@@ -127,15 +127,18 @@ automático. Reparo manual: as mensagens continuam no WhatsApp e na base da Evol
 Para o volume da Flash (5–20 leads/mês), o custo disso é baixo. Se um dia doer, o reenvio vira
 trabalho do Serviço de Sync (EPIC-5), não da central.
 
-## ⚠️ Risco conhecido antes de pôr o número real no ar
+## ⚠️ Dupla resposta — o risco, e como ele foi resolvido
 
-**Dupla resposta.** O `WF-04-004` (N8N) responde automaticamente toda mensagem inbound com o LLM. Se
-a atendente **também** responder pela central, o lead recebe **duas respostas** — uma do robô, uma da
-humana. Isso não é um bug da integração: são dois cérebros no mesmo número.
+O `WF-04-004` (N8N) responde automaticamente toda mensagem inbound com o LLM. Se a atendente
+**também** responder pela central, o lead recebe **duas respostas** — uma do robô, uma da humana.
+Não é bug da integração: são dois cérebros no mesmo número.
 
-O handoff (o Agente calar a boca quando um humano assume a conversa) é a **STORY-2.2**. Até lá, ou o
-número fica em modo espelho (a atendente **só observa**), ou o Agente é desligado. **Não deixe os
-dois ativos com tráfego real.**
+**Decisão (2026-07-13): modo espelho.** O Agente responde; a central só mostra. `make aquecimento`
+falha se alguém digitar ali. Ver o item 1 do checklist acima.
+
+O handoff (o Agente calar quando um humano assume) continua sendo trabalho futuro — o desenho
+natural é o Agente consultar a conversa no Chatwoot antes de responder e pular se houver um
+`assignee` humano, o que usa estado nativo do Chatwoot e não exige label nova.
 
 ## Diagnóstico
 
@@ -153,13 +156,24 @@ dois ativos com tráfego real.**
 Tudo o que era automatizável já está feito e verificado. O que falta depende de um **chip físico** e
 de uma **decisão de operação**. Faça nesta ordem:
 
-**1. Decida quem responde o lead** (é o risco da seção acima — não pule):
-- [ ] **Opção A (recomendada para começar):** o **Agente N8N responde**, a central **só espelha** —
-      a atendente observa e não digita. Zero risco de resposta dupla. Combine isso com o time.
-- [ ] **Opção B:** desligar o Agente (`WEBHOOK_GLOBAL_ENABLED=false` no CRM) e atender **só** pela
-      central. Perde-se a saudação automática e o link do Jotform.
-- [ ] Handoff de verdade (o Agente cala quando um humano assume) é trabalho novo — está registrado
-      como dívida técnica.
+**1. Quem responde o lead — DECIDIDO (2026-07-13): o Agente. A central só espelha.**
+
+No número de prospecção quem fala com o lead é o **Agente N8N** (saudação + link do Jotform). A
+atendente **acompanha** a conversa na central e **não digita** ali. É a operação de menor risco:
+enquanto não existe handoff (o Agente calar quando um humano assume), uma resposta digitada na
+central faria o lead receber **duas respostas** — a do robô e a da humana.
+
+Isso está **verificado, não só combinado**: `MODO_ESPELHO_PROSPECCAO=true` no `.env` faz o
+`make aquecimento` **falhar** se aparecer resposta digitada na central nessa inbox (mensagem
+outgoing sem o `source_id` `WAID:` que a Evolution carimba no que ela espelha).
+
+- [ ] Combine com o time: **na inbox `WhatsApp Prospecção`, ninguém responde pela central.** Precisa
+      falar com o lead? Fale pelo canal certo (e-mail) ou ajuste o Agente no CRM.
+- [ ] Handoff de verdade é trabalho novo — está na dívida técnica.
+
+> Se um dia quiser inverter (humano responde, Agente calado): desligue o Agente com
+> `WEBHOOK_GLOBAL_ENABLED=false` no CRM **e** ponha `MODO_ESPELHO_PROSPECCAO=false` aqui. Os dois
+> juntos, nunca um só — é o par que evita a resposta dupla.
 
 **2. Pareie o chip** (Passo manual 1, acima). Depois anote no `deploy/.env`:
 ```

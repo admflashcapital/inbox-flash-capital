@@ -87,7 +87,30 @@ else
   falha "${FRIAS} conversa(s) INICIADA(S) por nós neste número = outbound frio. Pare: isso queima o chip."
 fi
 
-# ── 2. Campanha na central: a central não é motor de disparo (AD-6) ─
+# ── 2. Modo espelho: quem responde o lead é o AGENTE, não a central ─
+# Decisão de operação (2026-07-13): no número de prospecção quem responde é o
+# Agente N8N; a central só ESPELHA. Enquanto não existir handoff (o Agente calar
+# quando um humano assume), uma resposta digitada na central faria o lead receber
+# DUAS respostas — a do robô e a da atendente.
+#
+# Como distinguimos: mensagem espelhada da Evolution chega com `source_id`
+# começando em `WAID:` (o id da mensagem no WhatsApp). Mensagem DIGITADA na
+# central nasce sem `source_id`. Logo: outgoing sem `WAID:` = alguém digitou aqui.
+if [ "$(env_get MODO_ESPELHO_PROSPECCAO)" != "false" ]; then
+  DIGITADAS="$(consultar "
+    SELECT count(*) FROM messages m
+    JOIN conversations c ON c.id = m.conversation_id
+    WHERE c.inbox_id = ${INBOX_ID}
+      AND m.message_type = 1
+      AND (m.source_id IS NULL OR m.source_id NOT LIKE 'WAID:%');")"
+  if [ "${DIGITADAS:-0}" -eq 0 ] 2>/dev/null; then
+    ok "modo espelho respeitado — nenhuma resposta digitada na central (quem responde é o Agente)"
+  else
+    falha "${DIGITADAS} resposta(s) digitada(s) na central neste número — o lead pode ter recebido resposta DUPLA (Agente + humano). Ver docs/runbook-canal-prospeccao.md."
+  fi
+fi
+
+# ── 3. Campanha na central: a central não é motor de disparo (AD-6) ─
 CAMPANHAS="$(consultar "SELECT count(*) FROM campaigns WHERE inbox_id = ${INBOX_ID};")"
 if [ "${CAMPANHAS:-0}" -eq 0 ] 2>/dev/null; then
   ok "nenhuma campanha configurada nesta inbox (AD-6: o motor de disparo é o monorepo)"
@@ -95,7 +118,7 @@ else
   falha "${CAMPANHAS} campanha(s) na inbox de prospecção — a central NÃO origina disparo (AD-6)"
 fi
 
-# ── 3. Volume enviado nas últimas 24h ─────────────────────────────
+# ── 4. Volume enviado nas últimas 24h ─────────────────────────────
 ENVIADAS="$(consultar "
   SELECT count(*) FROM messages m
   JOIN conversations c ON c.id = m.conversation_id

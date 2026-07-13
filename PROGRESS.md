@@ -52,8 +52,12 @@ Número novo pré-pago, **só inbound**, convivendo com o Agente N8N sem perda d
 
 > **O EPIC-2 está pronto até onde é automatizável.** As stories 2.1 e 2.2 só viram `[x]` depois de
 > **parear o chip** e provar o gate com uma mensagem real — o checklist está em
-> `docs/runbook-canal-prospeccao.md` (§ Checklist para fechar o gate do EPIC-2). Antes disso é
-> preciso **decidir quem responde o lead** (Agente ou humano), senão o lead recebe resposta dupla.
+> `docs/runbook-canal-prospeccao.md` (§ Checklist para fechar o gate do EPIC-2).
+>
+> **Decisão de operação (2026-07-13): modo espelho.** No número de prospecção quem responde o lead é
+> o **Agente N8N**; a central **só espelha** (a atendente acompanha, não digita). É o que evita a
+> resposta dupla enquanto não existe handoff. Não é só combinado: `MODO_ESPELHO_PROSPECCAO=true` faz
+> o `make aquecimento` **falhar** se aparecer resposta digitada na central nessa inbox.
 
 **STORY-2.2 — fan-out verificado na configuração e no código (2026-07-13, dev).** `make fanout`
 prova que os dois consumidores estão vivos na mesma instância (webhook global → N8N **e** integração
@@ -160,7 +164,7 @@ Nada ainda — implementação não iniciada. Itens levantados em code-review e 
 
 | Item | Risco | Alvo |
 |---|---|---|
-| **Dupla resposta no número de prospecção.** O `WF-04-004` (N8N) responde automaticamente toda mensagem inbound com o LLM. Se a atendente também responder pela central, o lead recebe **duas respostas** — o robô e a humana. Não é bug da integração: são dois cérebros no mesmo número. Até haver handoff, ou a central fica só observando, ou o Agente fica desligado. **Não pôr os dois com tráfego real.** | lead recebe resposta duplicada/contraditória | STORY-2.2 |
+| **Handoff Agente ↔ humano não existe.** Contornado pela decisão de **modo espelho** (2026-07-13): no número de prospecção quem responde é o Agente N8N; a central só espelha, e `make aquecimento` falha se alguém digitar ali (`MODO_ESPELHO_PROSPECCAO=true`). O custo é que a atendente **não pode** intervir numa conversa de lead. O handoff real (o Agente pular a resposta quando a conversa tem `assignee` humano no Chatwoot — estado nativo, sem label nova) fica para quando a operação pedir. | atendente sem poder assumir a conversa do lead | fase 2 / quando doer |
 | **Espelho pode duplicar e pode perder.** Duplicar: o dedup nativo da Evolution depende do import por Postgres direto (desligado por AD-8/AD-9) e o Chatwoot não tem índice único em `source_id` — o replay do Baileys reinsere. Mitigado *a posteriori* por `dedup-mensagens.sh` (precisa estar no cron). Perder: central fora do ar = mensagens só no N8N e no WhatsApp, sem reenvio automático. | espelho incompleto/duplicado (não afeta o Agente nem o lead) | reenvio vira trabalho do Serviço de Sync se doer (EPIC-5) |
 | **Anti-SSRF do Chatwoot desligado para rede privada** (`SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true`). Necessário para falar com a Evolution e baixar mídia; em troca, um webhook malicioso configurado na central poderia alcançar serviço interno. Mitigação atual: só admin configura webhook, e a rede `flash-canais` tem apenas Evolution, Chatwoot e o Caddy. | SSRF a partir da central | revisar no EPIC-6 (governança) |
 | **Retenção de conversa sem aval jurídico.** `RETENCAO_CONVERSAS_DIAS=1825` (5 anos) é um default técnico, não uma decisão. A central guarda conversa de **cobrança**: apagar cedo destrói prova de negociação de dívida; tarde demais viola a LGPD. O expurgo existe (`retencao-conversas.sh`) mas **não está no cron**. | LGPD / prova em disputa de dívida | STORY-6.3 |
