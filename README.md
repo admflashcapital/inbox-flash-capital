@@ -10,10 +10,12 @@ dele; os dados de negócio continuam no CRM (Twenty) e na plataforma interna (Su
 chega ao operador **mastigado** — labels e atributos empurrados por um Serviço de Sync — sem que a
 central consulte banco de domínio nenhum.
 
-> **Status: EPIC-1 concluído; EPIC-2 pronto até onde é automatizável (5/19 stories).** A central sobe
-> com um comando (`make up`), responde em HTTPS, tem backup/restore validados e banco isolado. O canal
-> de prospecção está ligado à Evolution com fan-out verificado — falta **parear o chip** e decidir
-> quem responde o lead (Agente ou humano). Checklist em `docs/runbook-canal-prospeccao.md`.
+> **Status: EPIC-1 concluído; EPIC-2 e EPIC-3 prontos até onde é automatizável (9/19 stories tocadas).**
+> A central sobe com um comando (`make up`), responde em HTTPS, tem backup/restore validados e banco
+> isolado. O canal de **prospecção** está ligado à Evolution com fan-out verificado — falta **parear o
+> chip**. O canal **oficial** (Twilio) tem a inbox, a janela de 24h, os templates e o espelho dos
+> disparos do monorepo — falta a **credencial Twilio real**. Checklists em
+> `docs/runbook-canal-prospeccao.md` e `docs/runbook-canal-oficial.md`.
 
 ## As 3 inboxes do MVP
 
@@ -94,6 +96,7 @@ Stack: Chatwoot CE `v4.15.1-ce` (web + Sidekiq) · PostgreSQL 16 + pgvector · R
 | `docs/runbook-backup.md` | backup do par banco+anexos, ensaio de restore, retenção LGPD |
 | `docs/runbook-canal-prospeccao.md` | ligar o WhatsApp de prospecção (Evolution), fan-out, pareamento do QR |
 | `docs/runbook-aquecimento-numero.md` | rampa de aquecimento, só-inbound, playbook de número bloqueado |
+| `docs/runbook-canal-oficial.md` | ligar o WhatsApp oficial (Twilio), janela de 24h, templates Meta, espelho dos disparos |
 
 ## Desenvolvimento
 
