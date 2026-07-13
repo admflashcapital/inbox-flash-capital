@@ -189,9 +189,10 @@ fi
 # por quê. Prova viva, não inspeção de config.
 TOKEN="$(env_get CENTRAL_ACCESS_TOKEN)"
 DOM="$(env_get DOMAIN)"; DOM="${DOM:-localhost}"
-if [ -n "$TOKEN" ] && $COMPOSE ps --status running --services 2>/dev/null | grep -q '^caddy$'; then
+CONTA="$(env_get CENTRAL_ACCOUNT_ID)"
+if [ -n "$TOKEN" ] && [ -n "$CONTA" ] && $COMPOSE ps --status running --services 2>/dev/null | grep -q '^caddy$'; then
   CODIGO="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 \
-    -H "api-access-token: ${TOKEN}" "https://inbox.${DOM}/api/v1/accounts/1/inboxes" 2>/dev/null)"
+    -H "api-access-token: ${TOKEN}" "https://inbox.${DOM}/api/v1/accounts/${CONTA}/inboxes" 2>/dev/null)"
   if [ "$CODIGO" = "200" ]; then
     ok "o token da API sobrevive ao Caddy (ponte hífen→underscore ativa)"
   else
