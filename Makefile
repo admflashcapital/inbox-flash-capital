@@ -8,7 +8,8 @@
 
 COMPOSE := docker compose -f deploy/docker-compose.yml --env-file deploy/.env
 
-.PHONY: help up down restart logs ps config check smoke migrate backup restore-check retencao evolution evolution-status
+.PHONY: help up down restart logs ps config check smoke migrate backup restore-check retencao \
+        evolution evolution-status fanout dedup aquecimento twilio twilio-status oficial
 
 help: ## Lista os comandos disponíveis
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -51,6 +52,15 @@ dedup: ## Simula a limpeza de mensagens duplicadas no espelho (STORY-2.2)
 
 aquecimento: ## Verifica só-inbound + rampa do número de prospecção (STORY-2.3)
 	deploy/scripts/verificar-aquecimento.sh
+
+twilio: ## Liga o número oficial à central: cria a inbox + sincroniza templates (STORY-3.1)
+	deploy/scripts/conectar-twilio.sh
+
+twilio-status: ## Mostra a inbox oficial que está valendo
+	deploy/scripts/conectar-twilio.sh --status
+
+oficial: ## Verifica as invariantes do canal oficial (janela 24h, templates, AD-6, AD-8)
+	deploy/scripts/verificar-canal-oficial.sh
 
 migrate: ## Roda as migrações do Chatwoot (usado no upgrade — STORY-1.3)
 	$(COMPOSE) run --rm chatwoot-init

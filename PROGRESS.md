@@ -107,8 +107,38 @@ Número oficial como inbox de cobrança/transacional + espelho dos disparos orig
 
 | # | Story | Status | Commit |
 |---|---|---|---|
-| 3.1 | Inbox oficial espelhada (FR-7) | [ ] | |
+| 3.1 | Inbox oficial espelhada (FR-7) | [~] | |
 | 3.2 | Espelho dos disparos em massa — push do monorepo (FR-8, AD-6) | [ ] | |
+
+**A descoberta que definiu o épico: o número oficial JÁ TEM dono do webhook.** O monorepo recebe o
+inbound do Twilio em `/webhooks/twilio/inbound`, valida a assinatura e usa a resposta do cliente para
+a **confirmação de sacado**. Um número Twilio tem **um único** webhook de inbound — apontá-lo para o
+Chatwoot **quebraria a confirmação de cobrança**. E o inverso (Chatwoot recebe e avisa o monorepo)
+colocaria a confirmação de **dinheiro** refém de uma ferramenta de **chat**. Então o desenho é
+forçado, e é o mesmo do EPIC-2: **o monorepo continua dono do webhook e faz fan-out** para a central.
+
+**STORY-3.1 — o que já está de pé (2026-07-13, dev).** `conectar-twilio.sh` cria a inbox como
+`Channel::TwilioSms` com **`medium: whatsapp`** — é o `medium` que ativa a **janela de 24h** nativa
+(`MessageWindowService`); criada como `sms` a atendente escreveria texto livre depois das 24h e a Meta
+rejeitaria o envio, em silêncio, no canal de cobrança. Bônus: com `whatsapp` o Chatwoot **não encosta**
+no webhook do número (`setup_webhooks if @twilio_channel.sms?`), então o do monorepo fica intacto.
+Templates Meta e janela de 24h são **nativos** — nada construído, só sincronizados da Content API.
+
+**Provado ao vivo com credencial Twilio FALSA de propósito** (ensaio removido depois): mensagem
+outgoing **com** `source_id` → `sent`, o Chatwoot **não chamou a Twilio**; **sem** `source_id` →
+`failed` com `[HTTP 401] 20003 Authentication Error`. O contraste prova o guard
+(`Base::SendOnChannelService#invalid_message?`) que impede a central de **reenviar** um disparo que o
+monorepo já mandou — sem ele, a STORY-3.2 cobraria o cliente **duas vezes**. Também provado: a
+resposta simulada do cliente caiu na **mesma thread** do disparo espelhado (via `contact_inbox.source_id`
+= `whatsapp:+E164`), e o `can_reply?` fecha sem inbound e reabre com ele.
+
+**Segurança do callback:** o `Twilio::CallbackController` do Chatwoot **não valida** o
+`X-Twilio-Signature`. Como o inbound legítimo chega pelo relay do monorepo (que já validou), o Caddy
+barra `/twilio/callback` para a internet com um token compartilhado (`RELAY_TOKEN`). Verificado: sem
+token → 403 · token errado → 403 · token certo → 204. Falha fechada se o token não estiver no `.env`.
+
+**Falta para fechar a 3.1:** credenciais Twilio reais no `.env` da central (passo do Vitor) + o
+fan-out do lado do monorepo (STORY-3.2). Checklist no `docs/runbook-canal-oficial.md`.
 
 **Gate EPIC-3:** mensagem ao número oficial cai na inbox `WhatsApp Oficial`; resposta dentro da janela de 24h sai pelo canal oficial e fora dela usa **template Meta aprovado**; disparo de cobrança do pipeline do monorepo aparece como outbound na conversa correta (push na API do Chatwoot); a resposta do cliente cai na **mesma thread**; a central **não origina** disparo em massa.
 
@@ -168,6 +198,8 @@ Nada ainda — implementação não iniciada. Itens levantados em code-review e 
 | **Espelho pode duplicar e pode perder.** Duplicar: o dedup nativo da Evolution depende do import por Postgres direto (desligado por AD-8/AD-9) e o Chatwoot não tem índice único em `source_id` — o replay do Baileys reinsere. Mitigado *a posteriori* por `dedup-mensagens.sh` (precisa estar no cron). Perder: central fora do ar = mensagens só no N8N e no WhatsApp, sem reenvio automático. | espelho incompleto/duplicado (não afeta o Agente nem o lead) | reenvio vira trabalho do Serviço de Sync se doer (EPIC-5) |
 | **Anti-SSRF do Chatwoot desligado para rede privada** (`SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true`). Necessário para falar com a Evolution e baixar mídia; em troca, um webhook malicioso configurado na central poderia alcançar serviço interno. Mitigação atual: só admin configura webhook, e a rede `flash-canais` tem apenas Evolution, Chatwoot e o Caddy. | SSRF a partir da central | revisar no EPIC-6 (governança) |
 | **Retenção de conversa sem aval jurídico.** `RETENCAO_CONVERSAS_DIAS=1825` (5 anos) é um default técnico, não uma decisão. A central guarda conversa de **cobrança**: apagar cedo destrói prova de negociação de dívida; tarde demais viola a LGPD. O expurgo existe (`retencao-conversas.sh`) mas **não está no cron**. | LGPD / prova em disputa de dívida | STORY-6.3 |
+| **Rota de disparo em massa do monorepo sem autenticação.** O router `/whatsapp-dispatch` (`api/api_main.py:256`) não declara nenhuma dependência de auth — nem no `include_router`, nem nas rotas. A única guarda é o limite de 50 boletos por lote. São os endpoints que **disparam cobrança em massa** pela Twilio. Achado de passagem no EPIC-3; **fora do escopo desta central** (é código do monorepo), mas registrado porque o risco é alto e o dono é o mesmo time. Confirmar se há middleware global de auth antes de concluir que está aberto. | disparo de cobrança em massa por terceiro; custo Twilio; reputação do número oficial | monorepo — avaliar assim que possível |
+| **`/twilio/delivery_status` da central aceita chamada não assinada.** O Chatwoot não valida o `X-Twilio-Signature` em nenhum dos dois callbacks. O `/twilio/callback` nós fechamos com o `RELAY_TOKEN` (o inbound vem do monorepo), mas o `delivery_status` **precisa** ficar público — é a Twilio que o chama direto, para as mensagens que a central envia. Forjá-lo só altera o status de entrega de uma mensagem existente. Mitigação possível: allowlist dos IPs da Twilio no Caddy. | status de entrega forjado (sem leitura nem envio de dados) | revisar no EPIC-6 (governança) |
 | **Cópia offsite do backup é manual.** O `backup.sh` grava só local; host morre = backup morre junto. A cópia criptografada para fora do host está documentada, não automatizada. | perda total em falha de host | antes do go-live |
 | **Staging não existe ainda.** O runbook de upgrade exige validar em staging antes de produção (FR-2); hoje só há o ambiente dev local. | upgrade sem rede de proteção | antes do 1º upgrade em prod |
 

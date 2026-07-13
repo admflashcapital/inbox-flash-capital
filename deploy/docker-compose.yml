@@ -198,6 +198,10 @@ services:
     environment:
       DOMAIN: ${DOMAIN}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
+      # Token do fan-out do inbound Twilio (EPIC-3). O Caddy usa para barrar
+      # chamada direta da internet em /twilio/callback — o Chatwoot não valida
+      # a assinatura da Twilio; quem valida é o monorepo, dono do webhook.
+      RELAY_TOKEN: ${RELAY_TOKEN:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

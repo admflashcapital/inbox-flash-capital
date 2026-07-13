@@ -41,6 +41,24 @@ http://localhost {
 inbox.{$DOMAIN:localhost} {
 	import seguranca
 
+	# ── Inbound da Twilio: entra só com o token do relay (EPIC-3) ──
+	# O Twilio::CallbackController do Chatwoot NÃO confere o X-Twilio-Signature
+	# (só filtra os params e enfileira o job). Aberto na internet, qualquer um
+	# forjaria uma mensagem inbound na central.
+	#
+	# Quem valida a assinatura é o MONOREPO: é ele o dono do webhook do número
+	# oficial (usa a resposta do cliente para a confirmação de sacado) e é dele
+	# que o evento chega aqui, por fan-out. Então este path não precisa — e não
+	# deve — aceitar chamada direta da internet.
+	#
+	# Falha fechada: sem RELAY_TOKEN no .env, o default abaixo não casa com
+	# nada e todo POST leva 403.
+	@callback_sem_token {
+		path /twilio/callback*
+		not header X-Relay-Token "{$RELAY_TOKEN:relay-token-nao-configurado}"
+	}
+	respond @callback_sem_token 403
+
 	reverse_proxy chatwoot-web:3000 {
 		# O Chatwoot usa ActionCable (WebSocket) para atualizar a conversa em
 		# tempo real — o Caddy faz proxy de WebSocket por padrão. Os headers
