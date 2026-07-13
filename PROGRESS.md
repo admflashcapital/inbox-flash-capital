@@ -46,9 +46,27 @@ Número novo pré-pago, **só inbound**, convivendo com o Agente N8N sem perda d
 
 | # | Story | Status | Commit |
 |---|---|---|---|
-| 2.1 | Inbox de prospecção espelhada no Chatwoot (FR-4) | [ ] | |
+| 2.1 | Inbox de prospecção espelhada no Chatwoot (FR-4) | [~] | |
 | 2.2 | Convivência com o Agente N8N sem perda — fan-out (FR-5, AD-5) | [ ] | |
 | 2.3 | Aquecimento e proteção do número (FR-6) | [ ] | |
+
+**STORY-2.1 — integração ligada e verificada até onde dá sem o chip (2026-07-13, dev).**
+Verificado ao vivo: rede `flash-canais` liga Evolution 2.3.7 ↔ Chatwoot 4.15.1 sem expor nenhuma das
+duas; `make evolution` criou a inbox `WhatsApp Prospecção` (`Channel::Api`, webhook
+`/chatwoot/webhook/crm`); a resposta digitada na central **chega** na Evolution; e a Evolution
+**escreve de volta** na conversa usando o token de admin. **Falta o passo manual do operador:** parear
+o chip pré-pago pelo QR (`docs/runbook-canal-prospeccao.md`) — só então dá para provar os CAs
+(mensagem real do lead, resposta chegando no WhatsApp, mídia anexada). A story só vira `[x]` depois
+disso.
+
+**Dois achados que mudaram o desenho:**
+1. **`SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true` é obrigatório na central.** O Chatwoot recusa webhook e
+   download de mídia em host sem IP público (anti-SSRF do `SafeFetch`), e a Evolution vive em rede
+   privada. Sem o flag, a resposta do atendente falha em silêncio (`failed` + `has no public ip
+   addresses`). Alternativa seria expor a Evolution na internet — pior.
+2. **Um host = um Caddy.** Central e CRM não podem ambos publicar 80/443. O Caddy da central virou
+   perfil `edge` (default em dev/staging); com as duas stacks no mesmo host, o Caddy do CRM serve o
+   vhost `inbox.<DOMAIN>` pela rede compartilhada.
 
 **Gate EPIC-2:** mensagem inbound no número novo aparece na inbox `WhatsApp Prospecção`; resposta pela central chega ao lead; mídia é anexada; **N8N e Chatwoot recebem cada evento** (fan-out at-least-once, sem mensagem engolida nem duplicada); a saudação + link Jotform do agente aparecem na conversa; limite de aquecimento documentado e zero outbound frio em massa.
 
@@ -119,6 +137,8 @@ Nada ainda — implementação não iniciada. Itens levantados em code-review e 
 
 | Item | Risco | Alvo |
 |---|---|---|
+| **Dupla resposta no número de prospecção.** O `WF-04-004` (N8N) responde automaticamente toda mensagem inbound com o LLM. Se a atendente também responder pela central, o lead recebe **duas respostas** — o robô e a humana. Não é bug da integração: são dois cérebros no mesmo número. Até haver handoff, ou a central fica só observando, ou o Agente fica desligado. **Não pôr os dois com tráfego real.** | lead recebe resposta duplicada/contraditória | STORY-2.2 |
+| **Anti-SSRF do Chatwoot desligado para rede privada** (`SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true`). Necessário para falar com a Evolution e baixar mídia; em troca, um webhook malicioso configurado na central poderia alcançar serviço interno. Mitigação atual: só admin configura webhook, e a rede `flash-canais` tem apenas Evolution, Chatwoot e o Caddy. | SSRF a partir da central | revisar no EPIC-6 (governança) |
 | **Retenção de conversa sem aval jurídico.** `RETENCAO_CONVERSAS_DIAS=1825` (5 anos) é um default técnico, não uma decisão. A central guarda conversa de **cobrança**: apagar cedo destrói prova de negociação de dívida; tarde demais viola a LGPD. O expurgo existe (`retencao-conversas.sh`) mas **não está no cron**. | LGPD / prova em disputa de dívida | STORY-6.3 |
 | **Cópia offsite do backup é manual.** O `backup.sh` grava só local; host morre = backup morre junto. A cópia criptografada para fora do host está documentada, não automatizada. | perda total em falha de host | antes do go-live |
 | **Staging não existe ainda.** O runbook de upgrade exige validar em staging antes de produção (FR-2); hoje só há o ambiente dev local. | upgrade sem rede de proteção | antes do 1º upgrade em prod |

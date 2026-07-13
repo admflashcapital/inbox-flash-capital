@@ -8,7 +8,7 @@
 
 COMPOSE := docker compose -f deploy/docker-compose.yml --env-file deploy/.env
 
-.PHONY: help up down restart logs ps config check smoke migrate backup restore-check retencao
+.PHONY: help up down restart logs ps config check smoke migrate backup restore-check retencao evolution evolution-status
 
 help: ## Lista os comandos disponíveis
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -36,6 +36,12 @@ check: ## Verifica as invariantes de arquitetura (AD-7/8/9) — rode antes de co
 
 smoke: ## Semeia dados, reinicia e prova a persistência (dev/staging — STORY-1.1)
 	deploy/scripts/smoke-test.sh
+
+evolution: ## Liga o número de prospecção à central (STORY-2.1)
+	deploy/scripts/conectar-evolution.sh
+
+evolution-status: ## Mostra a integração Evolution↔central que está valendo
+	deploy/scripts/conectar-evolution.sh --status
 
 migrate: ## Roda as migrações do Chatwoot (usado no upgrade — STORY-1.3)
 	$(COMPOSE) run --rm chatwoot-init

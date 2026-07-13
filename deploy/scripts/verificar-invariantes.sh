@@ -39,12 +39,18 @@ esac
 
 echo
 echo "── AD-9 — banco da central isolado (STORY-1.2) ────────────────"
-# 1. Nenhuma credencial de domínio mora no .env da central.
-VAZADAS="$(grep -oE '^[A-Z_0-9]*(TWENTY|SUPABASE|N8N|EVOLUTION)[A-Z_0-9]*=' "$ENV_FILE" 2>/dev/null | tr -d '=' | tr '\n' ' ')"
+# 1. Nenhuma credencial de BANCO de domínio mora no .env da central.
+#
+# A linha é entre BANCO e API de canal, e não no nome do sistema:
+#   ❌ EVOLUTION_DB_PASSWORD, TWENTY_*, SUPABASE_*, *_CONNECTION_URI  → cross-DB (AD-9)
+#   ✅ EVOLUTION_URL / EVOLUTION_API_KEY                              → adapter de canal (AD-4)
+# A central FALA com a Evolution por HTTP (é assim que o WhatsApp entra); o que
+# ela não pode é abrir conexão em banco de domínio nenhum.
+VAZADAS="$(grep -oE '^[A-Z_0-9]*(TWENTY|SUPABASE)[A-Z_0-9]*=|^[A-Z_0-9]*(EVOLUTION|N8N|CHATWOOT)[A-Z_0-9]*(DB|DATABASE|CONNECTION_URI|POSTGRES)[A-Z_0-9]*=' "$ENV_FILE" 2>/dev/null | tr -d '=' | tr '\n' ' ')"
 if [ -n "$VAZADAS" ]; then
-  falha "o .env da central tem chave de sistema de domínio: ${VAZADAS}(AD-9: sem credencial cruzada)"
+  falha "o .env da central tem credencial de BANCO de domínio: ${VAZADAS}(AD-9: sem cross-DB)"
 else
-  ok "nenhuma credencial de Twenty/Supabase/N8N/Evolution no .env da central"
+  ok "nenhuma credencial de banco de domínio no .env da central (API de canal é permitida — AD-4)"
 fi
 
 # 2. O Chatwoot aponta para o Postgres DESTE compose, não para um banco de domínio.

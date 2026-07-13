@@ -30,6 +30,14 @@ networks:
     driver: bridge
   external:
     driver: bridge
+  # canais: ponte com o compose do CRM (repo crm-flash-capital), onde mora a
+  # Evolution. É por ela que a Evolution posta a mensagem do lead na central e
+  # que a central devolve a resposta do atendente — sem que nenhuma das duas
+  # precise publicar porta nem ficar exposta na internet (AD-5, AD-8).
+  # Criada UMA vez, fora do compose:  docker network create flash-canais
+  canais:
+    external: true
+    name: flash-canais
 
 # ── Volumes (persistência entre restarts — critério de aceite 1.1) ──
 volumes:
@@ -54,6 +62,10 @@ x-chatwoot-base: &chatwoot-base
   networks:
     - internal
     - outbound
+    # canais: fala com a Evolution (CRM) por nome de container — o Chatwoot
+    # precisa alcançá-la para ENVIAR a resposta do atendente e para baixar a
+    # mídia que o lead mandou.
+    - canais
   depends_on:
     postgres:
       condition: service_healthy
@@ -167,9 +179,18 @@ services:
       retries: 5
       start_period: 60s
 
-  # ── Caddy — única porta de entrada; TLS automático (AD-8) ────────
+  # ── Caddy — porta de entrada da central; TLS automático (AD-8) ───
+  # PERFIL `edge`, e não um serviço sempre-ligado, porque só UM processo pode
+  # ficar com as portas 80/443 do host:
+  #   • central sozinha no host (dev, staging)  → COMPOSE_PROFILES=edge (default
+  #     do .env.example): este Caddy sobe e serve https://inbox.<DOMAIN>.
+  #   • central DIVIDINDO o host com o CRM      → COMPOSE_PROFILES= (vazio):
+  #     este Caddy fica fora, e o Caddy do CRM — que já é o porteiro do domínio
+  #     (crm., n8n.) — serve o vhost inbox.<DOMAIN> apontando para chatwoot-web
+  #     pela rede `canais`. Dois Caddys no mesmo host brigariam pela 443.
   caddy:
     image: caddy:2.11.4
+    profiles: ["edge"]
     restart: unless-stopped
     ports:
       - "80:80"
