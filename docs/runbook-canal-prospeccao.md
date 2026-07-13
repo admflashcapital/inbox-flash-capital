@@ -97,6 +97,36 @@ De **outro celular**, mande uma mensagem para o número de prospecção:
 4. o Agente N8N continua respondendo (saudação + link do Jotform) — e essas mensagens dele também
    aparecem na conversa da central (é o fan-out da STORY-2.2).
 
+## Idempotência e perda — o que o AD-5 promete e o que a implementação entrega
+
+O AD-5 pede **at-least-once com consumidores idempotentes**. Sendo honesto sobre o que existe:
+
+**Duplicata: possível, e tratada depois.** A Evolution até deduplica por `source_id`, mas só quando o
+import por **conexão direta no Postgres** da central está ligado — que nós desligamos de propósito
+(`chatwoot.service.ts:1062`). E o Chatwoot **não** tem índice único em `messages.source_id`. Como o
+handler da Evolution processa `notify` **e** `append` (o replay do Baileys ao reconectar,
+`whatsapp.baileys.service.ts:1166`), a mesma mensagem pode entrar duas vezes no espelho.
+
+Consertar na entrada exigiria forkar o Chatwoot (proibido, AD-7) ou abrir o banco da central para a
+Evolution (proibido, AD-9). Então a central limpa depois:
+
+```bash
+make dedup                                     # simula
+deploy/scripts/dedup-mensagens.sh --executar   # apaga a cópia, mantém a primeira
+```
+
+Agende de hora em hora em produção. O efeito observável é o de um consumidor idempotente.
+
+**Perda: existe uma janela, e ela é assimétrica — de propósito.** Se a central estiver fora do ar, a
+Evolution loga o erro e segue (o `try/catch` da linha 2525): o **N8N continua recebendo**, o
+**espelho perde** aquelas mensagens. É o desenho certo — o atendimento automático do lead não pode
+depender da central —, mas significa que uma queda longa deixa buracos no espelho. Não há reenvio
+automático. Reparo manual: as mensagens continuam no WhatsApp e na base da Evolution
+(`GET /chat/findMessages/{instância}`); a conversa segue íntegra do lado do lead.
+
+Para o volume da Flash (5–20 leads/mês), o custo disso é baixo. Se um dia doer, o reenvio vira
+trabalho do Serviço de Sync (EPIC-5), não da central.
+
 ## ⚠️ Risco conhecido antes de pôr o número real no ar
 
 **Dupla resposta.** O `WF-04-004` (N8N) responde automaticamente toda mensagem inbound com o LLM. Se
@@ -117,6 +147,39 @@ dois ativos com tráfego real.**
 | A resposta não sai no WhatsApp | a instância não está `open` — o chip desconectou, refaça o QR |
 | A central não vê nada, mas o N8N vê | `CHATWOOT_ENABLED` desligado no CRM, ou a integração não foi aplicada nesta instância |
 | Anexo não aparece | `EVOLUTION_SERVER_URL` inalcançável pela central (era `localhost:8080`?) — é dele que sai o link da mídia |
+
+## ✅ Checklist para fechar o gate do EPIC-2 (o que só o Vitor pode fazer)
+
+Tudo o que era automatizável já está feito e verificado. O que falta depende de um **chip físico** e
+de uma **decisão de operação**. Faça nesta ordem:
+
+**1. Decida quem responde o lead** (é o risco da seção acima — não pule):
+- [ ] **Opção A (recomendada para começar):** o **Agente N8N responde**, a central **só espelha** —
+      a atendente observa e não digita. Zero risco de resposta dupla. Combine isso com o time.
+- [ ] **Opção B:** desligar o Agente (`WEBHOOK_GLOBAL_ENABLED=false` no CRM) e atender **só** pela
+      central. Perde-se a saudação automática e o link do Jotform.
+- [ ] Handoff de verdade (o Agente cala quando um humano assume) é trabalho novo — está registrado
+      como dívida técnica.
+
+**2. Pareie o chip** (Passo manual 1, acima). Depois anote no `deploy/.env`:
+```
+NUMERO_PROSPECCAO_DESDE=<a data de hoje>   # inicia a rampa de aquecimento
+```
+
+**3. Prove o gate, com uma mensagem real, de outro celular:**
+- [ ] a mensagem aparece na inbox `WhatsApp Prospecção` da central;
+- [ ] o N8N registra uma execução do `WF-04-001` para **a mesma** mensagem (fan-out: os dois viram);
+- [ ] a saudação + link do Jotform do Agente **também** aparecem na conversa da central;
+- [ ] responder pela central chega no WhatsApp do lead (só teste isto se escolheu a Opção B, ou num
+      contato de teste — senão o lead recebe resposta dupla);
+- [ ] mandar uma **foto/PDF** → o anexo aparece na conversa;
+- [ ] `make fanout`, `make aquecimento` e `make dedup` continuam verdes.
+
+**4. Agende em produção:**
+- [ ] `deploy/scripts/dedup-mensagens.sh --executar` de hora em hora (idempotência do espelho);
+- [ ] `make aquecimento` semanal enquanto o número estiver na rampa.
+
+Feito isso, o EPIC-2 fecha: marque 2.1 e 2.2 como `[x]` no `PROGRESS.md`.
 
 ## Estado de verificação (2026-07-13, dev)
 

@@ -10,9 +10,10 @@ dele; os dados de negócio continuam no CRM (Twenty) e na plataforma interna (Su
 chega ao operador **mastigado** — labels e atributos empurrados por um Serviço de Sync — sem que a
 central consulte banco de domínio nenhum.
 
-> **Status: EPIC-1 concluído (4/19 stories).** A central já sobe com um comando (`make up`), responde
-> em HTTPS, tem backup/restore validados e banco isolado. Próxima pendente: **STORY-2.1** (inbox de
-> prospecção via Evolution).
+> **Status: EPIC-1 concluído; EPIC-2 pronto até onde é automatizável (5/19 stories).** A central sobe
+> com um comando (`make up`), responde em HTTPS, tem backup/restore validados e banco isolado. O canal
+> de prospecção está ligado à Evolution com fan-out verificado — falta **parear o chip** e decidir
+> quem responde o lead (Agente ou humano). Checklist em `docs/runbook-canal-prospeccao.md`.
 
 ## As 3 inboxes do MVP
 
@@ -91,6 +92,8 @@ Stack: Chatwoot CE `v4.15.1-ce` (web + Sidekiq) · PostgreSQL 16 + pgvector · R
 | `docs/runbook-deploy.md` | subir em dev e em produção; passos manuais (DNS, `.env`, 1º admin) |
 | `docs/runbook-upgrade.md` | subir de versão do Chatwoot (staging antes de produção) |
 | `docs/runbook-backup.md` | backup do par banco+anexos, ensaio de restore, retenção LGPD |
+| `docs/runbook-canal-prospeccao.md` | ligar o WhatsApp de prospecção (Evolution), fan-out, pareamento do QR |
+| `docs/runbook-aquecimento-numero.md` | rampa de aquecimento, só-inbound, playbook de número bloqueado |
 
 ## Desenvolvimento
 

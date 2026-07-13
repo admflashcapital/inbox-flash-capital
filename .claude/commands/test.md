@@ -11,9 +11,16 @@ Execute o que estiver instalado/existir e relate o resultado (ferramentas do Ser
 - `.venv/bin/mypy .` — se mypy estiver instalado
 
 **Infra (quando houver `deploy/`):**
-- `docker compose -f deploy/docker-compose.yml config -q` — o compose é válido?
-- `docker compose -f deploy/docker-compose.yml ps` — serviços Up + health checks verdes?
+- `make config` — o compose é válido?
+- `make ps` — serviços Up + health checks verdes?
+- `make check` — invariantes de arquitetura do EPIC-1 (tag fixa `-ce`, banco isolado sem cross-DB,
+  usuário não-superusuário, só o Caddy publicando porta, `.env` fora do git)
 - `caddy validate --config deploy/Caddyfile` — se o caddy estiver instalado
+
+**Canais (EPIC-2, quando a Evolution estiver no ar):**
+- `make fanout` — N8N **e** central recebem o mesmo evento? (AD-5 — o risco nº 1 do MVP)
+- `make aquecimento` — o número de prospecção segue **só inbound**, sem campanha e dentro da rampa?
+- `make dedup` — há mensagem duplicada no espelho? (idempotência do AD-5)
 
 Relate: total passando/falhando, arquivos com problema de lint/type, serviços não-saudáveis.
 

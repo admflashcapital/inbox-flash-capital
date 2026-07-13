@@ -46,9 +46,32 @@ Número novo pré-pago, **só inbound**, convivendo com o Agente N8N sem perda d
 
 | # | Story | Status | Commit |
 |---|---|---|---|
-| 2.1 | Inbox de prospecção espelhada no Chatwoot (FR-4) | [~] | |
-| 2.2 | Convivência com o Agente N8N sem perda — fan-out (FR-5, AD-5) | [ ] | |
-| 2.3 | Aquecimento e proteção do número (FR-6) | [ ] | |
+| 2.1 | Inbox de prospecção espelhada no Chatwoot (FR-4) | [~] | 4bbccb5 |
+| 2.2 | Convivência com o Agente N8N sem perda — fan-out (FR-5, AD-5) | [~] | |
+| 2.3 | Aquecimento e proteção do número (FR-6) | [x] | |
+
+> **O EPIC-2 está pronto até onde é automatizável.** As stories 2.1 e 2.2 só viram `[x]` depois de
+> **parear o chip** e provar o gate com uma mensagem real — o checklist está em
+> `docs/runbook-canal-prospeccao.md` (§ Checklist para fechar o gate do EPIC-2). Antes disso é
+> preciso **decidir quem responde o lead** (Agente ou humano), senão o lead recebe resposta dupla.
+
+**STORY-2.2 — fan-out verificado na configuração e no código (2026-07-13, dev).** `make fanout`
+prova que os dois consumidores estão vivos na mesma instância (webhook global → N8N **e** integração
+Chatwoot aplicada). No código da Evolution 2.3.7: os dois disparos acontecem no mesmo handler de
+mensagem (`chatwootService.eventWhatsapp` na linha 1331, `sendDataWebhook` na 1483) e o envio à
+central tem `try/catch` próprio (linha 2525) — **não é fila competida, e central fora do ar não cega
+o Agente**. A saudação do Agente aparece na central porque mensagem `fromMe` também é espelhada
+(vira `outgoing`).
+**Idempotência:** o dedup nativo da Evolution só roda com o import por Postgres direto (que
+desligamos por AD-8/AD-9) e o Chatwoot não tem índice único em `source_id` — duplicata é possível no
+replay do Baileys. Resolvido do lado da central por `dedup-mensagens.sh` (testado: 2 cópias → 1).
+**Perda:** com a central fora do ar, o espelho perde as mensagens daquele intervalo (o N8N não). É
+assimetria proposital; sem reenvio automático no MVP.
+
+**STORY-2.3 — política do número, com guardrail executável.** `make aquecimento` **falha** se alguma
+conversa da inbox de prospecção tiver sido **iniciada por nós** (assinatura de outbound frio), se
+existir **campanha** na inbox (AD-6) ou se o volume enviado em 24h passar do teto da rampa
+(20/40/60/80/100 por semana). Política e playbook de bloqueio em `docs/runbook-aquecimento-numero.md`.
 
 **STORY-2.1 — integração ligada e verificada até onde dá sem o chip (2026-07-13, dev).**
 Verificado ao vivo: rede `flash-canais` liga Evolution 2.3.7 ↔ Chatwoot 4.15.1 sem expor nenhuma das
@@ -138,6 +161,7 @@ Nada ainda — implementação não iniciada. Itens levantados em code-review e 
 | Item | Risco | Alvo |
 |---|---|---|
 | **Dupla resposta no número de prospecção.** O `WF-04-004` (N8N) responde automaticamente toda mensagem inbound com o LLM. Se a atendente também responder pela central, o lead recebe **duas respostas** — o robô e a humana. Não é bug da integração: são dois cérebros no mesmo número. Até haver handoff, ou a central fica só observando, ou o Agente fica desligado. **Não pôr os dois com tráfego real.** | lead recebe resposta duplicada/contraditória | STORY-2.2 |
+| **Espelho pode duplicar e pode perder.** Duplicar: o dedup nativo da Evolution depende do import por Postgres direto (desligado por AD-8/AD-9) e o Chatwoot não tem índice único em `source_id` — o replay do Baileys reinsere. Mitigado *a posteriori* por `dedup-mensagens.sh` (precisa estar no cron). Perder: central fora do ar = mensagens só no N8N e no WhatsApp, sem reenvio automático. | espelho incompleto/duplicado (não afeta o Agente nem o lead) | reenvio vira trabalho do Serviço de Sync se doer (EPIC-5) |
 | **Anti-SSRF do Chatwoot desligado para rede privada** (`SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true`). Necessário para falar com a Evolution e baixar mídia; em troca, um webhook malicioso configurado na central poderia alcançar serviço interno. Mitigação atual: só admin configura webhook, e a rede `flash-canais` tem apenas Evolution, Chatwoot e o Caddy. | SSRF a partir da central | revisar no EPIC-6 (governança) |
 | **Retenção de conversa sem aval jurídico.** `RETENCAO_CONVERSAS_DIAS=1825` (5 anos) é um default técnico, não uma decisão. A central guarda conversa de **cobrança**: apagar cedo destrói prova de negociação de dívida; tarde demais viola a LGPD. O expurgo existe (`retencao-conversas.sh`) mas **não está no cron**. | LGPD / prova em disputa de dívida | STORY-6.3 |
 | **Cópia offsite do backup é manual.** O `backup.sh` grava só local; host morre = backup morre junto. A cópia criptografada para fora do host está documentada, não automatizada. | perda total em falha de host | antes do go-live |
@@ -163,5 +187,7 @@ Nada ainda — implementação não iniciada. Itens levantados em code-review e 
 | 2026-07-13 | — | planejamento | Documentação BMAD gerada em `docs/`: `product-brief.md` (fase 1), `prd.md` (16 FRs, glossário fechado, jornadas), `architecture.md` (spine hub-and-spoke, AD-1..AD-9, diagramas, árvore-alvo), `epics-and-stories.md` (6 epics · 19 stories com CA Given/When/Then). Decisões travadas: Evolution fica no CRM com fan-out; merge só com telefone **E** documento; disparo em massa origina no monorepo. |
 | 2026-07-13 | — | setup | Scaffold do repo: `.claude/` (hooks, 5 comandos, 4 memories), `PROGRESS.md`, `CLAUDE.md`, `README.md`, `.gitignore`. 11 skills instaladas em `.claude/skills/` (incl. as oficiais `chatwoot-cli` e `twilio/ai`). Nenhum código de runtime. |
 | 2026-07-13 | EPIC-1 | 1.1 · 1.2 · 1.3 · 1.4 | **A central subiu.** `deploy/` criado: compose (Caddy 2.11.4 · Chatwoot `v4.15.1-ce` web+sidekiq+init · pgvector 0.8.5-pg16 · Redis 7.4.9), `Caddyfile`, `.env.example`, init-db e 5 scripts de operação; `Makefile` com `up/check/smoke/backup/restore-check/retencao`; runbooks de deploy, upgrade e backup. Decisões as-built: **`chatwoot-init` one-shot** (`db:chatwoot_prepare` via `service_completed_successfully`) para o `up` ser mesmo **um** comando — o compose oficial exige migração à mão; **extensões pré-criadas pelo superusuário** no init-db (o `pg_stat_statements` não é *trusted*, e o usuário da app é não-superusuário por AD-9); **`APP_DB_*`** no init para desfazer a colisão de `POSTGRES_PASSWORD` (superusuário na imagem do Postgres vs. usuário da app no Chatwoot). Gate do épico verificado ao vivo em dev. |
+
+| 2026-07-13 | EPIC-2 | 2.1 · 2.2 · 2.3 | **Canal de prospecção ligado.** A instância `crm` (Evolution, no CRM) passou a ter **dois consumidores**: o Agente N8N (webhook global) e a central (integração nativa Chatwoot). A inbox `WhatsApp Prospecção` é criada pela própria Evolution (`autoCreate`). Ponte por rede Docker externa `flash-canais` — nada exposto na internet. Novos comandos: `make evolution`, `make fanout`, `make dedup`, `make aquecimento`. Runbooks de canal e de aquecimento. **Achados que mudaram o desenho:** (1) o Chatwoot recusa webhook/mídia em host sem IP público (anti-SSRF do `SafeFetch`) → `SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true`, senão o canal falha **em silêncio**; (2) um host só tem uma porta 443 → o Caddy da central virou perfil `edge` e, no host compartilhado, o Caddy do CRM serve `inbox.<DOMAIN>`; (3) o dedup nativo da Evolution depende do import por Postgres direto (proibido por AD-9) → faxineiro `dedup-mensagens.sh` na central. Commits: `4bbccb5` (central) · `46b96b2` (CRM). Gate do épico **pendente do pareamento do chip** (manual). |
 
 > **Nota sobre este registro:** é um log **por sessão** (grão grosso). O rastreamento **por story** — com hash de commit — vive nas tabelas de cada épico acima.

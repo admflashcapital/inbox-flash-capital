@@ -43,6 +43,15 @@ evolution: ## Liga o número de prospecção à central (STORY-2.1)
 evolution-status: ## Mostra a integração Evolution↔central que está valendo
 	deploy/scripts/conectar-evolution.sh --status
 
+fanout: ## Confere que N8N e central recebem o MESMO evento (STORY-2.2 / AD-5)
+	deploy/scripts/verificar-fanout.sh
+
+dedup: ## Simula a limpeza de mensagens duplicadas no espelho (STORY-2.2)
+	deploy/scripts/dedup-mensagens.sh --simular
+
+aquecimento: ## Verifica só-inbound + rampa do número de prospecção (STORY-2.3)
+	deploy/scripts/verificar-aquecimento.sh
+
 migrate: ## Roda as migrações do Chatwoot (usado no upgrade — STORY-1.3)
 	$(COMPOSE) run --rm chatwoot-init
 
