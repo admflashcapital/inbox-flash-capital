@@ -28,7 +28,7 @@ PROJETO="inbox-flash-capital"
 IMAGEM_PG="pgvector/pgvector:0.8.5-pg16"   # a MESMA do compose
 
 # Lê UMA chave do .env (só chaves não-secretas). Ver comentário em backup.sh.
-env_get() { sed -n "s/^$1=//p" "$ENV_FILE" | head -1 | sed -e 's/^"\(.*\)"$/\1/'; }
+env_get() { sed -n "s/^$1=//p" "$ENV_FILE" | head -1 | sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
 
 BACKUP_DIR="${BACKUP_DIR:-$(env_get BACKUP_DIR)}"
 BACKUP_DIR="${BACKUP_DIR:-${RAIZ}/backups}"

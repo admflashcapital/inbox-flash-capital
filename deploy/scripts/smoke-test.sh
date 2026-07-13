@@ -25,7 +25,7 @@ COMPOSE="docker compose -f ${RAIZ}/deploy/docker-compose.yml --env-file ${ENV_FI
 # Lê UMA chave do .env. Deliberadamente não damos `source` no arquivo: isso
 # jogaria todos os segredos no ambiente do script (e um valor com `<`, `$` ou
 # aspas seria interpretado pelo shell). Aqui só entram chaves NÃO-secretas.
-env_get() { sed -n "s/^$1=//p" "$ENV_FILE" | head -1 | sed -e 's/^"\(.*\)"$/\1/'; }
+env_get() { sed -n "s/^$1=//p" "$ENV_FILE" | head -1 | sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
 
 DOMAIN="$(env_get DOMAIN)"
 if [ "${DOMAIN:-}" != "localhost" ]; then

@@ -33,7 +33,7 @@ set -euo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_FILE="${RAIZ}/deploy/.env"
-env_get() { sed -n "s/^$1=//p" "$ENV_FILE" | head -1 | sed -e 's/^"\(.*\)"$/\1/'; }
+env_get() { sed -n "s/^$1=//p" "$ENV_FILE" | head -1 | sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
 
 # Não-secretos.
 CENTRAL_URL="$(env_get CENTRAL_URL_INTERNA)"; CENTRAL_URL="${CENTRAL_URL:-http://chatwoot-web:3000}"
@@ -140,13 +140,24 @@ JSON
   CORPO="$(echo "$RESPOSTA" | sed '$d')"
 
   if [ "$CODIGO" != "200" ] && [ "$CODIGO" != "201" ]; then
-    # O corpo ecoa o auth_token que enviamos — não imprima. Só o motivo.
+    # O corpo ecoa o que ENVIAMOS (inclusive o auth_token) e a mensagem de erro do
+    # Rails pode conter a URL da Twilio com o Account SID dentro. Nada daqui sai cru:
+    # imprimimos só o `motivo`, e ainda assim redigido.
     echo "[twilio] FALHOU (HTTP ${CODIGO})."
     echo "$CORPO" | python3 -c "
-import sys, json
+import sys, json, re
+
+def redigir(texto: str) -> str:
+    # Identificadores da Twilio (AC/SK/HX/SM/MM/MG + 32 hex) e qualquer cadeia longa
+    # que cheire a token. Vale a pena ser agressivo: o custo de um falso positivo é
+    # uma mensagem menos legível; o de um falso negativo é uma credencial no terminal.
+    texto = re.sub(r'\b(AC|SK|HX|SM|MM|MG|IS|PN)[0-9a-fA-F]{32}\b', r'\1…[redigido]', texto)
+    return re.sub(r'\b[0-9a-fA-F]{32,}\b', '[redigido]', texto)
+
 try:
     d = json.load(sys.stdin)
-    print('  motivo:', d.get('message') or d.get('error') or d.get('attributes') or '(sem mensagem)')
+    motivo = d.get('message') or d.get('error') or d.get('attributes') or '(sem mensagem)'
+    print('  motivo:', redigir(str(motivo)))
 except Exception:
     print('  (resposta não-JSON — veja: make logs s=chatwoot-web)')
 " 2>/dev/null || true

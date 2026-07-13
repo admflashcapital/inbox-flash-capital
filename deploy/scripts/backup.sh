@@ -25,7 +25,7 @@ PROJETO="inbox-flash-capital"   # = `name:` do compose (prefixo dos volumes)
 
 # Lê UMA chave do .env. Não damos `source`: nenhum segredo precisa entrar no
 # ambiente deste script — o pg_dump roda dentro do container, pelo socket local.
-env_get() { sed -n "s/^$1=//p" "$ENV_FILE" | head -1 | sed -e 's/^"\(.*\)"$/\1/'; }
+env_get() { sed -n "s/^$1=//p" "$ENV_FILE" | head -1 | sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
 
 BACKUP_DIR="${BACKUP_DIR:-$(env_get BACKUP_DIR)}"
 BACKUP_DIR="${BACKUP_DIR:-${RAIZ}/backups}"

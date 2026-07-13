@@ -16,7 +16,7 @@ set -uo pipefail
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_FILE="${RAIZ}/deploy/.env"
 COMPOSE="docker compose -f ${RAIZ}/deploy/docker-compose.yml --env-file ${ENV_FILE}"
-env_get() { sed -n "s/^$1=//p" "$ENV_FILE" | head -1 | sed -e 's/^"\(.*\)"$/\1/'; }
+env_get() { sed -n "s/^$1=//p" "$ENV_FILE" | head -1 | sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
 
 FALHAS=0
 ok()    { echo "  ✓ $1"; }
@@ -132,6 +132,26 @@ if [ -n "${NAO_PREENCHIDAS// /}" ]; then
 fi
 if [ -z "${NAO_DOCUMENTADAS// /}" ] && [ -z "${NAO_PREENCHIDAS// /}" ]; then
   ok ".env e .env.example têm o mesmo conjunto de chaves ($(echo "$CHAVES_EX" | wc -l) chaves, nos dois sentidos)"
+fi
+
+# ── Valor com espaço/CR nas pontas: o erro mais traiçoeiro do .env ──
+# Invisível na tela e mortal na prática: um espaço sobrando em POSTGRES_PASSWORD
+# é uma falha de autenticação sem pista nenhuma; num SID, é uma URL inválida.
+# Os NOSSOS scripts aparam (env_get), mas o Docker Compose NÃO — ele passa o valor
+# cru para o container. Então a checagem tem que existir aqui.
+#
+# Só nomes de chave são impressos.
+SUJAS="$(grep -nE '^[A-Z_0-9]+=([[:space:]]+.*|.*[[:space:]]+)$' "$ENV_FILE" 2>/dev/null \
+  | sed 's/^[0-9]*://' | cut -d= -f1 | tr '\n' ' ')"
+# `grep -c` já imprime 0 e sai com 1 quando não acha; o `|| true` evita que o
+# `echo 0` de um fallback grude um segundo "0" na variável.
+CRLF="$(grep -cE $'\r$' "$ENV_FILE" 2>/dev/null || true)"; CRLF="${CRLF:-0}"
+if [ -n "${SUJAS// /}" ]; then
+  falha "chaves cujo VALOR tem espaço/tab nas pontas (o Compose não apara — falha calada): ${SUJAS}"
+elif [ "${CRLF:-0}" -gt 0 ]; then
+  falha "o .env tem ${CRLF} linha(s) com CR (fim de linha Windows) — o \\r entra no valor. Rode: dos2unix deploy/.env"
+else
+  ok "nenhum valor do .env tem espaço ou CR nas pontas"
 fi
 
 echo
