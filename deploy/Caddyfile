@@ -66,6 +66,27 @@ inbox.{$DOMAIN:localhost} {
 		# URL de asset/redirect em http e o navegador bloqueia o mixed content).
 		header_up X-Forwarded-Proto {scheme}
 		header_up X-Forwarded-Host {host}
+
+		# ── Ponte para o token da API do Chatwoot ──────────────────
+		# O Caddy 2.11 DESCARTA todo header cujo nome contenha underscore
+		# (defesa contra request smuggling — o log dele diz literalmente
+		# "dropping header containing underscore"). Não há opção para
+		# desligar isso.
+		#
+		# E o Chatwoot autentica a API com exatamente `api_access_token`.
+		# Resultado: um cliente de API que chame a central pela URL PÚBLICA
+		# tem o token silenciosamente removido e leva 401 — sem pista nenhuma
+		# de por quê.
+		#
+		# Ponte: o cliente manda `api-access-token` (com hífen, que sobrevive)
+		# e nós reconstruímos o nome que o Rails espera. Quando o header não
+		# vem, o valor fica vazio; o Chatwoot usa `.present?`, então header
+		# vazio é ignorado e a sessão por cookie (a UI) continua funcionando.
+		#
+		# Isto NÃO afeta quem fala com a central pela rede interna
+		# (`chatwoot-web:3000`) — Evolution, scripts e o espelho do monorepo
+		# não passam pelo Caddy e usam o header normal.
+		header_up api_access_token {http.request.header.Api-Access-Token}
 	}
 
 	# Anexos e uploads de conversa (ActiveStorage) — cliente manda PDF de

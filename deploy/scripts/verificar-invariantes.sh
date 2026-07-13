@@ -154,6 +154,23 @@ else
   ok "nenhum valor do .env tem espaço ou CR nas pontas"
 fi
 
+# ── O token da API tem que sobreviver ao Caddy ────────────────────
+# O Caddy 2.11 descarta header com underscore (anti request-smuggling), e o
+# Chatwoot autentica com `api_access_token`. Sem a ponte hífen→underscore no
+# Caddyfile, todo cliente de API que use a URL PÚBLICA leva 401 sem entender
+# por quê. Prova viva, não inspeção de config.
+TOKEN="$(env_get CENTRAL_ACCESS_TOKEN)"
+DOM="$(env_get DOMAIN)"; DOM="${DOM:-localhost}"
+if [ -n "$TOKEN" ] && $COMPOSE ps --status running --services 2>/dev/null | grep -q '^caddy$'; then
+  CODIGO="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 \
+    -H "api-access-token: ${TOKEN}" "https://inbox.${DOM}/api/v1/accounts/1/inboxes" 2>/dev/null)"
+  if [ "$CODIGO" = "200" ]; then
+    ok "o token da API sobrevive ao Caddy (ponte hífen→underscore ativa)"
+  else
+    falha "a API da central pela URL pública devolveu HTTP ${CODIGO} — o Caddy está comendo o token (falta a ponte 'header_up api_access_token' no Caddyfile)"
+  fi
+fi
+
 echo
 if [ "$FALHAS" -eq 0 ]; then
   echo "✅ invariantes do EPIC-1 OK."
