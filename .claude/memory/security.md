@@ -1,0 +1,63 @@
+# Segurança — Regras Invioláveis — Inbox Flash Capital
+
+> A central concentra conversa de cliente com **CPF/CNPJ, valor em aberto e situação de
+> inadimplência**. É o repositório de PII mais denso da Flash. Trate como tal.
+
+## NUNCA
+
+- ❌ Colar conteúdo real do `.env` no chat (nem parcialmente)
+- ❌ Hardcodar API key/token/senha no código, no `docker-compose.yml` ou no runbook — usar env var
+- ❌ `git add .env` — conferir `git status` antes de todo commit
+- ❌ Logar valor de env var, ou logar **PII** (CPF/CNPJ, telefone, conteúdo de mensagem) em log de serviço
+- ❌ Commitar `.env`, `secrets/`, `*.key`, `*.pem`, JSON de service account
+- ❌ Expor Postgres/Redis da central fora da rede Docker interna — só o Caddy publica porta
+- ❌ Aceitar webhook sem validar a origem (ver abaixo)
+
+## SEMPRE
+
+- ✅ Fluxo de nova env var: 1) `.env` (valor real) → 2) `.env.example` (placeholder + comentário) →
+  3) `deploy/docker-compose.yml` → 4) commitar **apenas** o `.env.example` e a config
+- ✅ Manter o `.env.example` sincronizado com todas as chaves
+- ✅ TLS em todo tráfego externo (Caddy, auto-HTTPS)
+- ✅ Revogar credencial imediatamente ao suspeitar de vazamento
+
+## Autenticação de webhook (AD-8) — cada canal tem o seu
+
+| Origem | Como validar |
+|---|---|
+| **Twilio** (inbound oficial) | assinatura `X-Twilio-Signature` — o monorepo **já faz isso** em `api/routers/twilio_webhooks_router.py`; reaproveite o padrão |
+| **Evolution** (fan-out do CRM) | token compartilhado no header |
+| **Chatwoot** (eventos → Serviço de Sync) | token compartilhado no header |
+| **Serviço de Sync → API do Chatwoot** | access token de agente/bot, escopo mínimo |
+
+Webhook público sem verificação = ingestão forjada (mensagem falsa na conversa de um cliente real).
+
+## Menor privilégio (serviços externos)
+
+- **Gmail:** conta/app password dedicada à caixa de atendimento — não a conta pessoal de ninguém
+- **Twilio:** credencial já existente no monorepo; a central **não** ganha permissão de disparo em massa
+- **Evolution:** apikey interna, sem exposição externa
+- **Chatwoot:** token de bot para o Sync, separado do token de admin humano
+
+## LGPD (Story 6.3)
+
+- Retenção de conversas **configurada** (não infinita por default)
+- Acesso a dado sensível (CPF/CNPJ, valor em aberto) **restrito por papel**
+- Direito de exclusão: apagar o contato na central **não** apaga a verdade no domínio — e vice-versa.
+  O pedido do titular atinge **os dois lados**; documente o procedimento antes do go-live.
+
+## gitleaks
+
+```bash
+gitleaks detect --no-banner            # escaneia o histórico completo
+gitleaks protect --staged --no-banner  # escaneia apenas o staged
+```
+O hook `PreToolUse` (`.claude/hooks/commit-guard.sh`) roda `gitleaks protect --staged` antes de cada
+`git commit`.
+
+## Em caso de vazamento
+
+1. Revogar a credencial no serviço **imediatamente**
+2. Gerar nova credencial e atualizar o `.env` local
+3. `git log --all -- '*.env'` para verificar se foi commitado
+4. Se commitado: `git filter-repo` para remover do histórico

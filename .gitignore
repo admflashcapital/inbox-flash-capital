@@ -1,0 +1,32 @@
+# Segredos — NUNCA versionar (AD-8)
+.env
+.env.*
+!.env.example
+secrets/
+*.key
+*.pem
+*.p12
+*-service-account*.json
+
+# Backups da central (contêm PII de conversa)
+backups/
+*.sql
+*.sql.gz
+
+# Python (Serviço de Sync)
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Storage local do Chatwoot (anexos) em dev
+storage/
+
+# Sessão do Claude Code (log local, não é artefato do projeto)
+.claude/session.log
+
+# SO / editor
+.DS_Store
+*.swp
