@@ -110,14 +110,28 @@ else
   ok "deploy/.env não está versionado"
 fi
 
-# O .env.example precisa ter as mesmas chaves do .env (sem valor nenhum vazando).
-CHAVES_ENV="$(grep -oE '^[A-Z_0-9]+=' "$ENV_FILE" 2>/dev/null | sort -u)"
-CHAVES_EX="$(grep -oE '^[A-Z_0-9]+=' "${RAIZ}/deploy/.env.example" 2>/dev/null | sort -u)"
-FALTANDO="$(comm -23 <(echo "$CHAVES_ENV") <(echo "$CHAVES_EX") | tr -d '=' | tr '\n' ' ')"
-if [ -z "${FALTANDO// /}" ]; then
-  ok ".env.example sincronizado com o .env (mesmas chaves)"
-else
-  falha "chaves no .env que faltam no .env.example: ${FALTANDO}"
+# ── .env e .env.example têm que ter EXATAMENTE o mesmo conjunto de chaves ──
+# Comparação SIMÉTRICA, de propósito. A versão anterior só olhava uma direção e
+# mesmo assim afirmava "mesmas chaves" — ficou verde enquanto 6 chaves da
+# STORY-3.1 faltavam no .env. É a direção que faltava que dói de verdade: sem
+# RELAY_TOKEN, por exemplo, o Caddy fecha /twilio/callback e TODO inbound do
+# número oficial leva 403 — em produção, em silêncio.
+#
+# Só nomes de chave são lidos e impressos aqui. Nenhum valor, nunca.
+CHAVES_ENV="$(grep -oE '^[A-Z_0-9]+=' "$ENV_FILE" 2>/dev/null | tr -d '=' | sort -u)"
+CHAVES_EX="$(grep -oE '^[A-Z_0-9]+=' "${RAIZ}/deploy/.env.example" 2>/dev/null | tr -d '=' | sort -u)"
+
+NAO_DOCUMENTADAS="$(comm -23 <(echo "$CHAVES_ENV") <(echo "$CHAVES_EX") | tr '\n' ' ')"
+NAO_PREENCHIDAS="$(comm -13 <(echo "$CHAVES_ENV") <(echo "$CHAVES_EX") | tr '\n' ' ')"
+
+if [ -n "${NAO_DOCUMENTADAS// /}" ]; then
+  falha "chaves no .env que NÃO estão no .env.example (chave sem contrato): ${NAO_DOCUMENTADAS}"
+fi
+if [ -n "${NAO_PREENCHIDAS// /}" ]; then
+  falha "chaves no .env.example AUSENTES do seu .env (o serviço sobe sem elas e falha calado): ${NAO_PREENCHIDAS}"
+fi
+if [ -z "${NAO_DOCUMENTADAS// /}" ] && [ -z "${NAO_PREENCHIDAS// /}" ]; then
+  ok ".env e .env.example têm o mesmo conjunto de chaves ($(echo "$CHAVES_EX" | wc -l) chaves, nos dois sentidos)"
 fi
 
 echo
