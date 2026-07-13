@@ -10,12 +10,12 @@ dele; os dados de negócio continuam no CRM (Twenty) e na plataforma interna (Su
 chega ao operador **mastigado** — labels e atributos empurrados por um Serviço de Sync — sem que a
 central consulte banco de domínio nenhum.
 
-> **Status: EPIC-1 concluído; EPIC-2 e EPIC-3 prontos até onde é automatizável (9/19 stories tocadas).**
+> **Status: EPIC-1 e EPIC-3 concluídos; EPIC-2 pronto até onde é automatizável (7/19 stories).**
 > A central sobe com um comando (`make up`), responde em HTTPS, tem backup/restore validados e banco
-> isolado. O canal de **prospecção** está ligado à Evolution com fan-out verificado — falta **parear o
-> chip**. O canal **oficial** (Twilio) tem a inbox, a janela de 24h, os templates e o espelho dos
-> disparos do monorepo — falta a **credencial Twilio real**. Checklists em
-> `docs/runbook-canal-prospeccao.md` e `docs/runbook-canal-oficial.md`.
+> isolado. O **número oficial (Twilio) está em produção**: recebe mensagem do cliente, responde pela
+> central dentro da janela de 24h e espelha os disparos de cobrança do monorepo — **sem reenviá-los**.
+> O canal de **prospecção** está ligado à Evolution com fan-out verificado; falta **parear o chip**.
+> Checklists em `docs/runbook-canal-oficial.md` e `docs/runbook-canal-prospeccao.md`.
 
 ## As 3 inboxes do MVP
 

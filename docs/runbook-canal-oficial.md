@@ -174,6 +174,45 @@ curl -H "api-access-token: $TOKEN" https://inbox.<DOMAIN>/api/v1/accounts/1/inbo
 em silêncio. Se um dia o monorepo e a central ficarem em **hosts separados**, o `CHATWOOT_URL` de lá
 vira `https://inbox.<DOMAIN>` — e aí o espelho depende dessa ponte.
 
+## ⚠️ O webhook do Twilio é a peça que mais apodrece
+
+**Sintoma:** a mensagem chega na Twilio (`status=received`) mas **nada acontece** — nem no monorepo,
+nem na central. Nenhum log, nenhum erro. Silêncio.
+
+**Onde olhar:** a própria Twilio guarda o motivo. Erro **11200** = "falha ao chamar o webhook".
+
+```bash
+# Mensagens recentes (mostra o error_code do inbound):
+curl -su "$SID:$TOKEN" "https://api.twilio.com/2010-04-01/Accounts/$SID/Messages.json?PageSize=10"
+# O detalhe do erro — inclui a URL EXATA que a Twilio tentou chamar:
+curl -su "$SID:$TOKEN" "https://monitor.twilio.com/v1/Alerts?PageSize=5"
+```
+
+Foi assim que descobrimos, em 13/07, que o webhook apontava para um túnel ngrok **morto desde 03/07**
+— e que, portanto, a **confirmação de sacado por resposta de WhatsApp nunca funcionou em produção**.
+E depois, que uma correção no console tinha **duplicado o caminho**
+(`/webhooks/twilio/inbound/webhooks/twilio/inbound`).
+
+**A URL do ngrok free muda a cada reinício do túnel.** Enquanto o webhook do Twilio e o
+`PUBLIC_BOLETO_BASE_URL` (que valida a assinatura) apontarem para um subdomínio aleatório, isso vai
+quebrar de novo, em silêncio. Reserve o **domínio estático** que o ngrok dá de graça.
+
+## Testar o canal sem depender de um celular
+
+Dá para provar tudo o que está sob nosso controle **sem enviar WhatsApp**: basta forjar a chamada da
+Twilio com uma assinatura válida — é o mesmo HMAC que ela calcula.
+
+```python
+base = URL + "".join(k + params[k] for k in sorted(params))
+assinatura = base64.b64encode(hmac.new(AUTH_TOKEN.encode(), base.encode(), hashlib.sha1).digest())
+# POST para a URL PÚBLICA (a mesma do webhook), com o header X-Twilio-Signature
+```
+
+Isso exercita ngrok → monorepo → validação de assinatura → confirmação de sacado → relay → central.
+Use um telefone **falso** no `From`: assim a confirmação de sacado não acha disparo correspondente e
+vira no-op, sem tocar em dado real. O único elo que sobra sem prova é a Twilio conseguir chamar a URL
+— e para isso os Alerts (acima) já dizem a verdade.
+
 ## Teste de aceite (o que fecha o EPIC-3)
 
 Com o número oficial real e o fan-out do monorepo no ar:
@@ -189,10 +228,42 @@ Com o número oficial real e o fan-out do monorepo no ar:
 - [ ] a resposta do cliente ao disparo cai na **mesma thread**;
 - [ ] `make oficial` verde.
 
+## ✅ Estado: gate verificado ao vivo (2026-07-13)
+
+Com o número oficial real (`+55 31 2391-6846`) e a conta Twilio de produção:
+
+- mensagem do cliente → inbox `WhatsApp Oficial` (`source_id` = SID da Twilio);
+- resposta digitada na central → **entregue** no WhatsApp do cliente;
+- espelho de um disparo → aparece na conversa do contato, e a **Twilio não recebeu nenhuma cópia**:
+  o guard do `source_id` segurou **com credencial real**. Cobrança em dobro não acontece.
+- inbound e espelho resolvem o **mesmo `contact_inbox`** (`whatsapp:+E164`) → mesma thread.
+
+**Não exercitado:** envio por template **fora** da janela de 24h (o mecanismo está provado — o
+`can_reply?` fecha sem inbound e reabre com ele, e os 10 templates estão sincronizados —, mas o envio
+real exige 24h de silêncio do cliente).
+
+## Identidade: telefone e BSUID convivem
+
+O inbound real criou **dois** `contact_inbox` para o mesmo contato:
+
+| `source_id` | origem |
+|---|---|
+| `whatsapp:+553182210297` | telefone (E.164) — é o que o **espelho do monorepo** usa |
+| `whatsapp:BR.4456758834604506` | **BSUID**, o identificador novo da Meta (`ExternalUserId` da Twilio) |
+
+Ambos apontam para o mesmo Contato, e o Chatwoot **prefere o do telefone**
+(`twilio_whatsapp_primary_source_id`) — por isso disparo e resposta casam hoje.
+
+O risco: a Meta está migrando para payloads **só com BSUID** (o Chatwoot já trata esse caso). Quando o
+`From` vier sem telefone, o inbound resolveria o `contact_inbox` do BSUID enquanto o espelho continua
+criando o do telefone — **mesmo contato, threads separadas**. Está na dívida técnica; se aparecer
+conversa duplicada para o mesmo cliente, é aqui que se olha.
+
 ## Diagnóstico
 
 | Sintoma | Causa provável |
 |---|---|
+| Mensagem chega na Twilio (`status=received`) e **nada acontece**, sem log em lugar nenhum | erro **11200**: a Twilio não conseguiu chamar o webhook. Veja os Alerts — eles dizem a URL exata que ela tentou |
 | A confirmação de sacado parou de funcionar | o webhook do número foi repontado para o Chatwoot. Ele deve apontar para o **monorepo** |
 | Mensagem do cliente não aparece na central | o relay do monorepo não está entregando: `RELAY_TOKEN` diferente entre os dois `.env` (→ 403 no Caddy) |
 | O cliente recebeu a cobrança **duas vezes** | o push do monorepo foi feito **sem `source_id`** — a central reenviou. Ver § "O disparo não pode sair duas vezes" |

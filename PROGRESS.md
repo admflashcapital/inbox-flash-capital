@@ -9,8 +9,9 @@
 O EPIC-1 bloqueia tudo. Os EPICs 2/3/4 podem correr em paralelo depois dele. O EPIC-5 precisa de ≥1 canal vivo.
 Cada épico tem um gate de saída — use `/gate EPIC-N`.
 
-**Progresso total:** 5 / 19 stories `[x]` (+4 em `[~]`, prontas até onde é automatizável — as 4 esperam
-por um chip físico ou por credencial real). **M1 (EPIC-1) concluído** — a central está no ar em dev.
+**Progresso total:** 7 / 19 stories `[x]` (+2 em `[~]`: 2.1 e 2.2, que esperam o **chip físico**).
+**M1 (EPIC-1) concluído** — a central está no ar. **EPIC-3 concluído e verificado ao vivo** — o número
+oficial recebe, responde e espelha os disparos, com o número real de produção.
 
 ---
 
@@ -108,8 +109,30 @@ Número oficial como inbox de cobrança/transacional + espelho dos disparos orig
 
 | # | Story | Status | Commit |
 |---|---|---|---|
-| 3.1 | Inbox oficial espelhada (FR-7) | [~] | b16dabc |
-| 3.2 | Espelho dos disparos em massa — push do monorepo (FR-8, AD-6) | [~] | c3d5438 (monorepo) |
+| 3.1 | Inbox oficial espelhada (FR-7) | [x] | b16dabc |
+| 3.2 | Espelho dos disparos em massa — push do monorepo (FR-8, AD-6) | [x] | c3d5438 (monorepo) |
+
+## ✅ Gate do EPIC-3 verificado AO VIVO (2026-07-13, número oficial real)
+
+Com a conta Twilio de produção e o número `+55 31 2391-6846`:
+
+| Critério do gate | Evidência |
+|---|---|
+| mensagem ao número oficial cai na inbox `WhatsApp Oficial` | `"Boa noite !"` de `+5531822…` → inbox 6, `source_id=SMbdf805…` |
+| resposta dentro da janela de 24h sai pelo canal oficial | digitada na central → entregue no WhatsApp, `source_id=SMf14975…` |
+| disparo do monorepo aparece como outbound na conversa correta | `mirror_outbound` chamado de dentro do `fastapi_api` → mensagem na conversa do contato |
+| **a central NÃO reenvia o disparo** | a Twilio recebeu **zero** cópias da mensagem espelhada — o guard do `source_id` segurou **com credencial real** |
+| a resposta do cliente cai na mesma thread | inbound e espelho resolveram o **mesmo `contact_inbox`** (`whatsapp:+E164`) e o mesmo contato |
+| a central não origina disparo em massa | `make oficial`: zero campanhas na inbox (AD-6) |
+
+**Ainda não exercitado:** o envio por **template fora da janela de 24h**. O mecanismo está provado
+(`can_reply?` fecha sem inbound e reabre com ele; os 10 Content Templates aprovados estão
+sincronizados), mas o envio real fora da janela exige 24h de silêncio do cliente.
+
+**Fan-out provado com assinatura real.** Antes do teste com celular, a cadeia foi validada forjando
+uma chamada da Twilio com **assinatura HMAC-SHA1 válida** pela URL pública: ngrok → monorepo
+(assinatura validada) → confirmação de sacado (no-op, número sem disparo) → relay → central. Os dois
+consumidores viram o mesmo evento.
 
 **A descoberta que definiu o épico: o número oficial JÁ TEM dono do webhook.** O monorepo recebe o
 inbound do Twilio em `/webhooks/twilio/inbound`, valida a assinatura e usa a resposta do cliente para
@@ -153,11 +176,28 @@ intocada). É **código**, então TDD: 16 testes novos, suíte da API em **895 p
   pretendido. Enquanto o override de dev (`TWILIO_FLASH_CAPITAL_PHONE_NUMBER`) existir, a Twilio
   entrega tudo no número de teste — é de lá que vem a resposta, logo é lá que a thread existe.
 
-**Falta para fechar o EPIC-3** (tudo depende de credencial real — nada mais é automatizável):
-credenciais Twilio no `.env` da central e o `RELAY_TOKEN` idêntico nos dois repos; `make twilio` para
-criar a inbox e sincronizar os templates; ligar `CHATWOOT_MIRROR_ENABLED=true` no monorepo com o
-`CHATWOOT_INBOX_ID`; e provar o gate com uma mensagem real — **incluindo o teste de não-regressão da
-confirmação de sacado**, que é o mais importante do épico. Checklist em `docs/runbook-canal-oficial.md`.
+### O que quase matou o épico em silêncio (e virou guard)
+
+Nenhum destes dava erro. Todos falhavam **calados** — é o padrão de falha que mais custa neste projeto.
+
+1. **O smoke test do EPIC-1 deixou uma conta para trás.** Ela virou a `Account` id 1; o `.env` dizia
+   `CENTRAL_ACCOUNT_ID=1`; e as duas inboxes foram criadas **dentro da conta de teste**. O operador
+   logava na conta real e via uma central vazia. → `smoke-test.sh` agora destrói a conta que cria e
+   **falha se ela sobreviver**; `make check` recusa conta de teste e exige **uma única** conta.
+2. **O Caddy 2.11 descarta header com underscore** (`dropping header containing underscore`, sem opção
+   de desligar) — e o Chatwoot autentica com `api_access_token`. Cliente de API pela URL pública levava
+   **401 com token válido**. A UI não sofria (cookie) e a rede interna também não — o bug só apareceria
+   no dia em que a central e o monorepo ficassem em hosts separados, e aí **o espelho morreria calado**.
+   → ponte hífen→underscore no Caddyfile + `make check` prova ao vivo (chama a API pública, exige 200).
+3. **`env_get` não aparava espaço/`\r`** do valor lido do `.env`. Espaço sobrando num SID vira URL
+   inválida; numa senha de banco, falha de autenticação sem pista. → aparado nos 10 scripts, e o
+   `make check` detecta a sujeira (o Docker Compose **não** apara — passa o valor cru ao container).
+4. **`make check` comparava `.env` e `.env.example` numa direção só**, e mesmo assim afirmava "mesmas
+   chaves" — ficou verde com 6 chaves faltando. → comparação simétrica.
+5. **O webhook do Twilio apontava para um túnel ngrok morto** (`a555-…`) desde **3 de julho**. Ou seja:
+   a **confirmação de sacado por resposta de WhatsApp nunca funcionou em produção** — o código valida
+   assinatura e grava em `confirmacoes_disparos`, mas a Twilio nunca conseguiu chamá-lo (erro 11200,
+   HTTP 404). Achado colateral do EPIC-3; **é do monorepo, e o time precisa saber**.
 
 **Gate EPIC-3:** mensagem ao número oficial cai na inbox `WhatsApp Oficial`; resposta dentro da janela de 24h sai pelo canal oficial e fora dela usa **template Meta aprovado**; disparo de cobrança do pipeline do monorepo aparece como outbound na conversa correta (push na API do Chatwoot); a resposta do cliente cai na **mesma thread**; a central **não origina** disparo em massa.
 
@@ -217,6 +257,8 @@ Nada ainda — implementação não iniciada. Itens levantados em code-review e 
 | **Espelho pode duplicar e pode perder.** Duplicar: o dedup nativo da Evolution depende do import por Postgres direto (desligado por AD-8/AD-9) e o Chatwoot não tem índice único em `source_id` — o replay do Baileys reinsere. Mitigado *a posteriori* por `dedup-mensagens.sh` (precisa estar no cron). Perder: central fora do ar = mensagens só no N8N e no WhatsApp, sem reenvio automático. | espelho incompleto/duplicado (não afeta o Agente nem o lead) | reenvio vira trabalho do Serviço de Sync se doer (EPIC-5) |
 | **Anti-SSRF do Chatwoot desligado para rede privada** (`SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true`). Necessário para falar com a Evolution e baixar mídia; em troca, um webhook malicioso configurado na central poderia alcançar serviço interno. Mitigação atual: só admin configura webhook, e a rede `flash-canais` tem apenas Evolution, Chatwoot e o Caddy. | SSRF a partir da central | revisar no EPIC-6 (governança) |
 | **Retenção de conversa sem aval jurídico.** `RETENCAO_CONVERSAS_DIAS=1825` (5 anos) é um default técnico, não uma decisão. A central guarda conversa de **cobrança**: apagar cedo destrói prova de negociação de dívida; tarde demais viola a LGPD. O expurgo existe (`retencao-conversas.sh`) mas **não está no cron**. | LGPD / prova em disputa de dívida | STORY-6.3 |
+| **Identidade dupla no canal Twilio: telefone e BSUID.** O inbound real criou **dois** `contact_inbox` para o mesmo contato: `whatsapp:+553182210297` (telefone) e `whatsapp:BR.4456758834604506` (o **BSUID**, identificador novo da Meta que a Twilio manda em `ExternalUserId`). Hoje o Chatwoot prefere o do telefone (`twilio_whatsapp_primary_source_id`) e é ele que o espelho do monorepo usa — então disparo e resposta casam. Mas a Meta está migrando para payloads **só com BSUID** (o próprio código do Chatwoot já trata esse caso). No dia em que o `From` vier sem telefone, o inbound resolveria o `contact_inbox` do BSUID e o espelho continuaria criando o do telefone: **mesmo contato, threads separadas**. | disparo e resposta em conversas diferentes (dado não se perde; a thread racha) | monitorar; revisar quando a Meta forçar BSUID |
+| **Webhook do Twilio depende de URL de ngrok efêmera.** A URL do plano free muda a cada reinício do túnel, e o webhook do Twilio (e o `PUBLIC_BOLETO_BASE_URL`, que valida a assinatura) apontam para ela. Foi exatamente assim que a confirmação de sacado ficou quebrada por 10 dias sem ninguém notar. Reservar o **domínio estático** que o ngrok dá de graça, ou publicar a API de verdade. | webhook apodrece em silêncio a cada restart | antes do go-live |
 | **Rota de disparo em massa do monorepo sem autenticação.** O router `/whatsapp-dispatch` (`api/api_main.py:256`) não declara nenhuma dependência de auth — nem no `include_router`, nem nas rotas. A única guarda é o limite de 50 boletos por lote. São os endpoints que **disparam cobrança em massa** pela Twilio. Achado de passagem no EPIC-3; **fora do escopo desta central** (é código do monorepo), mas registrado porque o risco é alto e o dono é o mesmo time. Confirmar se há middleware global de auth antes de concluir que está aberto. | disparo de cobrança em massa por terceiro; custo Twilio; reputação do número oficial | monorepo — avaliar assim que possível |
 | **`/twilio/delivery_status` da central aceita chamada não assinada.** O Chatwoot não valida o `X-Twilio-Signature` em nenhum dos dois callbacks. O `/twilio/callback` nós fechamos com o `RELAY_TOKEN` (o inbound vem do monorepo), mas o `delivery_status` **precisa** ficar público — é a Twilio que o chama direto, para as mensagens que a central envia. Forjá-lo só altera o status de entrega de uma mensagem existente. Mitigação possível: allowlist dos IPs da Twilio no Caddy. | status de entrega forjado (sem leitura nem envio de dados) | revisar no EPIC-6 (governança) |
 | **Cópia offsite do backup é manual.** O `backup.sh` grava só local; host morre = backup morre junto. A cópia criptografada para fora do host está documentada, não automatizada. | perda total em falha de host | antes do go-live |
@@ -246,5 +288,7 @@ Nada ainda — implementação não iniciada. Itens levantados em code-review e 
 | 2026-07-13 | EPIC-2 | 2.1 · 2.2 · 2.3 | **Canal de prospecção ligado.** A instância `crm` (Evolution, no CRM) passou a ter **dois consumidores**: o Agente N8N (webhook global) e a central (integração nativa Chatwoot). A inbox `WhatsApp Prospecção` é criada pela própria Evolution (`autoCreate`). Ponte por rede Docker externa `flash-canais` — nada exposto na internet. Novos comandos: `make evolution`, `make fanout`, `make dedup`, `make aquecimento`. Runbooks de canal e de aquecimento. **Achados que mudaram o desenho:** (1) o Chatwoot recusa webhook/mídia em host sem IP público (anti-SSRF do `SafeFetch`) → `SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true`, senão o canal falha **em silêncio**; (2) um host só tem uma porta 443 → o Caddy da central virou perfil `edge` e, no host compartilhado, o Caddy do CRM serve `inbox.<DOMAIN>`; (3) o dedup nativo da Evolution depende do import por Postgres direto (proibido por AD-9) → faxineiro `dedup-mensagens.sh` na central. Commits: `4bbccb5` (central) · `46b96b2` (CRM). Gate do épico **pendente do pareamento do chip** (manual). |
 
 | 2026-07-13 | EPIC-3 | 3.1 · 3.2 | **Canal oficial (Twilio) ligado — e o épico foi definido por uma descoberta.** O número oficial **já tinha dono do webhook**: o monorepo recebe o inbound, valida a assinatura e alimenta a confirmação de sacado. Um número Twilio tem **um** webhook de inbound — apontá-lo para o Chatwoot quebraria a cobrança; o inverso deixaria a confirmação de dinheiro refém do chat. Desenho forçado: **o monorepo segue dono e faz fan-out**, igual ao EPIC-2. Na central: `conectar-twilio.sh` (inbox `Channel::TwilioSms` **medium=whatsapp** — é o medium que ativa a janela de 24h nativa; como `sms`, a Meta rejeitaria o texto livre pós-24h **em silêncio**), Caddy barrando `/twilio/callback` com `RELAY_TOKEN` (o `Twilio::CallbackController` **não valida** a assinatura), `verificar-canal-oficial.sh`. No monorepo (branch `feat/espelho-chatwoot`): `ChatwootMirror`, fan-out do inbound **depois** da confirmação, espelho no choke point do dispatch. **O achado que salvou o épico:** o Chatwoot **reenviaria** o disparo se a mensagem chegasse sem `source_id` — cobrança em dobro. Provado ao vivo com credencial Twilio **falsa**: com SID → `sent` sem chamar a Twilio; sem SID → `failed` (HTTP 401). Comandos novos: `make twilio`, `make twilio-status`, `make oficial`. Commits: `b16dabc` (central) · `c3d5438` (monorepo, branch). Gate **pendente de credencial real**. |
+
+| 2026-07-13 | EPIC-3 | gate | **Gate do EPIC-3 fechado ao vivo, com o número oficial real.** Mensagem recebida na inbox, resposta enviada pela central e chegando no WhatsApp, espelho do disparo caindo na conversa do contato — e a Twilio **sem nenhuma cópia** da mensagem espelhada (o guard do `source_id` segurou com credencial real: cobrança em dobro não acontece). Antes do teste com celular, a cadeia foi validada forjando uma chamada da Twilio com **assinatura HMAC-SHA1 válida** pela URL pública. O caminho até aqui foi feito de **falhas silenciosas**, e cada uma virou guard: a conta órfã que o smoke test deixou (os canais nasceram na conta de TESTE e o operador via a central vazia); o Caddy comendo o `api_access_token` por causa do underscore; o `env_get` sem aparar espaço; o `make check` comparando o `.env` numa direção só. Achado colateral **grave, do monorepo**: o webhook do Twilio apontava para um túnel ngrok morto desde 03/07 — a **confirmação de sacado por WhatsApp nunca funcionou em produção**. Commits: `b16dabc`, `78beb30`, `483adc2`, `3890d31`, `c7d0df3`, `83002d2`, `fd86c4f` (central) · `c3d5438` (monorepo, branch `feat/espelho-chatwoot`). |
 
 > **Nota sobre este registro:** é um log **por sessão** (grão grosso). O rastreamento **por story** — com hash de commit — vive nas tabelas de cada épico acima.
