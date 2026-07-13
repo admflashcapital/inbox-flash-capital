@@ -59,6 +59,9 @@ inbox.{$DOMAIN:localhost} {
 	}
 	respond @callback_sem_token 403
 
+	# Só quem apresentou o token é que ganha a ponte (ver abaixo).
+	@com_token header Api-Access-Token *
+
 	reverse_proxy chatwoot-web:3000 {
 		# O Chatwoot usa ActionCable (WebSocket) para atualizar a conversa em
 		# tempo real — o Caddy faz proxy de WebSocket por padrão. Os headers
@@ -86,7 +89,12 @@ inbox.{$DOMAIN:localhost} {
 		# Isto NÃO afeta quem fala com a central pela rede interna
 		# (`chatwoot-web:3000`) — Evolution, scripts e o espelho do monorepo
 		# não passam pelo Caddy e usam o header normal.
-		header_up api_access_token {http.request.header.Api-Access-Token}
+		#
+		# CONDICIONAL de propósito (`@com_token`): sem o matcher, o Caddy injeta
+		# `api_access_token: ""` em TODA requisição, inclusive as do navegador.
+		# Hoje o Chatwoot ignora (usa `.present?`), mas depender disso é apostar
+		# que nenhum caminho do Rails vai preferir um header vazio à sessão.
+		header_up @com_token api_access_token {http.request.header.Api-Access-Token}
 	}
 
 	# Anexos e uploads de conversa (ActiveStorage) — cliente manda PDF de

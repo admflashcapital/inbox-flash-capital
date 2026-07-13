@@ -154,6 +154,34 @@ else
   ok "nenhum valor do .env tem espaço ou CR nas pontas"
 fi
 
+# ── A central serve UMA conta, e o .env aponta para ELA ───────────
+# Aprendido do jeito difícil: o smoke test deixou uma conta ("Flash Capital
+# (smoke)") no banco. Ela virou a conta 1; o `.env` dizia CENTRAL_ACCOUNT_ID=1;
+# e todo o trabalho dos canais foi criado dentro da conta de TESTE, enquanto o
+# operador logava na conta real e via uma central vazia — sem nenhum erro.
+if $COMPOSE ps --status running --services 2>/dev/null | grep -q '^postgres$'; then
+  DB="$(env_get POSTGRES_DATABASE)"
+  conta_sql() { $COMPOSE exec -T postgres psql -tAX -U postgres -d "$DB" -c "$1" 2>/dev/null | tr -d '[:space:]'; }
+
+  TESTE="$(conta_sql "SELECT count(*) FROM accounts WHERE name ILIKE '%smoke%' OR name ILIKE '%test%';")"
+  if [ "${TESTE:-0}" -eq 0 ] 2>/dev/null; then
+    ok "nenhuma conta de teste no banco"
+  else
+    falha "há ${TESTE} conta(s) de TESTE no banco — elas roubam o id 1 e os canais acabam criados nelas"
+  fi
+
+  QTD="$(conta_sql "SELECT count(*) FROM accounts;")"
+  ID_ENV="$(env_get CENTRAL_ACCOUNT_ID)"
+  EXISTE="$(conta_sql "SELECT count(*) FROM accounts WHERE id = ${ID_ENV:-0};")"
+  if [ "${QTD:-0}" -eq 1 ] && [ "${EXISTE:-0}" -eq 1 ]; then
+    ok "CENTRAL_ACCOUNT_ID=${ID_ENV} é a única conta da central"
+  elif [ "${EXISTE:-0}" -ne 1 ]; then
+    falha "CENTRAL_ACCOUNT_ID=${ID_ENV} não existe no banco — os canais seriam criados no vazio"
+  else
+    falha "há ${QTD} contas no banco. A central serve UMA empresa; conta extra significa canal criado na conta errada"
+  fi
+fi
+
 # ── O token da API tem que sobreviver ao Caddy ────────────────────
 # O Caddy 2.11 descarta header com underscore (anti request-smuggling), e o
 # Chatwoot autentica com `api_access_token`. Sem a ponte hífen→underscore no

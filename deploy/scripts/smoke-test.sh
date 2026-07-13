@@ -113,5 +113,34 @@ CODIGO="$(curl -sk -o /dev/null -w '%{http_code}' --resolve "inbox.${DOMAIN}:443
 echo "[smoke] https://inbox.${DOMAIN}/app/login → HTTP ${CODIGO}"
 [ "$CODIGO" = "200" ] || [ "$CODIGO" = "302" ] || { echo "[smoke] FALHOU: UI não respondeu em HTTPS."; exit 1; }
 
+# ── 5. Limpeza — o smoke NÃO pode deixar conta para trás ───────────
+# Aprendido do jeito difícil (2026-07-13): a conta semeada aqui SOBREVIVEU ao
+# teste, virou a `Account` de id 1 e, como o `.env` apontava
+# `CENTRAL_ACCOUNT_ID=1`, TODO o trabalho dos canais (inbox de prospecção, inbox
+# oficial da Twilio) foi criado dentro da conta de TESTE — não na conta real do
+# operador. Da UI, o operador via uma central vazia e não entendia por quê.
+#
+# Um teste que deixa estado para trás não é um teste: é uma armadilha. O smoke
+# prova o que precisa provar e some.
+echo "[smoke] removendo a conta de teste…"
+$COMPOSE exec -T chatwoot-web bundle exec rails runner '
+  conta = Account.find_by(name: "Flash Capital (smoke)")
+  if conta.nil?
+    puts "[smoke] (nada a limpar)"
+  else
+    usuarios = conta.users.where("email LIKE ?", "smoke@%").to_a
+    conta.destroy!
+    usuarios.each { |u| u.destroy! if u.accounts.reload.empty? }
+    puts "[smoke] conta de teste e usuário removidos"
+  end
+' 2>/dev/null | grep "\[smoke\]"
+
+RESTANTES="$(consultar "SELECT count(*) FROM accounts WHERE name = 'Flash Capital (smoke)';")"
+if [ "${RESTANTES:-1}" != "0" ]; then
+  echo "[smoke] FALHOU: a conta de teste sobreviveu à limpeza — ela contaminaria a central."
+  exit 1
+fi
+
 echo
 echo "[smoke] OK — stack sobe com um comando, responde em HTTPS e os dados sobrevivem ao restart."
+echo "[smoke] e o teste não deixou rastro: nenhuma conta de teste no banco."
