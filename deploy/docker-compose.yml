@@ -1,0 +1,195 @@
+# ═══════════════════════════════════════════════════════════════════
+# Inbox Flash Capital — stack da central (STORY-1.1 / EPIC-1)
+# ═══════════════════════════════════════════════════════════════════
+# Chatwoot CE (web + Sidekiq) + Postgres 16/pgvector + Redis 7 + Caddy.
+# Sobe com UM comando:  make up   (=  docker compose up -d --wait)
+#
+# Regras que este arquivo materializa:
+#   • AD-7 — imagem oficial CE com TAG FIXA. `latest` é proibido (FR-2).
+#   • AD-9 — Postgres PRÓPRIO da central. Nenhuma credencial ou conexão
+#            com os bancos do CRM (Twenty) ou do monorepo (Supabase).
+#   • AD-8 — segredos só no .env (gitignored); TLS externo pelo Caddy.
+#   • Só o Caddy publica porta no host. Postgres, Redis e o Rails do
+#     Chatwoot ficam acessíveis apenas pela rede Docker interna.
+# ═══════════════════════════════════════════════════════════════════
+
+name: inbox-flash-capital
+
+# ── Redes ──────────────────────────────────────────────────────────
+# internal: `internal: true` ⇒ rede FECHADA (sem egress, sem exposição
+#           ao host). Postgres e Redis vivem só aqui.
+# outbound: bridge com egress. Só quem precisa falar com a internet:
+#           web e sidekiq (Evolution no CRM, Twilio, IMAP/SMTP do Gmail,
+#           ACME não passa por aqui — é do Caddy).
+# external: porta de entrada do host (80/443). Só o Caddy.
+networks:
+  internal:
+    driver: bridge
+    internal: true
+  outbound:
+    driver: bridge
+  external:
+    driver: bridge
+
+# ── Volumes (persistência entre restarts — critério de aceite 1.1) ──
+volumes:
+  postgres_data:   # banco da central (conversas, contatos, config)
+  redis_data:      # filas do Sidekiq
+  storage_data:    # anexos das conversas (ActiveStorage local) — web e sidekiq compartilham
+  caddy_data:      # certificados TLS (não perder: rate limit do Let's Encrypt)
+  caddy_config:
+
+# ── Base comum do Chatwoot (web, sidekiq e init usam a MESMA imagem) ─
+x-chatwoot-base: &chatwoot-base
+  # AD-7/FR-2: tag CE explícita e fixa. NUNCA `latest`. Upgrade = bump
+  # desta tag + validação em staging (docs/runbook-upgrade.md).
+  image: chatwoot/chatwoot:${CHATWOOT_TAG:-v4.15.1-ce}
+  env_file: .env
+  environment:
+    NODE_ENV: production
+    RAILS_ENV: production
+    INSTALLATION_ENV: docker
+  volumes:
+    - storage_data:/app/storage
+  networks:
+    - internal
+    - outbound
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  # ── PostgreSQL 16 + pgvector — banco EXCLUSIVO da central (AD-9) ──
+  # O init script cria o usuário `chatwoot`, o banco e pré-cria as 5
+  # extensões que o schema do Chatwoot exige. Sem porta no host.
+  postgres:
+    image: pgvector/pgvector:0.8.5-pg16
+    restart: unless-stopped
+    # pg_stat_statements precisa ser pré-carregada no boot do servidor;
+    # o schema.rb do Chatwoot habilita a extensão (enable_extension).
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
+    environment:
+      # Credencial do SUPERUSUÁRIO do container (imagem oficial do Postgres).
+      # Note que `POSTGRES_PASSWORD` é ambíguo entre os dois mundos: para a
+      # imagem do Postgres é a senha do superusuário; para o Chatwoot é a do
+      # usuário da aplicação. Por isso o init lê as suas em `APP_DB_*`.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD}
+      POSTGRES_DB: postgres
+      # Locale pt-BR via ICU — ordenação correta de nome de cedente/sacado.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale-provider=icu --icu-locale=pt-BR"
+      # Consumidos pelo init script (cria o usuário e o banco da central):
+      APP_DB_NAME: ${POSTGRES_DATABASE}
+      APP_DB_USER: ${POSTGRES_USERNAME}
+      APP_DB_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db:/docker-entrypoint-initdb.d:ro
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Redis 7 — fila do Sidekiq. Sem porta no host; senha obrigatória. ─
+  redis:
+    image: redis:7.4.9-alpine
+    restart: unless-stopped
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Chatwoot init — migrações (one-shot, idempotente) ────────────
+  # O compose oficial exige `rails db:chatwoot_prepare` À MÃO antes do up.
+  # Aqui ele vira um serviço one-shot de que web e sidekiq dependem
+  # (service_completed_successfully) — assim `docker compose up` é UM
+  # comando, sem passo manual frágil (critério de aceite da STORY-1.1).
+  # `db:chatwoot_prepare` = cria o schema se novo, migra se já existe.
+  # É também o passo de migração do upgrade (docs/runbook-upgrade.md).
+  chatwoot-init:
+    <<: *chatwoot-base
+    restart: "no"
+    entrypoint: ["docker/entrypoints/rails.sh"]
+    command: ["bundle", "exec", "rails", "db:chatwoot_prepare"]
+
+  # ── Chatwoot web (Rails) — a UI e a API da central ───────────────
+  # Sem porta publicada: o acesso externo entra só pelo Caddy (TLS).
+  chatwoot-web:
+    <<: *chatwoot-base
+    restart: unless-stopped
+    entrypoint: ["docker/entrypoints/rails.sh"]
+    command: ["bundle", "exec", "rails", "s", "-p", "3000", "-b", "0.0.0.0"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chatwoot-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 90s
+
+  # ── Chatwoot Sidekiq — jobs (webhooks, e-mail, IMAP, automações) ──
+  chatwoot-sidekiq:
+    <<: *chatwoot-base
+    restart: unless-stopped
+    command: ["bundle", "exec", "sidekiq", "-C", "config/sidekiq.yml"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chatwoot-init:
+        condition: service_completed_successfully
+    healthcheck:
+      # Processo vivo = Sidekiq respondendo. Não há endpoint HTTP aqui.
+      test: ["CMD-SHELL", "pgrep -f sidekiq > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ── Caddy — única porta de entrada; TLS automático (AD-8) ────────
+  caddy:
+    image: caddy:2.11.4
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - internal
+      - external
+    depends_on:
+      chatwoot-web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

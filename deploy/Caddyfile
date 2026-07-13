@@ -1,0 +1,58 @@
+# ═══════════════════════════════════════════════════════════════════
+# Caddy — porta de entrada da central (STORY-1.1 / EPIC-1)
+# ═══════════════════════════════════════════════════════════════════
+# Todo tráfego externo passa por aqui. O Rails do Chatwoot não publica
+# porta no host (AD-8: TLS sempre; superfície mínima).
+#
+#   https://inbox.<DOMAIN>  → Chatwoot (UI de atendimento + API)
+#
+# TLS parametrizado por $DOMAIN — um único Caddyfile serve os dois ambientes:
+#   • dev  (DOMAIN=localhost)          → CA interna do Caddy (self-signed),
+#                                         sem ACME, sem DNS público.
+#   • prod (DOMAIN=flashcapital.com.br) → Let's Encrypt automático, usando
+#                                         $ADMIN_EMAIL no ACME. Exige o DNS de
+#                                         inbox.<DOMAIN> já apontando para o host.
+# ═══════════════════════════════════════════════════════════════════
+
+{
+	# E-mail do ACME (Let's Encrypt em prod). Em dev (*.localhost) o Caddy usa
+	# a CA interna e ignora o ACME — o valor fica inerte.
+	email {$ADMIN_EMAIL:admin@localhost}
+}
+
+# Cabeçalhos de segurança dos vhosts HTTPS.
+(seguranca) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Não revela a versão do servidor.
+		-Server
+	}
+}
+
+# Health/landing em HTTP simples (sem redirect p/ HTTPS) — usado pelo
+# healthcheck do container e como sanity check do proxy.
+http://localhost {
+	respond "Inbox Flash Capital — Caddy OK" 200
+}
+
+# UI + API do Chatwoot.
+inbox.{$DOMAIN:localhost} {
+	import seguranca
+
+	reverse_proxy chatwoot-web:3000 {
+		# O Chatwoot usa ActionCable (WebSocket) para atualizar a conversa em
+		# tempo real — o Caddy faz proxy de WebSocket por padrão. Os headers
+		# abaixo dizem ao Rails que a ponta externa é HTTPS (senão ele monta
+		# URL de asset/redirect em http e o navegador bloqueia o mixed content).
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-Host {host}
+	}
+
+	# Anexos e uploads de conversa (ActiveStorage) — cliente manda PDF de
+	# nota fiscal/contrato; o default do Caddy (~10MB) cortaria.
+	request_body {
+		max_size 40MB
+	}
+}

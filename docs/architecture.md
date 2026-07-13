@@ -117,10 +117,10 @@ graph LR
 
 | Name | Version |
 | --- | --- |
-| Chatwoot (Community Edition) | pin em tag estável (ex.: `v4.x`) — confirmar no deploy |
-| PostgreSQL (com pgvector) | 16.x |
-| Redis | 7.x |
-| Caddy (reverse proxy / TLS) | 2.x |
+| Chatwoot (Community Edition) | **`v4.15.1-ce`** — fixada em `deploy/.env` (`CHATWOOT_TAG`); upgrade em `docs/runbook-upgrade.md` |
+| PostgreSQL (com pgvector) | **`pgvector/pgvector:0.8.5-pg16`** |
+| Redis | **`7.4.9-alpine`** |
+| Caddy (reverse proxy / TLS) | **`2.11.4`** |
 | Evolution API (existente no CRM) | v2.3.7 |
 | Twilio WhatsApp (Meta API, existente no monorepo) | provider atual |
 | Serviço de Sync | Python 3.12 + FastAPI + httpx (alinhado ao monorepo) |
@@ -193,10 +193,16 @@ erDiagram
 ```text
 inbox-flash-capital/
   docs/                      # esta documentação (product-brief, prd, architecture, epics)
-  deploy/                    # [STORY-1.1] ainda não existe
-    docker-compose.yml       # chatwoot-web, sidekiq, postgres, redis, caddy, sync-service
-    Caddyfile
-    .env.example
+  deploy/                    # [EPIC-1 ✔] a stack da central
+    docker-compose.yml       # caddy, chatwoot-web, chatwoot-sidekiq, chatwoot-init, postgres, redis
+    Caddyfile                # TLS + único ponto de entrada (só ele publica porta)
+    .env.example             # todas as chaves; o .env real nunca é versionado
+    scripts/
+      init-db/               # cria usuário, banco e extensões da central (AD-9)
+      backup.sh  restore.sh  # backup do par banco+anexos; restore com ensaio em ambiente limpo
+      smoke-test.sh          # semeia, reinicia e prova a persistência (dev/staging)
+      verificar-invariantes.sh  # falha se AD-7/AD-8/AD-9 forem violados
+      retencao-conversas.sh  # expurgo LGPD de conversa resolvida antiga
   sync-service/              # [EPIC-5] ainda não existe
     app/
       main.py                # FastAPI: webhooks de domínio + Chatwoot

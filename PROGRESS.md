@@ -9,7 +9,7 @@
 O EPIC-1 bloqueia tudo. Os EPICs 2/3/4 podem correr em paralelo depois dele. O EPIC-5 precisa de ≥1 canal vivo.
 Cada épico tem um gate de saída — use `/gate EPIC-N`.
 
-**Progresso total:** 0 / 19 stories.
+**Progresso total:** 4 / 19 stories. **M1 (EPIC-1) concluído** — a central está no ar em dev.
 
 ---
 
@@ -19,12 +19,24 @@ Chatwoot self-hosted na infra da Flash: deploy reproduzível, banco isolado, ver
 
 | # | Story | Status | Commit |
 |---|---|---|---|
-| 1.1 | Stack Docker da central sobe com um comando (FR-1) | [ ] | |
-| 1.2 | Banco da central isolado dos bancos de domínio (FR-1, AD-9) | [ ] | |
-| 1.3 | Versão fixada e procedimento de upgrade (FR-2) | [ ] | |
-| 1.4 | Backup e restore validados (FR-3) | [ ] | |
+| 1.1 | Stack Docker da central sobe com um comando (FR-1) | [x] | |
+| 1.2 | Banco da central isolado dos bancos de domínio (FR-1, AD-9) | [x] | |
+| 1.3 | Versão fixada e procedimento de upgrade (FR-2) | [x] | |
+| 1.4 | Backup e restore validados (FR-3) | [x] | |
 
 **Gate EPIC-1:** `docker compose up -d` sobe web + Sidekiq + Postgres/pgvector + Redis + Caddy; UI do Chatwoot responde em HTTPS com cert válido; dados persistem após restart; imagem com **tag fixa** (nunca `latest`); Postgres próprio, sem credencial cruzada com Twenty/Supabase; restore de backup recompõe conversas e anexos num ambiente limpo.
+
+**Gate verificado ao vivo em 2026-07-13 (dev):** `make up` sobe os 6 containers healthy com um
+comando · `https://inbox.localhost` responde (HTTP→HTTPS 308; cert da CA interna em dev — o cert
+público do Let's Encrypt depende do **DNS de produção**, ver abaixo) · `make smoke` prova que
+conversa, mensagem e anexo sobrevivem ao restart · `make check` valida tag fixa `-ce`, banco próprio
+sem credencial cruzada, usuário não-superusuário, sem dblink/fdw, só o Caddy publicando porta ·
+`make backup` + `make restore-check` recompõem banco **e** anexos num ambiente limpo.
+
+**Pendências de produção (passo manual do operador — `docs/runbook-deploy.md`):** apontar o DNS de
+`inbox.<DOMAIN>` para o host antes do 1º boot (sem isso o Let's Encrypt não emite cert), preencher o
+`.env` de produção com segredos próprios, criar o admin em `/installation/onboarding`, configurar o
+SMTP transacional e agendar o cron de backup + cópia offsite criptografada.
 
 ---
 
@@ -107,7 +119,9 @@ Nada ainda — implementação não iniciada. Itens levantados em code-review e 
 
 | Item | Risco | Alvo |
 |---|---|---|
-| — | — | — |
+| **Retenção de conversa sem aval jurídico.** `RETENCAO_CONVERSAS_DIAS=1825` (5 anos) é um default técnico, não uma decisão. A central guarda conversa de **cobrança**: apagar cedo destrói prova de negociação de dívida; tarde demais viola a LGPD. O expurgo existe (`retencao-conversas.sh`) mas **não está no cron**. | LGPD / prova em disputa de dívida | STORY-6.3 |
+| **Cópia offsite do backup é manual.** O `backup.sh` grava só local; host morre = backup morre junto. A cópia criptografada para fora do host está documentada, não automatizada. | perda total em falha de host | antes do go-live |
+| **Staging não existe ainda.** O runbook de upgrade exige validar em staging antes de produção (FR-2); hoje só há o ambiente dev local. | upgrade sem rede de proteção | antes do 1º upgrade em prod |
 
 ### Adiado para a fase 2 (registrado em `docs/architecture.md` §Deferred)
 
@@ -128,5 +142,6 @@ Nada ainda — implementação não iniciada. Itens levantados em code-review e 
 |---|---|---|---|
 | 2026-07-13 | — | planejamento | Documentação BMAD gerada em `docs/`: `product-brief.md` (fase 1), `prd.md` (16 FRs, glossário fechado, jornadas), `architecture.md` (spine hub-and-spoke, AD-1..AD-9, diagramas, árvore-alvo), `epics-and-stories.md` (6 epics · 19 stories com CA Given/When/Then). Decisões travadas: Evolution fica no CRM com fan-out; merge só com telefone **E** documento; disparo em massa origina no monorepo. |
 | 2026-07-13 | — | setup | Scaffold do repo: `.claude/` (hooks, 5 comandos, 4 memories), `PROGRESS.md`, `CLAUDE.md`, `README.md`, `.gitignore`. 11 skills instaladas em `.claude/skills/` (incl. as oficiais `chatwoot-cli` e `twilio/ai`). Nenhum código de runtime. |
+| 2026-07-13 | EPIC-1 | 1.1 · 1.2 · 1.3 · 1.4 | **A central subiu.** `deploy/` criado: compose (Caddy 2.11.4 · Chatwoot `v4.15.1-ce` web+sidekiq+init · pgvector 0.8.5-pg16 · Redis 7.4.9), `Caddyfile`, `.env.example`, init-db e 5 scripts de operação; `Makefile` com `up/check/smoke/backup/restore-check/retencao`; runbooks de deploy, upgrade e backup. Decisões as-built: **`chatwoot-init` one-shot** (`db:chatwoot_prepare` via `service_completed_successfully`) para o `up` ser mesmo **um** comando — o compose oficial exige migração à mão; **extensões pré-criadas pelo superusuário** no init-db (o `pg_stat_statements` não é *trusted*, e o usuário da app é não-superusuário por AD-9); **`APP_DB_*`** no init para desfazer a colisão de `POSTGRES_PASSWORD` (superusuário na imagem do Postgres vs. usuário da app no Chatwoot). Gate do épico verificado ao vivo em dev. |
 
 > **Nota sobre este registro:** é um log **por sessão** (grão grosso). O rastreamento **por story** — com hash de commit — vive nas tabelas de cada épico acima.

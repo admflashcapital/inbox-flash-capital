@@ -10,8 +10,9 @@ dele; os dados de negócio continuam no CRM (Twenty) e na plataforma interna (Su
 chega ao operador **mastigado** — labels e atributos empurrados por um Serviço de Sync — sem que a
 central consulte banco de domínio nenhum.
 
-> **Status: planejamento concluído, implementação não iniciada (0/19 stories).** O repo hoje tem a
-> documentação BMAD em `docs/` e o scaffold de desenvolvimento. Próxima pendente: **STORY-1.1**.
+> **Status: EPIC-1 concluído (4/19 stories).** A central já sobe com um comando (`make up`), responde
+> em HTTPS, tem backup/restore validados e banco isolado. Próxima pendente: **STORY-2.1** (inbox de
+> prospecção via Evolution).
 
 ## As 3 inboxes do MVP
 
@@ -71,16 +72,25 @@ Detalhe completo (AD-1..AD-9, diagramas, ERD, convenções) em **`docs/architect
 
 ## Subir o ambiente
 
-> Ainda **não existe** — é a entrega da **STORY-1.1**. O alvo:
-
 ```bash
 cp deploy/.env.example deploy/.env    # preencha os segredos (nunca commite o .env)
-docker compose -f deploy/docker-compose.yml up -d
-docker compose -f deploy/docker-compose.yml ps
+make up        # sobe a central inteira e espera ficar saudável
+make check     # invariantes: tag fixa, banco isolado, só o Caddy publica porta
+make smoke     # (dev) semeia, reinicia e prova que os dados persistem
 ```
 
-Stack: Chatwoot web + Sidekiq · PostgreSQL 16 + pgvector · Redis 7 · Caddy (auto-HTTPS) ·
-Serviço de Sync (FastAPI). Imagem do Chatwoot **sempre com tag fixa** — `latest` é proibido.
+UI em **https://inbox.\<DOMAIN\>** (dev: `https://inbox.localhost`). O primeiro admin nasce em
+`/installation/onboarding` — signup público fica fechado.
+
+Stack: Chatwoot CE `v4.15.1-ce` (web + Sidekiq) · PostgreSQL 16 + pgvector · Redis 7 · Caddy
+(auto-HTTPS) · Serviço de Sync (FastAPI, EPIC-5). Imagem do Chatwoot **sempre com tag fixa** —
+`latest` é proibido. Passo a passo, DNS e segredos: **`docs/runbook-deploy.md`**.
+
+| Runbook | Para quê |
+|---|---|
+| `docs/runbook-deploy.md` | subir em dev e em produção; passos manuais (DNS, `.env`, 1º admin) |
+| `docs/runbook-upgrade.md` | subir de versão do Chatwoot (staging antes de produção) |
+| `docs/runbook-backup.md` | backup do par banco+anexos, ensaio de restore, retenção LGPD |
 
 ## Desenvolvimento
 
