@@ -10,7 +10,7 @@ COMPOSE := docker compose -f deploy/docker-compose.yml --env-file deploy/.env
 
 .PHONY: help up down restart logs ps config check smoke migrate backup restore-check retencao \
         evolution evolution-status fanout dedup aquecimento twilio twilio-status oficial \
-        gmail gmail-status gmail-url email backfill chip chip-status chip-logout
+        gmail gmail-status gmail-url email backfill chip chip-codigo chip-status chip-logout
 
 help: ## Lista os comandos disponíveis
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -41,6 +41,9 @@ smoke: ## Semeia dados, reinicia e prova a persistência (dev/staging — STORY-
 
 chip: ## Pareia o chip de prospecção na Evolution — grava o QR num PNG (STORY-2.1)
 	deploy/scripts/parear-chip.sh
+
+chip-codigo: ## Pareia o chip por CÓDIGO de 8 caracteres (sem câmera). Exige NUMERO_PROSPECCAO no .env
+	deploy/scripts/parear-chip.sh --codigo
 
 chip-status: ## Estado da instância Evolution + número pareado (mascarado)
 	deploy/scripts/parear-chip.sh --status

@@ -15,8 +15,16 @@
 # O PRÉ-PAGO de prospecção. NUNCA o número oficial de cobrança — a segmentação de
 # risco existe para que um número queimado não leve o canal de dinheiro junto.
 #
+# ── Duas formas de parear ─────────────────────────────────────────
+#   QR      → escaneia com a câmera do celular.
+#   CÓDIGO  → 8 caracteres que você DIGITA no celular. Não precisa de câmera.
+#             Exige NUMERO_PROSPECCAO (E.164) no .env, porque a Evolution precisa
+#             saber para qual número emitir o código.
+# Os dois produzem a MESMA vinculação. O código é o caminho para câmera quebrada.
+#
 # Uso:
-#   deploy/scripts/parear-chip.sh            # gera o QR e espera conectar
+#   deploy/scripts/parear-chip.sh            # QR (grava PNG e abre)
+#   deploy/scripts/parear-chip.sh --codigo   # código de 8 caracteres (sem câmera)
 #   deploy/scripts/parear-chip.sh --status   # só mostra o estado da instância
 #   deploy/scripts/parear-chip.sh --logout   # desconecta o número (NÃO apaga a instância)
 # ═══════════════════════════════════════════════════════════════════
@@ -31,7 +39,9 @@ EV_INST="$(env_get EVOLUTION_INSTANCE)";  EV_INST="${EV_INST:-crm}"
 EV_KEY="$(env_get EVOLUTION_API_KEY)"     # SEGREDO — só entra em ENV de container
 REDE="${REDE_CANAIS:-flash-canais}"
 IMAGEM_CURL="curlimages/curl:8.11.1"
-QR_PNG="${RAIZ}/deploy/.qr-pareamento.png"   # gitignored
+QR_PNG="${RAIZ}/deploy/.qr-pareamento.png"       # gitignored
+COD_TXT="${RAIZ}/deploy/.qr-codigo-pareamento.txt" # gitignored (mesmo padrão .qr-*)
+NUM_CHIP="$(env_get NUMERO_PROSPECCAO)"
 
 if [ -z "$EV_KEY" ]; then
   echo "[chip] ERRO: EVOLUTION_API_KEY ausente no deploy/.env"
@@ -94,6 +104,89 @@ if [ "$ESTADO" = "open" ]; then
   exit 0
 fi
 
+# ── Modo CÓDIGO: 8 caracteres digitados, sem câmera ───────────────
+if [ "${1:-}" = "--codigo" ]; then
+  if [ -z "$NUM_CHIP" ]; then
+    echo "[chip] ERRO: NUMERO_PROSPECCAO está vazio no deploy/.env."
+    echo "       O pareamento por código exige o número do chip em E.164, porque é"
+    echo "       para ele que a Evolution emite o código. Ex.: NUMERO_PROSPECCAO=+5531999998888"
+    exit 1
+  fi
+  if ! printf '%s' "$NUM_CHIP" | grep -qE '^\+[0-9]{10,15}$'; then
+    echo "[chip] ERRO: NUMERO_PROSPECCAO não está em E.164 (precisa começar com + e só dígitos)."
+    exit 1
+  fi
+  # A Evolution quer o número SEM o '+'.
+  NUM_API="${NUM_CHIP#+}"
+  echo "[chip] instância '${EV_INST}' está '${ESTADO}' — pedindo código para ${NUM_CHIP:0:5}…${NUM_CHIP: -4}"
+
+  ev GET "/instance/connect/${EV_INST}?number=${NUM_API}" | COD_TXT="$COD_TXT" python3 -c "
+import sys, json, os
+d = json.load(sys.stdin)
+cod = (d.get('pairingCode') or '').strip()
+if not cod:
+    print('[chip] a Evolution não devolveu pairingCode.')
+    print('       Causas: número em formato errado, instância em estado transitório,')
+    print('       ou a versão da Evolution não suporta pareamento por código.')
+    print('       Tente de novo, ou use o QR: make chip')
+    raise SystemExit(1)
+destino = os.environ['COD_TXT']
+with open(destino, 'w') as f:
+    f.write(cod + '\n')
+os.chmod(destino, 0o600)
+print(f'[chip] código gravado em: {destino}')
+" || exit 1
+
+  echo
+  echo "  ┌─────────────────────────────────────────────────────────────────┐"
+  echo "  │  PAREAMENTO POR CÓDIGO — não precisa de câmera                  │"
+  echo "  └─────────────────────────────────────────────────────────────────┘"
+  echo
+  echo "  No celular do chip:"
+  echo "    WhatsApp → Aparelhos conectados → Conectar aparelho"
+  echo "    → toque em \"Conectar com número de telefone\" (embaixo, no lugar do QR)"
+  echo "    → digite o código de 8 caracteres que está no arquivo"
+  echo
+
+  # Mesma disciplina do QR: o código é credencial de vinculação — vai para arquivo,
+  # nunca para o terminal. Abrimos o arquivo no visualizador do sistema.
+  if command -v explorer.exe >/dev/null 2>&1 && command -v wslpath >/dev/null 2>&1; then
+    explorer.exe "$(wslpath -w "$COD_TXT")" >/dev/null 2>&1 || true
+    echo "  (arquivo aberto no Windows)"
+  elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$COD_TXT" >/dev/null 2>&1 || true
+    echo "  (arquivo aberto)"
+  else
+    echo "  Abra manualmente:  cat '${COD_TXT}'"
+  fi
+  echo
+  echo "  ⚠️  O código expira em ~60s. Expirou? rode de novo."
+  echo
+  echo "[chip] aguardando a conexão (até 180s)…"
+
+  for i in $(seq 1 60); do
+    sleep 3
+    E="$(estado)"
+    if [ "$E" = "open" ]; then
+      echo
+      echo "  ✅ CONECTADO — número $(numero_pareado)"
+      rm -f "$COD_TXT" "$QR_PNG"
+      echo "     (código apagado do disco)"
+      echo
+      echo "  Próximos passos:"
+      echo "   1. NUMERO_PROSPECCAO_DESDE=$(date +%F)   no .env (rampa de aquecimento)"
+      echo "   2. make evolution · 3. make fanout · 4. make aquecimento"
+      exit 0
+    fi
+    printf '.'
+  done
+  echo
+  echo "[chip] não conectou em 180s (estado: $(estado)). O código provavelmente expirou."
+  rm -f "$COD_TXT"
+  exit 1
+fi
+
+# ── Modo QR (default) ─────────────────────────────────────────────
 echo "[chip] instância '${EV_INST}' está '${ESTADO}' — gerando o QR…"
 
 ev GET "/instance/connect/${EV_INST}" | QR_PNG="$QR_PNG" python3 -c "
