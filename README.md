@@ -13,7 +13,9 @@ central consulte banco de domínio nenhum.
 > **Status: EPIC-1 e EPIC-3 concluídos; EPIC-2 pronto até onde é automatizável (7/19 stories).**
 > A central sobe com um comando (`make up`), responde em HTTPS, tem backup/restore validados e banco
 > isolado. O **número oficial (Twilio) está em produção**: recebe mensagem do cliente, responde pela
-> central dentro da janela de 24h e espelha os disparos de cobrança do monorepo — **sem reenviá-los**.
+> central dentro da janela de 24h e espelha os disparos de cobrança do monorepo — **sem reenviá-los**
+> (⚠️ o espelho vive na branch `feat/espelho-chatwoot` do monorepo, **ainda não mergeada na `main` de
+> lá** — até o merge+deploy, ele não roda em produção).
 > O canal de **prospecção** está ligado à Evolution com fan-out verificado; falta **parear o chip**.
 > Checklists em `docs/runbook-canal-oficial.md` e `docs/runbook-canal-prospeccao.md`.
 
@@ -86,8 +88,9 @@ UI em **https://inbox.\<DOMAIN\>** (dev: `https://inbox.localhost`). O primeiro 
 `/installation/onboarding` — signup público fica fechado.
 
 Stack: Chatwoot CE `v4.15.1-ce` (web + Sidekiq) · PostgreSQL 16 + pgvector · Redis 7 · Caddy
-(auto-HTTPS) · Serviço de Sync (FastAPI, EPIC-5). Imagem do Chatwoot **sempre com tag fixa** —
-`latest` é proibido. Passo a passo, DNS e segredos: **`docs/runbook-deploy.md`**.
+(auto-HTTPS) · Serviço de Sync (FastAPI — **EPIC-5, ainda não construído**). Imagem do Chatwoot
+**sempre com tag fixa** — `latest` é proibido. Passo a passo, DNS e segredos:
+**`docs/runbook-deploy.md`**.
 
 | Runbook | Para quê |
 |---|---|
@@ -97,6 +100,7 @@ Stack: Chatwoot CE `v4.15.1-ce` (web + Sidekiq) · PostgreSQL 16 + pgvector · R
 | `docs/runbook-canal-prospeccao.md` | ligar o WhatsApp de prospecção (Evolution), fan-out, pareamento do QR |
 | `docs/runbook-aquecimento-numero.md` | rampa de aquecimento, só-inbound, playbook de número bloqueado |
 | `docs/runbook-canal-oficial.md` | ligar o WhatsApp oficial (Twilio), janela de 24h, templates Meta, espelho dos disparos |
+| `docs/runbook-canal-email.md` | ligar a caixa Gmail (OAuth), autorização via ngrok em dev, armadilhas do token |
 
 ## Desenvolvimento
 

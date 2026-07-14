@@ -49,3 +49,14 @@
 **Segmentação de risco de número.** Prospecção fria sai por **e-mail**. O número de prospecção é
 **só inbound** (recepciona o lead pescado, manda o link do Jotform). Cobrança fica isolada no número
 oficial. Cold outreach queima reputação — e um número queimado leva o canal de dinheiro junto.
+
+**Modo espelho na prospecção (decisão de operação, 2026-07-13).** Na inbox `WhatsApp Prospecção`
+quem responde o lead é o **Agente N8N**; a central **só espelha** (a atendente acompanha, não digita).
+Enquanto não existir handoff, uma resposta digitada ali chegaria **em dobro** ao lead. Não é só
+combinado: `MODO_ESPELHO_PROSPECCAO=true` faz `make aquecimento` **falhar** se aparecer resposta
+digitada nessa inbox. O AC da STORY-2.1 ("responder pela central chega no lead") continua sendo a
+capacidade técnica a provar — mas **só em contato de teste**.
+
+**Service account não pluga no canal de e-mail (2026-07-14).** O Chatwoot só sabe o fluxo OAuth de
+**usuário** (`grant_type=refresh_token`); service account usa JWT-bearer e nunca emite
+`refresh_token`. Não há caminho de código. Ver `docs/runbook-canal-email.md`.

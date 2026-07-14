@@ -242,6 +242,12 @@ Com o número oficial real (`+55 31 2391-6846`) e a conta Twilio de produção:
 `can_reply?` fecha sem inbound e reabre com ele, e os 10 templates estão sincronizados —, mas o envio
 real exige 24h de silêncio do cliente).
 
+> ⚠️ **O espelho ainda NÃO está no caminho de produção.** O `mirror_outbound` e o `relay_inbound`
+> vivem na branch **`feat/espelho-chatwoot`** (commit `c3d5438`) do `monorepo-flash-capital` — **não
+> mergeada na `main` de lá**. O gate acima foi provado ao vivo rodando essa branch. Enquanto não
+> houver **merge + deploy no monorepo**, a central **não recebe** o inbound relayado nem o espelho dos
+> disparos em produção. É a pendência que fecha o EPIC-3 de verdade.
+
 ## Identidade: telefone e BSUID convivem
 
 O inbound real criou **dois** `contact_inbox` para o mesmo contato:

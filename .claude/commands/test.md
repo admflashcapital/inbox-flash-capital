@@ -17,10 +17,21 @@ Execute o que estiver instalado/existir e relate o resultado (ferramentas do Ser
   usuário não-superusuário, só o Caddy publicando porta, `.env` fora do git)
 - `caddy validate --config deploy/Caddyfile` — se o caddy estiver instalado
 
-**Canais (EPIC-2, quando a Evolution estiver no ar):**
+**Canal Prospecção (EPIC-2, quando a Evolution estiver no ar):**
 - `make fanout` — N8N **e** central recebem o mesmo evento? (AD-5 — o risco nº 1 do MVP)
 - `make aquecimento` — o número de prospecção segue **só inbound**, sem campanha e dentro da rampa?
 - `make dedup` — há mensagem duplicada no espelho? (idempotência do AD-5)
+
+**Canal Oficial (EPIC-3 — é o canal de DINHEIRO, não pule):**
+- `make oficial` — `medium=whatsapp` (janela de 24h ativa), templates Meta sincronizados, número em
+  `whatsapp:+E164`, zero campanha (AD-6), `/twilio/callback` fechado pelo `RELAY_TOKEN`
+- `make twilio-status` — a inbox oficial que está valendo
+
+**Canal E-mail (EPIC-4, quando o OAuth do Gmail estiver concluído):**
+- `make email` — `provider=google`, **`refresh_token` gravado** (sem ele o canal morre em 1h, calado)
+  e o job `trigger_imap_email_inboxes_job` registrado (é ele que busca o e-mail **e** mantém o token
+  fresco para o SMTP de saída)
+- `make gmail-status` — a inbox de e-mail que está valendo
 
 Relate: total passando/falhando, arquivos com problema de lint/type, serviços não-saudáveis.
 

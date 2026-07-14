@@ -79,8 +79,20 @@ a inbox `E-mail` de atendimento (EPIC-4). Sem SMTP, o convite de agente não sai
 
 ## Produção
 
+### ⚠️ Antes do `make up`: quem fica com as portas 80/443?
+
+**Só UM Caddy pode publicá-las.** O default do `.env.example` é `COMPOSE_PROFILES=edge`, que faz a
+central subir o **próprio** Caddy. No host as-built, porém, a central **divide o host com o CRM** — e
+o CRM já tem um Caddy nas portas. Subir com `edge` ali levanta um **segundo** Caddy e **colide**.
+
+| Cenário | `COMPOSE_PROFILES` | Quem serve `inbox.<DOMAIN>` |
+|---|---|---|
+| central sozinha no host (dev/staging) | `edge` | o Caddy da central |
+| **central + CRM no mesmo host (produção as-built)** | **vazio** | o Caddy do **CRM**, pela rede compartilhada |
+
 ```bash
 # no host de produção, com DOMAIN=flashcapital.com.br e DNS já apontando
+# ⚠️ compartilhando host com o CRM? deixe COMPOSE_PROFILES= (vazio) no deploy/.env
 make up
 make check                       # invariantes de arquitetura
 curl -sI https://inbox.flashcapital.com.br/app/login   # 200/302 + cert válido

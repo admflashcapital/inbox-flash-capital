@@ -25,10 +25,21 @@
 
 | Origem | Como validar |
 |---|---|
-| **Twilio** (inbound oficial) | assinatura `X-Twilio-Signature` — o monorepo **já faz isso** em `api/routers/twilio_webhooks_router.py`; reaproveite o padrão |
+| **Twilio** (inbound oficial) | assinatura `X-Twilio-Signature` — quem valida é o **monorepo**, dono do webhook (`api/routers/twilio_webhooks_router.py`) |
+| **Relay monorepo → central** (`/twilio/callback`) | ⚠️ o `Twilio::CallbackController` do Chatwoot **NÃO valida assinatura nenhuma**. Quem protege é o **`RELAY_TOKEN`** no header `X-Relay-Token`, barrado no **Caddy** (falha fechada: sem token → 403). O inbound legítimo chega pelo monorepo, que já validou a assinatura |
+| **`/twilio/delivery_status`** | fica **aberto de propósito** — é a Twilio que o chama direto, para as mensagens que a própria central envia. Forjá-lo só altera status de entrega. Dívida técnica: allowlist de IP no Caddy (EPIC-6) |
 | **Evolution** (fan-out do CRM) | token compartilhado no header |
 | **Chatwoot** (eventos → Serviço de Sync) | token compartilhado no header |
 | **Serviço de Sync → API do Chatwoot** | access token de agente/bot, escopo mínimo |
+
+## Segredo que o Chatwoot NÃO criptografa (EPIC-4)
+
+O `Channel::Email` criptografa só `imap_password`/`smtp_password`. Com OAuth (Gmail), a credencial
+real é o **`refresh_token` no `provider_config`** — coluna **jsonb, não criptografada**, mesmo com as
+chaves `ACTIVE_RECORD_ENCRYPTION_*` ligadas. Escopo `https://mail.google.com/` (lê e envia na caixa
+inteira) e **não expira**. Fica em texto puro no Postgres **e em todo backup**. Corrigir exigiria
+forkar o Chatwoot (proibido, AD-7). Mitigação: `BACKUP_DIR` é segredo; revogar em
+`myaccount.google.com/permissions` se vazar.
 
 Webhook público sem verificação = ingestão forjada (mensagem falsa na conversa de um cliente real).
 

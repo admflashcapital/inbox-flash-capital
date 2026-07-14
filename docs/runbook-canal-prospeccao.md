@@ -134,7 +134,7 @@ O `WF-04-004` (N8N) responde automaticamente toda mensagem inbound com o LLM. Se
 Não é bug da integração: são dois cérebros no mesmo número.
 
 **Decisão (2026-07-13): modo espelho.** O Agente responde; a central só mostra. `make aquecimento`
-falha se alguém digitar ali. Ver o item 1 do checklist acima.
+falha se alguém digitar ali. Ver o item 1 do checklist abaixo.
 
 O handoff (o Agente calar quando um humano assume) continua sendo trabalho futuro — o desenho
 natural é o Agente consultar a conversa no Chatwoot antes de responder e pular se houver um
@@ -184,8 +184,9 @@ NUMERO_PROSPECCAO_DESDE=<a data de hoje>   # inicia a rampa de aquecimento
 - [ ] a mensagem aparece na inbox `WhatsApp Prospecção` da central;
 - [ ] o N8N registra uma execução do `WF-04-001` para **a mesma** mensagem (fan-out: os dois viram);
 - [ ] a saudação + link do Jotform do Agente **também** aparecem na conversa da central;
-- [ ] responder pela central chega no WhatsApp do lead (só teste isto se escolheu a Opção B, ou num
-      contato de teste — senão o lead recebe resposta dupla);
+- [ ] responder pela central chega no WhatsApp do lead (**teste só num contato de teste** — a operação
+      corrente é **modo espelho**: quem responde o lead é o Agente N8N, e uma resposta digitada aqui
+      chegaria em dobro. `make aquecimento` reprova se acontecer numa conversa real);
 - [ ] mandar uma **foto/PDF** → o anexo aparece na conversa;
 - [ ] `make fanout`, `make aquecimento` e `make dedup` continuam verdes.
 

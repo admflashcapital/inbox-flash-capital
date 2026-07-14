@@ -9,13 +9,56 @@ Guia para o Claude Code (claude.ai/code) trabalhar neste repositório.
 
 ## Estado atual do repositório (leia primeiro)
 
-**Fase de planejamento concluída; implementação NÃO iniciada — 0/19 stories.** O repo hoje tem apenas
-a documentação BMAD em `docs/` e este scaffold `.claude/`. Não existe `deploy/`, não existe
-`sync-service/`, não há nenhum container no ar. A próxima pendente é a **STORY-1.1** (stack Docker
-da central sobe com um comando).
+> **`PROGRESS.md` é a fonte da verdade do estado.** Esta seção dá o mapa grosso; o rastreamento
+> story a story (com hash de commit, gate e dívida técnica) vive lá. Se as duas divergirem,
+> **`PROGRESS.md` ganha** — e conserte esta seção.
+
+**A central está no ar.** `deploy/` existe (6 containers, 12 scripts de operação) e dois dos três
+canais estão ligados. O que **não** existe ainda é o `sync-service/` (EPIC-5) — esse é o único
+componente construído do zero, e nele TDD é obrigatório.
+
+| Épico | Estado |
+|---|---|
+| **EPIC-1** Fundação | ✅ fechado, gate verificado ao vivo — a stack sobe com `make up`, backup/restore validados |
+| **EPIC-2** WhatsApp Prospecção | 🟡 pronto até onde é automatizável — as stories 2.1/2.2 esperam o **pareamento do chip físico** (passo manual, `docs/runbook-canal-prospeccao.md`) |
+| **EPIC-3** WhatsApp Oficial | ✅ fechado, gate verificado **com o número real de produção** — recebe, responde e espelha os disparos do monorepo sem reenviá-los |
+| **EPIC-4** E-mail (Gmail) | ⬜ próximo — nada feito |
+| **EPIC-5** Serviço de Sync | ⬜ não iniciado — `sync-service/` ainda não existe |
+| **EPIC-6** Operação & Governança | ⬜ não iniciado |
 
 O que **já está decidido e não se re-discute** está em `docs/architecture.md` (AD-1..AD-9) e
 condensado em `.claude/memory/decisions.md`.
+
+### Comandos de operação (`make help` lista todos)
+
+| Alvo | O quê |
+|---|---|
+| `make up` · `down` · `ps` · `logs s=<svc>` | ciclo de vida da stack |
+| `make check` | invariantes AD-7/8/9 — **rode antes de commitar** |
+| `make smoke` | semeia, reinicia, prova a persistência (dev) |
+| `make backup` · `restore-check` | backup do par banco+anexos e ensaio de restore |
+| `make evolution` · `evolution-status` · `fanout` · `dedup` · `aquecimento` | canal de prospecção |
+| `make twilio` · `twilio-status` · `oficial` | canal oficial |
+| `make gmail` · `gmail-status` · `gmail-url` · `email` | canal de e-mail (Gmail/OAuth) |
+| `make migrate` · `retencao` | migrações do upgrade · expurgo LGPD (simulado) |
+
+### As-built que vai te morder (aprendido em produção, não re-descubra)
+
+Todas as falhas caras deste projeto foram **silenciosas**. Nenhuma deu erro. Guarde estas:
+
+1. **`SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true` é obrigatório.** O anti-SSRF do Chatwoot (`SafeFetch`)
+   recusa webhook e download de mídia de host sem IP público — e a Evolution vive em rede privada.
+   Sem o flag, a resposta da atendente falha **em silêncio**. Está registrado como dívida técnica.
+2. **Um host = um Caddy.** Central e CRM não podem ambos publicar 80/443. O Caddy da central é
+   perfil `edge` (default em dev/staging); com as duas stacks no mesmo host, o Caddy do CRM serve o
+   vhost `inbox.<DOMAIN>`.
+3. **O Caddy 2.11 descarta header com underscore** — e o Chatwoot autentica com `api_access_token`.
+   Há uma ponte hífen→underscore no Caddyfile. Mexer nela = **401 com token válido**.
+4. **O guard do `source_id` impede cobrança em dobro.** Mensagem `outgoing` empurrada pelo monorepo
+   **com** `source_id` o Chatwoot **não reenvia**; sem ele, reenviaria — o cliente seria cobrado
+   duas vezes. Nunca empurre outbound espelhado sem `source_id`.
+5. **O `.env` não é aparado pelo Docker Compose.** Espaço ou `\r` sobrando num valor vira erro sem
+   pista. Os scripts usam `env_get`, que apara; `make check` detecta a sujeira.
 
 ---
 

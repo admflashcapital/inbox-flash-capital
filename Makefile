@@ -9,7 +9,8 @@
 COMPOSE := docker compose -f deploy/docker-compose.yml --env-file deploy/.env
 
 .PHONY: help up down restart logs ps config check smoke migrate backup restore-check retencao \
-        evolution evolution-status fanout dedup aquecimento twilio twilio-status oficial
+        evolution evolution-status fanout dedup aquecimento twilio twilio-status oficial \
+        gmail gmail-status gmail-url email
 
 help: ## Lista os comandos disponíveis
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -61,6 +62,18 @@ twilio-status: ## Mostra a inbox oficial que está valendo
 
 oficial: ## Verifica as invariantes do canal oficial (janela 24h, templates, AD-6, AD-8)
 	deploy/scripts/verificar-canal-oficial.sh
+
+gmail: ## Cria a inbox E-mail e devolve a URL de autorização do Google (STORY-4.1)
+	deploy/scripts/conectar-gmail.sh
+
+gmail-status: ## Mostra a inbox de e-mail que está valendo (sem imprimir token)
+	deploy/scripts/conectar-gmail.sh --status
+
+gmail-url: ## Re-gera a URL de autorização do Google (o state expira em 15min)
+	deploy/scripts/conectar-gmail.sh --url
+
+email: ## Verifica as invariantes do canal de e-mail (OAuth, refresh_token, agendador)
+	deploy/scripts/verificar-canal-email.sh
 
 migrate: ## Roda as migrações do Chatwoot (usado no upgrade — STORY-1.3)
 	$(COMPOSE) run --rm chatwoot-init

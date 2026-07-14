@@ -9,9 +9,20 @@
 O EPIC-1 bloqueia tudo. Os EPICs 2/3/4 podem correr em paralelo depois dele. O EPIC-5 precisa de ≥1 canal vivo.
 Cada épico tem um gate de saída — use `/gate EPIC-N`.
 
-**Progresso total:** 7 / 19 stories `[x]` (+2 em `[~]`: 2.1 e 2.2, que esperam o **chip físico**).
+**Progresso total:** 8 / 19 stories `[x]`, +2 em `[~]` e 1 em `[!]`.
 **M1 (EPIC-1) concluído** — a central está no ar. **EPIC-3 concluído e verificado ao vivo** — o número
-oficial recebe, responde e espelha os disparos, com o número real de produção.
+oficial recebe, responde e espelha os disparos, com o número real de produção. **STORY-4.1 concluída e
+verificada ao vivo** — a caixa `operacional@` recebe e responde pela central, na mesma thread.
+
+As 3 stories abertas estão travadas em coisas que **não são código**:
+
+| Story | Espera |
+|---|---|
+| 2.1 · 2.2 `[~]` | **parear o chip físico** pelo QR (`docs/runbook-canal-prospeccao.md`) |
+| 4.2 `[!]` | o **EPIC-5** — a resolução de identidade (AD-3) vive só no Serviço de Sync. Bloqueio de **desenho**, previsto desde o planejamento |
+
+**Próximo trabalho real: EPIC-5 (Serviço de Sync).** É o que destrava a 4.2 (e portanto fecha o
+EPIC-4), e é o **único componente construído do zero** — TDD obrigatório.
 
 ---
 
@@ -209,10 +220,87 @@ Caixa Gmail de atendimento como inbox, com as threads unificadas ao mesmo contat
 
 | # | Story | Status | Commit |
 |---|---|---|---|
-| 4.1 | Inbox de e-mail espelhada (FR-9) | [ ] | |
-| 4.2 | Unificação sob o mesmo contato (FR-10) | [ ] | |
+| 4.1 | Inbox de e-mail espelhada (FR-9) | [x] | |
+| 4.2 | Unificação sob o mesmo contato (FR-10) | [!] | |
+
+## ✅ Gate da STORY-4.1 verificado AO VIVO (2026-07-14, caixa real de produção)
+
+Com a caixa `operacional@flashcapital.com.br` (Google Workspace, OAuth):
+
+| Critério do gate | Evidência |
+|---|---|
+| e-mail que chega na caixa vira conversa na inbox `E-mail` | **8 conversas reais** puxadas na 1ª sincronização (NF, boletos, Jotform, mailer-daemon) |
+| resposta pela central volta ao remetente | resposta digitada na central → **entregue** na caixa do destinatário |
+| a resposta cai na **mesma thread** | a mensagem inbound trouxe o `Message-ID` do Gmail (`CAL=_anO9…`); é dele que o mailer monta o `In-Reply-To` + `References`. `Reply-To` = a própria caixa |
+| **o canal se renova sozinho** | forçamos `expires_on` para o passado: o refresher chamou o Google, renovou, **preservou o `refresh_token`** — e o IMAP **autenticou com o token renovado** |
+| o canal vive sem o andaime do OAuth | `FRONTEND_URL` devolvida a `https://inbox.localhost` e a ponte derrubada: `make email` **continua verde** |
+
+**Ainda não exercitado:** a janela de ~24h do IMAP (`SINCE hoje−1`) — o canal tolera o Sidekiq fora do ar
+por horas, mas acima de ~24h o que chegou no buraco não é mais buscado. Não dá para provar sem esperar.
 
 **Gate EPIC-4:** e-mail que chega na caixa vira conversa na inbox `E-mail`; resposta pela central volta ao remetente na mesma thread; conversas de e-mail e de WhatsApp do mesmo cliente aparecem sob o **mesmo Contato** quando e-mail/documento casam, sem duplicidade (fecha junto com o EPIC-5).
+
+> **O EPIC-4 está pronto até onde é automatizável.** A 4.1 vira `[x]` depois do **passo manual do
+> operador**: criar o OAuth Client no Google Cloud, preencher 3 chaves no `.env` e concluir a dança
+> do OAuth. Checklist completo em `docs/runbook-canal-email.md`.
+> A 4.2 está `[!]` **por desenho, não por atraso** — a resolução de identidade (telefone **E**
+> documento, AD-3) vive num lugar só: o **Serviço de Sync (EPIC-5)**, que ainda não existe. Já estava
+> assim em `docs/epics-and-stories.md` desde o planejamento ("depende de Epic 5").
+
+**A descoberta que definiu o épico: a service account do Gmail NÃO pluga no Chatwoot.** Não é
+preferência — é ausência de caminho de código. O `Imap::GoogleFetchEmailService` autentica XOAUTH2
+com o `Google::RefreshOauthTokenService`, que renova por `grant_type=refresh_token` e faz
+`raise 'A refresh_token is not available'` se ele faltar. Service account usa o grant **JWT-bearer**
+(domain-wide delegation) e **nunca emite `refresh_token`**. Injetar um token de SA na marra faria o
+canal viver **1 hora** e morrer **dentro de um job do Sidekiq**, calado. Rota escolhida: **OAuth de
+usuário** (`provider=google`), com a tela de consentimento **Internal** (é Workspace) — o que dispensa
+a revisão do Google para o escopo restrito `https://mail.google.com/`.
+
+**STORY-4.1 — o que já está de pé (2026-07-14, dev).** `conectar-gmail.sh` (`make gmail`) **pré-cria**
+a inbox `E-mail` (`Channel::Email`) e devolve a URL de autorização. A pré-criação não é detalhe: o
+`OauthCallbackController` **cria a inbox sozinho** nomeando-a com o perfil do Google
+(`users_data['name']`), o que violaria o nome fixo do glossário; pré-criada com o endereço certo, o
+callback a **encontra** (`find_channel_by_email`) e só anexa os tokens. `verificar-canal-email.sh`
+(`make email`) recusa as três falhas silenciosas do canal. Criptografia at-rest ligada
+(`ACTIVE_RECORD_ENCRYPTION_*`) — sem regressão: o `auth_token` da Twilio, gravado antes em texto puro,
+continua legível (`support_unencrypted_data = true`).
+
+**A armadilha que quase custou horas: a env var do OAuth NÃO basta.** O controller que monta a URL de
+consentimento não lê o ENV — lê `GlobalConfigService.load`, que consulta a tabela
+`installation_configs`. Esse loader *tenta* cair para o ENV, mas faz
+`InstallationConfig.where(name: k).first_or_create(...)` e **devolve `i.value`** — e como o
+`installation_config.yml` do Chatwoot **semeia a linha vazia** no deploy, o `first_or_create`
+**encontra** a linha vazia, não atualiza nada, e devolve o vazio. **O ENV é ignorado para sempre.**
+Sintoma: a URL de consentimento sai com `client_id` **em branco** e o Google responde um erro
+genérico — sem nada de errado no `.env`. Resolvido: `make gmail` grava os valores no
+`installation_configs` e limpa o cache; `make email` reprova se estiverem vazios.
+(De quebra: a coluna é `serialized_value` **jsonb com YAML dentro** — o próprio Chatwoot marca isso
+com um `FIX ME` —, então a checagem **não pode** ser SQL; passa pelo model.)
+
+**O ngrok foi descartado — e a razão importa.** O host já roda **dois túneis ngrok que são carga viva
+do monorepo**: o do `fastapi_api` (webhook do **Twilio** + `PUBLIC_BOLETO_BASE_URL`) e o do Supabase.
+Um terceiro agente esbarraria no limite de sessões do plano free, e o candidato a cair era justamente
+o do Twilio — **a mesma falha que deixou a confirmação de sacado quebrada por 10 dias**. Em vez disso:
+**ponte de loopback** (`socat`, só em `127.0.0.1:3000`, fora do compose) + redirect URI
+`http://localhost:3000/google/callback`, que o Google **aceita** (a exigência de HTTPS isenta o
+`localhost` **puro** — `inbox.localhost` é subdomínio e é recusado). Derrubada depois da dança.
+
+**Três armadilhas as-built, todas silenciosas (detalhe em `docs/runbook-canal-email.md`):**
+1. **Agendador parado ⇒ a atendente para de RESPONDER.** O SMTP de saída autentica com
+   `provider_config['access_token']` **cru** (`ConversationReplyMailerHelper#base_smtp_settings`), sem
+   passar pelo refresh. Quem mantém esse token fresco é o **job IMAP que roda a cada minuto**. Sidekiq
+   parado → em 1h o envio quebra junto com o recebimento, com falha de auth SMTP dentro de um job.
+2. **Re-autorizar sem revogar não devolve `refresh_token`.** O Google só o emite com
+   `access_type=offline` + `prompt=consent` **e** consentimento ainda não dado. Re-autorizou por cima?
+   volta sem refresh_token, e o canal nasce condenado a morrer em 1h. Revogar antes em
+   `myaccount.google.com/permissions`.
+3. **O `refresh_token` fica em texto puro** — ver dívida técnica.
+
+**O ngrok aqui é seguro (≠ a dívida do Twilio).** O Google recusa `.localhost` como redirect URI, então
+a dança do OAuth em dev sai por um túnel. Mas a URL do túnel só precisa existir **no momento do
+clique**: o refresh usa `grant_type=refresh_token`, que **não usa `redirect_uri`**. Autorizou, pode
+derrubar o túnel e devolver a `FRONTEND_URL`. É o oposto do webhook do Twilio, que é **permanente**
+numa URL efêmera — e por isso apodreceu por 10 dias.
 
 ---
 
@@ -249,18 +337,22 @@ Cockpit, papéis, atribuição, labels manuais, respostas rápidas, LGPD e obser
 
 ## Dívida técnica conhecida
 
-Nada ainda — implementação não iniciada. Itens levantados em code-review e desvios as-built entram aqui.
+Itens levantados em code-review e desvios as-built. **Nenhum bloqueia o MVP** — mas os marcados
+"antes do go-live" precisam ser resolvidos antes de a operação depender disto de verdade.
 
 | Item | Risco | Alvo |
 |---|---|---|
 | **Handoff Agente ↔ humano não existe.** Contornado pela decisão de **modo espelho** (2026-07-13): no número de prospecção quem responde é o Agente N8N; a central só espelha, e `make aquecimento` falha se alguém digitar ali (`MODO_ESPELHO_PROSPECCAO=true`). O custo é que a atendente **não pode** intervir numa conversa de lead. O handoff real (o Agente pular a resposta quando a conversa tem `assignee` humano no Chatwoot — estado nativo, sem label nova) fica para quando a operação pedir. | atendente sem poder assumir a conversa do lead | fase 2 / quando doer |
 | **Espelho pode duplicar e pode perder.** Duplicar: o dedup nativo da Evolution depende do import por Postgres direto (desligado por AD-8/AD-9) e o Chatwoot não tem índice único em `source_id` — o replay do Baileys reinsere. Mitigado *a posteriori* por `dedup-mensagens.sh` (precisa estar no cron). Perder: central fora do ar = mensagens só no N8N e no WhatsApp, sem reenvio automático. | espelho incompleto/duplicado (não afeta o Agente nem o lead) | reenvio vira trabalho do Serviço de Sync se doer (EPIC-5) |
 | **Anti-SSRF do Chatwoot desligado para rede privada** (`SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true`). Necessário para falar com a Evolution e baixar mídia; em troca, um webhook malicioso configurado na central poderia alcançar serviço interno. Mitigação atual: só admin configura webhook, e a rede `flash-canais` tem apenas Evolution, Chatwoot e o Caddy. | SSRF a partir da central | revisar no EPIC-6 (governança) |
-| **Retenção de conversa sem aval jurídico.** `RETENCAO_CONVERSAS_DIAS=1825` (5 anos) é um default técnico, não uma decisão. A central guarda conversa de **cobrança**: apagar cedo destrói prova de negociação de dívida; tarde demais viola a LGPD. O expurgo existe (`retencao-conversas.sh`) mas **não está no cron**. | LGPD / prova em disputa de dívida | STORY-6.3 |
+| **Retenção de conversa sem aval jurídico — e agora ela está ACUMULANDO.** `RETENCAO_CONVERSAS_DIAS=1825` (5 anos) é um default técnico, não uma decisão. O expurgo existe (`retencao-conversas.sh`) mas **não está no cron**. Desde 2026-07-14 isto deixou de ser hipotético: com o canal de e-mail ligado à caixa **real** (`operacional@`), a central passou a ingerir **PII de cliente de verdade** a cada minuto (CNPJ, valores, NF, boletos, dados de lead do Jotform) — e todo `make backup` a carrega junto. Decisão do operador (2026-07-14): **seguir, porque este host vira produção**. | LGPD / prova em disputa de dívida | **cron da retenção: antes do go-live** · aval jurídico: STORY-6.3 |
 | **Identidade dupla no canal Twilio: telefone e BSUID.** O inbound real criou **dois** `contact_inbox` para o mesmo contato: `whatsapp:+553182210297` (telefone) e `whatsapp:BR.4456758834604506` (o **BSUID**, identificador novo da Meta que a Twilio manda em `ExternalUserId`). Hoje o Chatwoot prefere o do telefone (`twilio_whatsapp_primary_source_id`) e é ele que o espelho do monorepo usa — então disparo e resposta casam. Mas a Meta está migrando para payloads **só com BSUID** (o próprio código do Chatwoot já trata esse caso). No dia em que o `From` vier sem telefone, o inbound resolveria o `contact_inbox` do BSUID e o espelho continuaria criando o do telefone: **mesmo contato, threads separadas**. | disparo e resposta em conversas diferentes (dado não se perde; a thread racha) | monitorar; revisar quando a Meta forçar BSUID |
 | **Webhook do Twilio depende de URL de ngrok efêmera.** A URL do plano free muda a cada reinício do túnel, e o webhook do Twilio (e o `PUBLIC_BOLETO_BASE_URL`, que valida a assinatura) apontam para ela. Foi exatamente assim que a confirmação de sacado ficou quebrada por 10 dias sem ninguém notar. Reservar o **domínio estático** que o ngrok dá de graça, ou publicar a API de verdade. | webhook apodrece em silêncio a cada restart | antes do go-live |
 | **Rota de disparo em massa do monorepo sem autenticação.** O router `/whatsapp-dispatch` (`api/api_main.py:256`) não declara nenhuma dependência de auth — nem no `include_router`, nem nas rotas. A única guarda é o limite de 50 boletos por lote. São os endpoints que **disparam cobrança em massa** pela Twilio. Achado de passagem no EPIC-3; **fora do escopo desta central** (é código do monorepo), mas registrado porque o risco é alto e o dono é o mesmo time. Confirmar se há middleware global de auth antes de concluir que está aberto. | disparo de cobrança em massa por terceiro; custo Twilio; reputação do número oficial | monorepo — avaliar assim que possível |
 | **`/twilio/delivery_status` da central aceita chamada não assinada.** O Chatwoot não valida o `X-Twilio-Signature` em nenhum dos dois callbacks. O `/twilio/callback` nós fechamos com o `RELAY_TOKEN` (o inbound vem do monorepo), mas o `delivery_status` **precisa** ficar público — é a Twilio que o chama direto, para as mensagens que a central envia. Forjá-lo só altera o status de entrega de uma mensagem existente. Mitigação possível: allowlist dos IPs da Twilio no Caddy. | status de entrega forjado (sem leitura nem envio de dados) | revisar no EPIC-6 (governança) |
+| **O `refresh_token` do Gmail fica em TEXTO PURO no banco.** O `Channel::Email` criptografa só `imap_password`/`smtp_password`. Com OAuth, a credencial real vive no `provider_config` — **jsonb, que o Chatwoot não criptografa**, mesmo com `ACTIVE_RECORD_ENCRYPTION_*` ligado (ligamos: protege o `Hook#access_token` e habilita MFA, mas **não** cobre este caso). O token dá **leitura e envio na caixa inteira** (`https://mail.google.com/`) e **não expira**. Está no Postgres e dentro de **todo backup**. Corrigir exigiria forkar o Chatwoot — proibido (AD-7). Mitigação: `BACKUP_DIR` tratado como segredo; revogar em `myaccount.google.com/permissions` ao menor sinal. | quem tiver o backup tem a caixa de atendimento inteira | aceito no MVP; revisar no EPIC-6 (governança) |
+| **Envio de e-mail acoplado ao poller de recebimento.** O SMTP de saída usa o `provider_config['access_token']` **cru**; quem o mantém fresco é o job IMAP que roda a cada minuto. Agendador do Sidekiq parado ⇒ em até 1h a atendente **para de conseguir responder**, com falha de auth SMTP **dentro de um job** (sem erro na tela). `make email` checa o registro do cron. | resposta ao cliente some em silêncio | monitorar (alerta de saúde entra na STORY-6.3) |
+| **O espelho do canal oficial não está na `main` do monorepo.** `mirror_outbound`/`relay_inbound` vivem na branch `feat/espelho-chatwoot` (`c3d5438`). O gate do EPIC-3 foi provado ao vivo **rodando essa branch** — mas até **merge + deploy** no monorepo, a central **não recebe** o inbound relayado nem o espelho em produção. | o EPIC-3 parece fechado e não está, em produção | monorepo — antes do go-live |
 | **Cópia offsite do backup é manual.** O `backup.sh` grava só local; host morre = backup morre junto. A cópia criptografada para fora do host está documentada, não automatizada. | perda total em falha de host | antes do go-live |
 | **Staging não existe ainda.** O runbook de upgrade exige validar em staging antes de produção (FR-2); hoje só há o ambiente dev local. | upgrade sem rede de proteção | antes do 1º upgrade em prod |
 
@@ -290,5 +382,11 @@ Nada ainda — implementação não iniciada. Itens levantados em code-review e 
 | 2026-07-13 | EPIC-3 | 3.1 · 3.2 | **Canal oficial (Twilio) ligado — e o épico foi definido por uma descoberta.** O número oficial **já tinha dono do webhook**: o monorepo recebe o inbound, valida a assinatura e alimenta a confirmação de sacado. Um número Twilio tem **um** webhook de inbound — apontá-lo para o Chatwoot quebraria a cobrança; o inverso deixaria a confirmação de dinheiro refém do chat. Desenho forçado: **o monorepo segue dono e faz fan-out**, igual ao EPIC-2. Na central: `conectar-twilio.sh` (inbox `Channel::TwilioSms` **medium=whatsapp** — é o medium que ativa a janela de 24h nativa; como `sms`, a Meta rejeitaria o texto livre pós-24h **em silêncio**), Caddy barrando `/twilio/callback` com `RELAY_TOKEN` (o `Twilio::CallbackController` **não valida** a assinatura), `verificar-canal-oficial.sh`. No monorepo (branch `feat/espelho-chatwoot`): `ChatwootMirror`, fan-out do inbound **depois** da confirmação, espelho no choke point do dispatch. **O achado que salvou o épico:** o Chatwoot **reenviaria** o disparo se a mensagem chegasse sem `source_id` — cobrança em dobro. Provado ao vivo com credencial Twilio **falsa**: com SID → `sent` sem chamar a Twilio; sem SID → `failed` (HTTP 401). Comandos novos: `make twilio`, `make twilio-status`, `make oficial`. Commits: `b16dabc` (central) · `c3d5438` (monorepo, branch). Gate **pendente de credencial real**. |
 
 | 2026-07-13 | EPIC-3 | gate | **Gate do EPIC-3 fechado ao vivo, com o número oficial real.** Mensagem recebida na inbox, resposta enviada pela central e chegando no WhatsApp, espelho do disparo caindo na conversa do contato — e a Twilio **sem nenhuma cópia** da mensagem espelhada (o guard do `source_id` segurou com credencial real: cobrança em dobro não acontece). Antes do teste com celular, a cadeia foi validada forjando uma chamada da Twilio com **assinatura HMAC-SHA1 válida** pela URL pública. O caminho até aqui foi feito de **falhas silenciosas**, e cada uma virou guard: a conta órfã que o smoke test deixou (os canais nasceram na conta de TESTE e o operador via a central vazia); o Caddy comendo o `api_access_token` por causa do underscore; o `env_get` sem aparar espaço; o `make check` comparando o `.env` numa direção só. Achado colateral **grave, do monorepo**: o webhook do Twilio apontava para um túnel ngrok morto desde 03/07 — a **confirmação de sacado por WhatsApp nunca funcionou em produção**. Commits: `b16dabc`, `78beb30`, `483adc2`, `3890d31`, `c7d0df3`, `83002d2`, `fd86c4f` (central) · `c3d5438` (monorepo, branch `feat/espelho-chatwoot`). |
+
+| 2026-07-14 | — | docs | **Faxina da documentação.** O `CLAUDE.md` afirmava "implementação NÃO iniciada — 0/19 stories", "não existe `deploy/`" e "a próxima é a STORY-1.1" — mentira em todos os pontos, e é o primeiro arquivo que qualquer sessão lê. Reescrito com o estado real, os comandos do Makefile e os 5 as-built que mordem. Auditoria varreu os 17 docs restantes: corrigidos o README e o `runbook-canal-oficial.md` (afirmavam o espelho **em produção**, quando ele está numa branch não mergeada do monorepo), o `runbook-deploy.md` (mandava `make up` em produção sem alertar que `COMPOSE_PROFILES=edge` sobe um **segundo Caddy** e colide com o do CRM), a "Opção B" fantasma e um "acima"/"abaixo" trocado no runbook de prospecção, a árvore de fonte do `architecture.md` (listava 5 dos 12 scripts) e o cabeçalho da dívida técnica ("Nada ainda" com 9 itens logo abaixo). Nas memories — que são o que o `/story` carrega: `decisions.md` não registrava o **modo espelho** (um agente leria o AD-5 e acharia normal responder ao lead pela central) e `security.md` dizia que o inbound da central é validado por assinatura, quando quem o protege é o **`RELAY_TOKEN`** no Caddy. |
+
+| 2026-07-14 | EPIC-4 | 4.1 | **Canal de e-mail ligado até onde é automatizável — e o épico foi definido por uma descoberta.** A **service account do Gmail não pluga no Chatwoot**: não é preferência, é ausência de caminho de código (`BaseRefreshOauthTokenService` faz `raise 'A refresh_token is not available'`; SA usa JWT-bearer e nunca emite refresh_token). Rota: **OAuth de usuário**, consent screen **Internal** (Workspace) — dispensa revisão do Google no escopo restrito. Novos: `conectar-gmail.sh` (`make gmail`/`gmail-status`/`gmail-url`), `verificar-canal-email.sh` (`make email`), `docs/runbook-canal-email.md`, e as chaves `GMAIL_*`/`GOOGLE_OAUTH_*`/`ACTIVE_RECORD_ENCRYPTION_*`. **A inbox é PRÉ-CRIADA** porque o `OauthCallbackController` a criaria com o nome do perfil Google, violando o glossário. **Três armadilhas silenciosas viraram guard ou runbook:** (1) o SMTP de saída usa o access_token **cru**, mantido fresco pelo job IMAP — **agendador parado ⇒ a atendente para de responder** em 1h; (2) re-autorizar sem revogar **não devolve refresh_token**, e o canal nasce condenado; (3) o `refresh_token` fica em **texto puro** no `provider_config` (jsonb que o Chatwoot não criptografa) — dívida técnica aceita, mitigada por revogação. Criptografia at-rest ligada sem regressão. Gate **pendente do passo manual do operador** (Google Cloud + dança do OAuth). |
+
+| 2026-07-14 | EPIC-4 | gate 4.1 | **Gate da STORY-4.1 fechado ao vivo, com a caixa real.** A 1ª sincronização puxou **8 conversas de operação de verdade** (NF, boletos, Jotform); a resposta digitada na central chegou ao destinatário **na mesma thread** (o `In-Reply-To` sai do `Message-ID` do Gmail que veio no inbound). E o teste que mais importava: **forçamos o `expires_on` para o passado** e o refresher renovou o token no Google, preservou o `refresh_token` e o **IMAP autenticou com o token renovado** — o canal não morre em 1h. Andaime removido (ponte derrubada, `FRONTEND_URL` devolvida) e o `make email` continua verde **sem** ele, provando que o refresh não depende do `redirect_uri`. O caminho até aqui teve **duas falhas silenciosas**: a URL de consentimento saindo com `client_id` **vazio** (o controller lê `installation_configs`, não o ENV — e o Chatwoot semeia a linha vazia, então o fallback devolve o vazio); e um **falso negativo do meu próprio verificador**, que consultava a coluna `value` — quando a coluna é `serialized_value`, jsonb **com YAML dentro**. Consequência de negócio registrada: a central passou a ingerir **PII real de cliente** a cada minuto; o operador decidiu seguir (este host vira produção), e o **cron da retenção LGPD** virou bloqueador de go-live. |
 
 > **Nota sobre este registro:** é um log **por sessão** (grão grosso). O rastreamento **por story** — com hash de commit — vive nas tabelas de cada épico acima.

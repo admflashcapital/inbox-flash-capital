@@ -190,20 +190,29 @@ erDiagram
 
 ### Árvore de fonte (repo `inbox-flash-capital`)
 
+Estado as-built (a marca diz o que **existe hoje**, não o que foi planejado):
+
 ```text
 inbox-flash-capital/
-  docs/                      # esta documentação (product-brief, prd, architecture, epics)
+  Makefile                   # [✔] atalhos de operação — `make help` lista todos
+  docs/                      # esta documentação (product-brief, prd, architecture, epics) + runbooks
   deploy/                    # [EPIC-1 ✔] a stack da central
     docker-compose.yml       # caddy, chatwoot-web, chatwoot-sidekiq, chatwoot-init, postgres, redis
-    Caddyfile                # TLS + único ponto de entrada (só ele publica porta)
+    Caddyfile                # TLS + único ponto de entrada (só ele publica porta); perfil `edge`
     .env.example             # todas as chaves; o .env real nunca é versionado
     scripts/
-      init-db/               # cria usuário, banco e extensões da central (AD-9)
-      backup.sh  restore.sh  # backup do par banco+anexos; restore com ensaio em ambiente limpo
-      smoke-test.sh          # semeia, reinicia e prova a persistência (dev/staging)
-      verificar-invariantes.sh  # falha se AD-7/AD-8/AD-9 forem violados
-      retencao-conversas.sh  # expurgo LGPD de conversa resolvida antiga
-  sync-service/              # [EPIC-5] ainda não existe
+      init-db/                    # [1.2] cria usuário, banco e extensões da central (AD-9)
+      backup.sh  restore.sh       # [1.4] backup do par banco+anexos; restore em ambiente limpo
+      smoke-test.sh               # [1.1] semeia, reinicia e prova a persistência (dev/staging)
+      verificar-invariantes.sh    # [1.x] falha se AD-7/AD-8/AD-9 forem violados (`make check`)
+      retencao-conversas.sh       # [6.3] expurgo LGPD de conversa resolvida antiga
+      conectar-evolution.sh       # [2.1] cria/liga a inbox WhatsApp Prospecção (Evolution)
+      verificar-fanout.sh         # [2.2] prova os DOIS consumidores vivos (AD-5)
+      dedup-mensagens.sh          # [2.2] faxineiro de duplicata do espelho (replay do Baileys)
+      verificar-aquecimento.sh    # [2.3] só-inbound + rampa + zero campanha (AD-6)
+      conectar-twilio.sh          # [3.1] cria a inbox WhatsApp Oficial (medium=whatsapp) + templates
+      verificar-canal-oficial.sh  # [3.1] janela 24h, templates, AD-6, RELAY_TOKEN
+  sync-service/              # [EPIC-5] AINDA NÃO EXISTE — único componente construído do zero (TDD)
     app/
       main.py                # FastAPI: webhooks de domínio + Chatwoot
       identity.py            # AD-3: resolução E.164 + documento, merge/sugestão
@@ -214,6 +223,11 @@ inbox-flash-capital/
   .claude/                   # scaffold de dev: hooks, comandos, memories, skills
   CLAUDE.md  PROGRESS.md  README.md
 ```
+
+> O espelho do canal oficial (STORY-3.2) **não mora aqui** — é código do `monorepo-flash-capital`
+> (`api/integrations/chatwoot/chatwoot_mirror.py`), porque quem é dono do webhook do Twilio e do
+> motor de disparo é o monorepo (AD-6). Estado: branch **`feat/espelho-chatwoot`** (`c3d5438`),
+> **ainda não mergeada na `main` de lá** — até o merge+deploy, o espelho não roda em produção.
 
 ## Capability → Architecture Map
 
