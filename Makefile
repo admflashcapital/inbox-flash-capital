@@ -10,7 +10,7 @@ COMPOSE := docker compose -f deploy/docker-compose.yml --env-file deploy/.env
 
 .PHONY: help up down restart logs ps config check smoke migrate backup restore-check retencao \
         evolution evolution-status fanout dedup aquecimento twilio twilio-status oficial \
-        gmail gmail-status gmail-url email
+        gmail gmail-status gmail-url email backfill
 
 help: ## Lista os comandos disponíveis
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -74,6 +74,9 @@ gmail-url: ## Re-gera a URL de autorização do Google (o state expira em 15min)
 
 email: ## Verifica as invariantes do canal de e-mail (OAuth, refresh_token, agendador)
 	deploy/scripts/verificar-canal-email.sh
+
+backfill: ## Importa histórico retroativo da caixa. Uso: make backfill d=90 (default 30) · make backfill d=--contar
+	deploy/scripts/backfill-email.sh $(d)
 
 migrate: ## Roda as migrações do Chatwoot (usado no upgrade — STORY-1.3)
 	$(COMPOSE) run --rm chatwoot-init
