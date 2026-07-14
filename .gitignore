@@ -30,3 +30,7 @@ storage/
 # SO / editor
 .DS_Store
 *.swp
+
+# QR de pareamento do WhatsApp (credencial de vinculação de dispositivo)
+.qr-*.png
+deploy/.qr-*.png
