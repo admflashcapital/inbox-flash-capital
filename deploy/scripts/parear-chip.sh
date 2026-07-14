@@ -118,17 +118,40 @@ if [ "${1:-}" = "--codigo" ]; then
   fi
   # A Evolution quer o número SEM o '+'.
   NUM_API="${NUM_CHIP#+}"
-  echo "[chip] instância '${EV_INST}' está '${ESTADO}' — pedindo código para ${NUM_CHIP:0:5}…${NUM_CHIP: -4}"
+
+  # ── A sutileza que faz o pairingCode vir NULO ───────────────────
+  # O `/instance/connect` do Evolution só INICIA um socket novo quando o estado é
+  # `close`. Em `connecting`, ele devolve o QR que está em CACHE — e esse cache foi
+  # criado pelo connect anterior, que rodou SEM número (`phoneNumber = null`).
+  # O pairingCode só é emitido por um socket que NASCE sabendo o número
+  # (`requestPairingCode(phoneNumber)` no handler de QR do Baileys).
+  # Logo: se não estiver `close`, derrubamos a sessão ANTES de pedir o código.
+  # Sem isso, `pairingCode` volta nulo para sempre — e o erro parece ser do número.
+  if [ "$ESTADO" != "close" ]; then
+    echo "[chip] instância está '${ESTADO}' — derrubando o socket para poder emitir o código…"
+    ev DELETE "/instance/logout/${EV_INST}" >/dev/null 2>&1 || true
+    for _ in $(seq 1 10); do
+      sleep 2
+      ESTADO="$(estado)"
+      [ "$ESTADO" = "close" ] && break
+    done
+    if [ "$ESTADO" != "close" ]; then
+      echo "[chip] ERRO: não consegui levar a instância a 'close' (está '${ESTADO}')."
+      exit 1
+    fi
+  fi
+
+  echo "[chip] pedindo código para ${NUM_CHIP:0:5}…${NUM_CHIP: -4}"
 
   ev GET "/instance/connect/${EV_INST}?number=${NUM_API}" | COD_TXT="$COD_TXT" python3 -c "
 import sys, json, os
 d = json.load(sys.stdin)
 cod = (d.get('pairingCode') or '').strip()
 if not cod:
-    print('[chip] a Evolution não devolveu pairingCode.')
-    print('       Causas: número em formato errado, instância em estado transitório,')
-    print('       ou a versão da Evolution não suporta pareamento por código.')
-    print('       Tente de novo, ou use o QR: make chip')
+    print('[chip] a Evolution não devolveu pairingCode, mesmo com a instância em close.')
+    print('       Provável: NUMERO_PROSPECCAO errado (confira DDI+DDD), ou a versão da')
+    print('       Evolution não suporta pareamento por código.')
+    print('       Alternativa: use o QR — make chip')
     raise SystemExit(1)
 destino = os.environ['COD_TXT']
 with open(destino, 'w') as f:
