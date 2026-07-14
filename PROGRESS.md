@@ -220,7 +220,7 @@ Caixa Gmail de atendimento como inbox, com as threads unificadas ao mesmo contat
 
 | # | Story | Status | Commit |
 |---|---|---|---|
-| 4.1 | Inbox de e-mail espelhada (FR-9) | [x] | |
+| 4.1 | Inbox de e-mail espelhada (FR-9) | [x] | 28b6766 |
 | 4.2 | Unificação sob o mesmo contato (FR-10) | [!] | |
 
 ## ✅ Gate da STORY-4.1 verificado AO VIVO (2026-07-14, caixa real de produção)
