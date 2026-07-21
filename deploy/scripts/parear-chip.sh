@@ -41,6 +41,12 @@ REDE="${REDE_CANAIS:-flash-canais}"
 IMAGEM_CURL="curlimages/curl:8.11.1"
 QR_PNG="${RAIZ}/deploy/.qr-pareamento.png"       # gitignored
 COD_TXT="${RAIZ}/deploy/.qr-codigo-pareamento.txt" # gitignored (mesmo padrão .qr-*)
+
+# O QR e o código são CREDENCIAL DE VINCULAÇÃO: quem os lê dentro da validade
+# vincula o próprio aparelho ao WhatsApp do chip. Os caminhos de sucesso/timeout
+# já apagavam, mas um Ctrl-C (comum: o operador desiste da janela de 45s) deixava
+# a credencial no disco. O trap fecha esse buraco em QUALQUER saída (AD-8).
+trap 'rm -f "$COD_TXT" "$QR_PNG" 2>/dev/null || true' EXIT INT TERM
 NUM_CHIP="$(env_get NUMERO_PROSPECCAO)"
 
 if [ -z "$EV_KEY" ]; then
@@ -183,17 +189,25 @@ print(f'[chip] código gravado em: {destino}')
     echo "  Abra manualmente:  cat '${COD_TXT}'"
   fi
   echo
-  echo "  ⚠️  O código expira em ~60s. Expirou? rode de novo."
+  # ── Janela REAL de digitação: ~45s, não 180s ────────────────────
+  # O Baileys rotaciona o QR a cada 45s (`qrTimeout:45e3`) e a Evolution re-emite
+  # um pairingCode NOVO a cada rotação. O código gravado no arquivo é o da 1ª
+  # emissão: passados ~45s ele está morto, e nenhuma espera adicional o ressuscita.
+  # Os 180s abaixo são para a CONEXÃO fechar depois que o código foi aceito —
+  # não são janela de digitação. Dizer "expira em ~60s" e então esperar 180s em
+  # silêncio fazia o operador acreditar que tinha 3 minutos.
+  echo "  ⏱️  Você tem ~45s para DIGITAR. Depois disso este código morre e é"
+  echo "      preciso rodar de novo (a Evolution emite outro)."
   echo
-  echo "[chip] aguardando a conexão (até 180s)…"
+  echo "[chip] aguardando…"
 
+  FECHADO_SEGUIDAS=0
   for i in $(seq 1 60); do
     sleep 3
     E="$(estado)"
     if [ "$E" = "open" ]; then
       echo
       echo "  ✅ CONECTADO — número $(numero_pareado)"
-      rm -f "$COD_TXT" "$QR_PNG"
       echo "     (código apagado do disco)"
       echo
       echo "  Próximos passos:"
@@ -201,11 +215,51 @@ print(f'[chip] código gravado em: {destino}')
       echo "   2. make evolution · 3. make fanout · 4. make aquecimento"
       exit 0
     fi
-    printf '.'
+
+    # ── Detecção da CREDENCIAL ÓRFÃ (incidente de 20/07/2026) ─────
+    # Um socket saudável fica em `connecting` enquanto espera a digitação. Se ele
+    # volta para `close` logo após o connect, o WhatsApp o derrubou com 401
+    # loggedOut — quase sempre porque a linha em evolution_api."Session" sobreviveu
+    # ao logout anterior e o Baileys reapresentou uma credencial morta.
+    # O código nem chega a ser avaliado; no celular o erro aparece como "código
+    # inválido", que aponta para o lugar errado. Custou 1h+ e ~11 tentativas.
+    if [ "$E" = "close" ]; then
+      FECHADO_SEGUIDAS=$((FECHADO_SEGUIDAS + 1))
+    else
+      FECHADO_SEGUIDAS=0
+    fi
+    if [ "$FECHADO_SEGUIDAS" -ge 2 ] && [ "$i" -le 8 ]; then
+      echo
+      echo "[chip] ✗ O socket MORREU em poucos segundos (estado: close)."
+      echo
+      echo "   Isto NÃO é código expirado nem número errado — o WhatsApp derrubou a"
+      echo "   conexão com 401 antes de o código ser avaliado. A causa quase certa é"
+      echo "   uma CREDENCIAL ÓRFÃ: o logout anterior deixou a linha em"
+      echo "   evolution_api.\"Session\" para trás, e o Baileys a reapresentou."
+      echo
+      echo "   Corrija no repo DONO do banco (crm-flash-capital):"
+      echo "       make evolution-reset-sessao"
+      echo "   e então volte aqui:"
+      echo "       make chip-status     # deve dizer: close"
+      echo "       make chip-codigo"
+      exit 1
+    fi
+
+    # Sinaliza a virada da janela em vez de só imprimir pontos.
+    if [ "$i" -eq 15 ]; then
+      echo
+      echo "[chip] ⚠️  passaram-se ~45s: o código do arquivo EXPIROU."
+      echo "       Se ainda não digitou, interrompa (Ctrl-C) e rode 'make chip-codigo' de novo."
+      echo "       Seguimos esperando só para o caso de você ter digitado no limite…"
+    else
+      printf '.'
+    fi
   done
   echo
-  echo "[chip] não conectou em 180s (estado: $(estado)). O código provavelmente expirou."
-  rm -f "$COD_TXT"
+  echo "[chip] não conectou (estado: $(estado))."
+  echo "       Se você digitou dentro dos ~45s e mesmo assim falhou, suspeite de"
+  echo "       credencial órfã: 'make evolution-reset-sessao' no crm-flash-capital."
+  echo "       Se foram muitas tentativas seguidas, pode ser rate-limit — espere 24h."
   exit 1
 fi
 
