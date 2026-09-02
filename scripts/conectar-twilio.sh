@@ -36,7 +36,8 @@ ENV_FILE="${RAIZ}/.env"
 . "${RAIZ}/scripts/lib/env.sh"
 
 # Não-secretos.
-CENTRAL_URL="$(env_get CENTRAL_URL_INTERNA)"; CENTRAL_URL="${CENTRAL_URL:-http://chatwoot-web:3000}"
+PORTA="$(env_get CHATWOOT_HOST_PORT)"; PORTA="${PORTA:-3001}"
+CENTRAL_URL="http://127.0.0.1:${PORTA}"
 CONTA="$(env_get CENTRAL_ACCOUNT_ID)"
 NOME_INBOX="$(env_get INBOX_OFICIAL_NOME)"; NOME_INBOX="${NOME_INBOX:-WhatsApp Oficial}"
 NUMERO="$(env_get TWILIO_NUMERO_OFICIAL)"
@@ -64,21 +65,24 @@ if ! printf '%s' "$NUMERO" | grep -qE '^\+[0-9]{10,15}$'; then
   exit 1
 fi
 
-REDE="${REDE_CANAIS:-flash-canais}"
-IMAGEM_CURL="curlimages/curl:8.11.1"
-
-# O token da central é expandido pelo shell DE DENTRO do container (aspas
-# escapadas), então não aparece no argv do `docker run` no host.
+# Fala com a central pela porta publicada em LOOPBACK (AD-10). Antes isto era
+# um `docker run --network flash-canais curlimages/curl` — precisava de um
+# container efêmero E de uma rede compartilhada só para alcançar
+# `chatwoot-web:3000`. Com a porta em 127.0.0.1, um curl do host basta.
+#
+# O token vai por `--config -` (stdin), não em argv: argv de processo é
+# legível por qualquer usuário da máquina via /proc.
 cw_curl() {  # cw_curl <método> <caminho>   [corpo JSON por stdin]
-  local metodo="$1" caminho="$2" data=""
-  [ "$metodo" = "GET" ] || data="--data-binary @-"
-  CENTRAL_ACCESS_TOKEN="$CENTRAL_ACCESS_TOKEN" docker run --rm -i \
-    --network "$REDE" -e CENTRAL_ACCESS_TOKEN --entrypoint sh "$IMAGEM_CURL" -c "
-      curl -sS -w '\n%{http_code}' -X ${metodo} \
-        -H \"api_access_token: \$CENTRAL_ACCESS_TOKEN\" \
-        -H 'Content-Type: application/json' \
-        ${data} '${CENTRAL_URL}${caminho}'
-    "
+  local metodo="$1" caminho="$2" corpo=""
+  if [ "$metodo" != "GET" ]; then corpo="$(cat)"; fi
+  {
+    printf 'header = "api_access_token: %s"\n' "$CENTRAL_ACCESS_TOKEN"
+    printf 'header = "Content-Type: application/json"\n'
+    printf 'request = "%s"\n' "$metodo"
+    printf 'url = "%s"\n' "${CENTRAL_URL}${caminho}"
+    printf 'silent\nshow-error\nwrite-out = "\\n%%{http_code}"\n'
+    [ -n "$corpo" ] && printf 'data-binary = "%s"\n' "$(printf '%s' "$corpo" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+  } | curl --config - --max-time 30
 }
 
 # Devolve o id da inbox pelo nome, ou vazio.
