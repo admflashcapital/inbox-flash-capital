@@ -113,10 +113,18 @@ Mapa de camadas → responsabilidade:
 - **Binds:** FR-11..FR-14 (anulados), STORY-4.2
 - **Prevents:** construir reconciliação posterior para um dado que já está na mão.
 - **Rule:** **EPIC-5 cancelado.** O monorepo já conhece `titulo_id`, CNPJ, valor e dias de atraso no
-  instante do disparo; esse contexto vai nos `custom_attributes` da conversa, dentro de
-  `chatwoot_mirror.py::_garantir_conversa`. Push unidirecional no momento do disparo em vez de
-  reconciliação. A central continua sem consultar banco de domínio em runtime — o espírito do AD-2 é
-  preservado sem o serviço que ele pressupunha.
+  instante do disparo; esse contexto vai nos `custom_attributes` da conversa. Push unidirecional no
+  momento do disparo em vez de reconciliação. A central continua sem consultar banco de domínio em
+  runtime — o espírito do AD-2 é preservado sem o serviço que ele pressupunha.
+- **Como, e por que não do jeito óbvio:** o carimbo é uma etapa **separada**
+  (`chatwoot_mirror.py::_carimbar_atributos`), chamada depois que `conversa_id` foi resolvido —
+  **não** dentro de `_garantir_conversa`. Aquele método tem duas saídas, reuso e criação, e o reuso
+  é o caminho comum (um sacado em cobrança já tem thread). Pôr os atributos no corpo do POST de
+  criação passaria no teste e não carimbaria nada em produção.
+- **O endpoint substitui, não mescla:** `POST /conversations/{id}/custom_attributes` faz
+  `conversation.custom_attributes = params[...]`. Cada carimbo manda o conjunto completo, e um
+  disparo que não conhece um campo o apaga. É deliberado: num painel de cobrança, dado ausente é
+  melhor que `dias_atraso` de três meses atrás.
 
 ### Diagrama de direção de dependência (quem pode depender de quem)
 

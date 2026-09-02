@@ -20,7 +20,7 @@ As 3 stories abertas estão travadas em coisas que **não são código**:
 | Story | Espera |
 |---|---|
 | 2.1 · 2.2 ~~`[~]`~~ | **CANCELADAS** (2026-09-02) — o EPIC-2 sai junto com a Evolution |
-| 4.2 ~~`[!]`~~ | **DESTRAVADA** (2026-09-02) — o AD-13 substitui o Sync: o contexto (`titulo_id`, CNPJ, valor, atraso) é carimbado nos `custom_attributes` da conversa em `chatwoot_mirror.py::_garantir_conversa`, no instante do disparo |
+| 4.2 ~~`[!]`~~ | **DESTRAVADA** (2026-09-02) — o AD-13 substitui o Sync: o contexto (`titulo_id`, CNPJ, valor, atraso) é carimbado nos `custom_attributes` da conversa por `chatwoot_mirror.py::_carimbar_atributos`, no instante do disparo. Etapa separada de propósito: `_garantir_conversa` tem duas saídas e o reuso é o caminho comum |
 
 **Próximo trabalho real: Fase 2 (CRM) → Fase 3 (espelho ponta a ponta).** As Fases 0 e 1 estão
 fechadas (ver o quadro acima). Não é o EPIC-5 — ele foi cancelado. O roteiro está no
