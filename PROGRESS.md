@@ -55,63 +55,13 @@ SMTP transacional e agendar o cron de backup + cópia offsite criptografada.
 
 ---
 
-## ~~EPIC-2 — Canal WhatsApp Prospecção (Evolution)~~ `[CANCELADO 2026-09-02]`
+## ~~EPIC-2 — Canal WhatsApp Prospecção~~ `[CANCELADO 2026-09-02 — AD-11]`
 
-> **Épico cancelado.** A Evolution sai dos dois repos (AD-11 do inbox, ADR-010 do CRM). Os 3 stories,
-> o runbook de prospecção, o de aquecimento e os 5 scripts são apagados na **Fase 1.1**. O conteúdo
-> abaixo fica só para leitura do histórico — **não executar nada daqui**.
+3 stories, 2 runbooks e 5 scripts removidos na Fase 1.1. O que aconteceu enquanto o épico viveu está
+no **Registro de sessões** (2026-07-13 e 2026-07-14), incluindo o fan-out provado ao vivo.
 
-Número novo pré-pago, **só inbound**, convivendo com o Agente N8N sem perda de mensagem.
-
-| # | Story | Status | Commit |
-|---|---|---|---|
-| 2.1 | Inbox de prospecção espelhada no Chatwoot (FR-4) | [~] | 4bbccb5 |
-| 2.2 | Convivência com o Agente N8N sem perda — fan-out (FR-5, AD-5) | [~] | |
-| 2.3 | Aquecimento e proteção do número (FR-6) | [x] | |
-
-> **O EPIC-2 está pronto até onde é automatizável.** As stories 2.1 e 2.2 só viram `[x]` depois de
-> **parear o chip** e provar o gate com uma mensagem real — o checklist está em
-> `docs/runbook-canal-prospeccao.md` (§ Checklist para fechar o gate do EPIC-2).
->
-> **Decisão de operação (2026-07-13): modo espelho.** No número de prospecção quem responde o lead é
-> o **Agente N8N**; a central **só espelha** (a atendente acompanha, não digita). É o que evita a
-> resposta dupla enquanto não existe handoff. Não é só combinado: `MODO_ESPELHO_PROSPECCAO=true` faz
-> o `make aquecimento` **falhar** se aparecer resposta digitada na central nessa inbox.
-
-**STORY-2.2 — fan-out verificado na configuração e no código (2026-07-13, dev).** `make fanout`
-prova que os dois consumidores estão vivos na mesma instância (webhook global → N8N **e** integração
-Chatwoot aplicada). No código da Evolution 2.3.7: os dois disparos acontecem no mesmo handler de
-mensagem (`chatwootService.eventWhatsapp` na linha 1331, `sendDataWebhook` na 1483) e o envio à
-central tem `try/catch` próprio (linha 2525) — **não é fila competida, e central fora do ar não cega
-o Agente**. A saudação do Agente aparece na central porque mensagem `fromMe` também é espelhada
-(vira `outgoing`).
-**Idempotência:** o dedup nativo da Evolution só roda com o import por Postgres direto (que
-desligamos por AD-8/AD-9) e o Chatwoot não tem índice único em `source_id` — duplicata é possível no
-replay do Baileys. Resolvido do lado da central por `dedup-mensagens.sh` (testado: 2 cópias → 1).
-**Perda:** com a central fora do ar, o espelho perde as mensagens daquele intervalo (o N8N não). É
-assimetria proposital; sem reenvio automático no MVP.
-
-**STORY-2.3 — política do número, com guardrail executável.** `make aquecimento` **falha** se alguma
-conversa da inbox de prospecção tiver sido **iniciada por nós** (assinatura de outbound frio), se
-existir **campanha** na inbox (AD-6) ou se o volume enviado em 24h passar do teto da rampa
-(20/40/60/80/100 por semana). Política e playbook de bloqueio em `docs/runbook-aquecimento-numero.md`.
-
-**STORY-2.1 — integração ligada e verificada até onde dá sem o chip (2026-07-13, dev).**
-Verificado ao vivo: rede `flash-canais` liga Evolution 2.3.7 ↔ Chatwoot 4.15.1 sem expor nenhuma das
-duas; `make evolution` criou a inbox `WhatsApp Prospecção` (`Channel::Api`, webhook
-`/chatwoot/webhook/crm`); a resposta digitada na central **chega** na Evolution; e a Evolution
-**escreve de volta** na conversa usando o token de admin. **Falta o passo manual do operador:** parear
-o chip pré-pago pelo QR (`docs/runbook-canal-prospeccao.md`) — só então dá para provar os CAs
-(mensagem real do lead, resposta chegando no WhatsApp, mídia anexada). A story só vira `[x]` depois
-disso.
-
-**Nota:** os dois achados de desenho registrados nesta story (o `SAFE_FETCH_ALLOW_PRIVATE_NETWORK` e
-a disputa pela 443) não valem mais — a central publica em `127.0.0.1:${CHATWOOT_HOST_PORT}`, sozinha,
-e o anti-SSRF está ligado.
-
-**Gate EPIC-2:** mensagem inbound no número novo aparece na inbox `WhatsApp Prospecção`; resposta pela central chega ao lead; mídia é anexada; **N8N e Chatwoot recebem cada evento** (fan-out at-least-once, sem mensagem engolida nem duplicada); a saudação + link Jotform do agente aparecem na conversa; limite de aquecimento documentado e zero outbound frio em massa.
-
-> ⚠️ **Risco de engenharia do épico:** a instância Evolution tem **dois consumidores** (N8N + Chatwoot). Se virar fila competida, um engole o evento do outro. Fan-out é requisito, não detalhe.
+A regra que sobreviveu ao épico: **prospecção fria sai por e-mail, nunca por WhatsApp** — o número
+oficial é exclusivo de cobrança e transacional.
 
 ---
 
@@ -222,7 +172,7 @@ Caixa Gmail de atendimento como inbox, com as threads unificadas ao mesmo contat
 | # | Story | Status | Commit |
 |---|---|---|---|
 | 4.1 | Inbox de e-mail espelhada (FR-9) | [x] | 28b6766 |
-| 4.2 | Unificação sob o mesmo contato (FR-10) | [!] | |
+| 4.2 | Contexto de domínio carimbado na conversa (FR-10, AD-13) | [ ] | |
 
 ## ✅ Gate da STORY-4.1 verificado AO VIVO (2026-07-14, caixa real de produção)
 
@@ -239,14 +189,15 @@ Com a caixa `operacional@flashcapital.com.br` (Google Workspace, OAuth):
 **Ainda não exercitado:** a janela de ~24h do IMAP (`SINCE hoje−1`) — o canal tolera o Sidekiq fora do ar
 por horas, mas acima de ~24h o que chegou no buraco não é mais buscado. Não dá para provar sem esperar.
 
-**Gate EPIC-4:** e-mail que chega na caixa vira conversa na inbox `E-mail`; resposta pela central volta ao remetente na mesma thread; conversas de e-mail e de WhatsApp do mesmo cliente aparecem sob o **mesmo Contato** quando e-mail/documento casam, sem duplicidade (fecha junto com o EPIC-5).
+**Gate EPIC-4:** e-mail que chega na caixa vira conversa na inbox `E-mail`; resposta pela central volta ao remetente na mesma thread; e a conversa de cobrança carrega `titulo_id`, `cnpj`, `valor_em_aberto` e `dias_atraso` nos `custom_attributes` — **inclusive quando a conversa foi reusada**, que é o caminho comum.
 
 > **O EPIC-4 está pronto até onde é automatizável.** A 4.1 vira `[x]` depois do **passo manual do
 > operador**: criar o OAuth Client no Google Cloud, preencher 3 chaves no `.env` e concluir a dança
 > do OAuth. Checklist completo em `docs/runbook-canal-email.md`.
-> A 4.2 está `[!]` **por desenho, não por atraso** — a resolução de identidade (telefone **E**
-> documento, AD-3) vive num lugar só: o **Serviço de Sync (EPIC-5)**, que ainda não existe. Já estava
-> assim em `docs/epics-and-stories.md` desde o planejamento ("depende de Epic 5").
+> A 4.2 mudou de conteúdo com o AD-13: em vez de reconciliar identidade depois do fato, o monorepo
+> carimba o contexto que já tem em mãos no instante do disparo. É trabalho **no monorepo**
+> (`chatwoot_mirror.py`), não neste repo — e a armadilha está registrada: `_garantir_conversa` tem
+> duas saídas, e o carimbo precisa valer para as duas.
 
 **A descoberta que definiu o épico: a service account do Gmail NÃO pluga no Chatwoot.** Não é
 preferência — é ausência de caminho de código. O `Imap::GoogleFetchEmailService` autentica XOAUTH2
@@ -368,7 +319,6 @@ Itens levantados em code-review e desvios as-built. **Nenhum bloqueia o MVP** �
 
 | Item | Por quê ficou fora do MVP |
 |---|---|
-| **Instância B** — número de relacionamento (clientes que já operam) no Evolution | mesmo padrão do canal de prospecção, sem agente; baixo esforço — revisar se o cronograma permitir |
 | **Dashboard App (iframe)** com dado de domínio ao vivo | o MVP usa só atributos empurrados; mantém a central leve (AD-2) |
 | **Sync bidirecional** (central → domínio) | MVP é unidirecional |
 | **Campanhas/disparo em massa na central** | permanece no monorepo (AD-6) |

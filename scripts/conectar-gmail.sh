@@ -68,10 +68,9 @@ if ! printf '%s' "$CAIXA" | grep -qE '^[^@[:space:]]+@[^@[:space:]]+\.[a-zA-Z]{2
   exit 1
 fi
 
-# Fala com a central pela porta publicada em LOOPBACK (AD-10). Antes isto era
-# um `docker run --network flash-canais curlimages/curl` — precisava de um
-# container efêmero E de uma rede compartilhada só para alcançar
-# `chatwoot-web:3000`. Com a porta em 127.0.0.1, um curl do host basta.
+# Fala com a central pela porta publicada em LOOPBACK (AD-10): este script roda
+# no host, então um curl direto basta — nada de container efêmero nem de rede
+# compartilhada. A rede `flash-espelho` é só para container↔container.
 #
 # O token vai por `--config -` (stdin), não em argv: argv de processo é
 # legível por qualquer usuário da máquina via /proc.
@@ -184,10 +183,9 @@ if [ "$aceito_pelo_google" != "true" ]; then
   echo "  ⚠️  FRONTEND_URL='${FRONTEND_URL}' NÃO é um redirect URI que o Google aceita."
   echo "      A dança falharia com redirect_uri_mismatch."
   echo
-  echo "      O Google exige HTTPS, e só isenta o localhost PURO. Um subdomínio como"
-  echo "      'inbox.localhost' NÃO é isento — foi por isso que existiu a ponte socat."
-  echo "      Desde o AD-10 a central publica direto em 127.0.0.1, então a ponte morreu:"
-  echo "      a própria FRONTEND_URL já é um redirect URI aceitável."
+  echo "      O Google exige HTTPS, e só isenta o localhost PURO — um subdomínio como"
+  echo "      'inbox.localhost' NÃO é isento. Por isso a central publica direto em"
+  echo "      127.0.0.1 (AD-10): a própria FRONTEND_URL já é um redirect URI aceitável."
   echo
   echo "      Válido:   http://localhost:<CHATWOOT_HOST_PORT>   (dev — hoje 3001)"
   echo "                https://<host-publico>                  (quando houver ingresso)"

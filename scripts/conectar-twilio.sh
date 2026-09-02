@@ -65,10 +65,9 @@ if ! printf '%s' "$NUMERO" | grep -qE '^\+[0-9]{10,15}$'; then
   exit 1
 fi
 
-# Fala com a central pela porta publicada em LOOPBACK (AD-10). Antes isto era
-# um `docker run --network flash-canais curlimages/curl` — precisava de um
-# container efêmero E de uma rede compartilhada só para alcançar
-# `chatwoot-web:3000`. Com a porta em 127.0.0.1, um curl do host basta.
+# Fala com a central pela porta publicada em LOOPBACK (AD-10): este script roda
+# no host, então um curl direto basta — nada de container efêmero nem de rede
+# compartilhada. A rede `flash-espelho` é só para container↔container.
 #
 # O token vai por `--config -` (stdin), não em argv: argv de processo é
 # legível por qualquer usuário da máquina via /proc.

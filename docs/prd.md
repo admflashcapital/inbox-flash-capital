@@ -16,13 +16,12 @@ Este PRD é para o time da Flash Capital que vai implementar a central de atendi
 
 ## 1. Vision
 
-O Inbox Flash Capital consolida numa única tela todos os canais de conversa da Flash — múltiplos números de WhatsApp e caixas de e-mail — funcionando como **espelho** das conversas e **cockpit** dos operadores, sem ser dono de nenhum dado de negócio. Cada canal é uma inbox; cada contato aparece enriquecido com o contexto que já vive no CRM (Twenty) e na plataforma interna (Supabase), casado por telefone e documento. O operador deixa de trocar de ferramenta e passa a ver a história inteira de cada cliente num lugar só, com o contexto certo ao lado da conversa. A central roda self-hosted na infra da Flash, reaproveitando os provedores de WhatsApp já existentes (Evolution e Twilio), com soberania total sobre os dados.
+O Inbox Flash Capital consolida numa única tela todos os canais de conversa da Flash — múltiplos números de WhatsApp e caixas de e-mail — funcionando como **espelho** das conversas e **cockpit** dos operadores, sem ser dono de nenhum dado de negócio. Cada canal é uma inbox; cada conversa carrega o contexto de domínio que o monorepo **carimba no instante do disparo** (AD-13). O operador deixa de trocar de ferramenta e passa a ver a história inteira de cada cliente num lugar só, com o contexto certo ao lado da conversa. A central roda self-hosted na infra da Flash, com soberania total sobre os dados.
 
 ## 2. Target User
 
 ### 2.1 Jobs To Be Done
 
-- **Como atendente de prospecção:** quando um lead pescado me chama no WhatsApp, quero reconhecê-lo e enviar o formulário Jotform sem sair da tela, para converter o contato em lead qualificado.
 - **Como atendente de relacionamento:** quando um cliente que já opera me procura, quero ver o histórico completo e a situação da operação ao lado da conversa, para responder com contexto sem consultar outro sistema.
 - **Como responsável por cobrança:** quando falo com um inadimplente, quero ver em que etapa da régua ele está e o valor em aberto na própria conversa, para conduzir a cobrança certa.
 - **Como gestão:** quero visão de volume, tempo de resposta e um histórico auditável de todas as conversas, para governança e conformidade LGPD.
@@ -31,22 +30,14 @@ O Inbox Flash Capital consolida numa única tela todos os canais de conversa da 
 ### 2.2 Non-Users (v1)
 
 - Clientes finais (cedentes/sacados) não usam a central diretamente — ela é ferramenta interna de atendimento. O cliente continua no WhatsApp/e-mail de sempre.
-- O time que roda disparo em massa de cobrança/prospecção continua no pipeline atual do monorepo no MVP; a central ainda não é motor de campanha.
+- O time que roda disparo em massa de cobrança continua no pipeline atual do monorepo; a central não é motor de campanha, e não é meta que venha a ser.
 
 ### 2.3 Key User Journeys
-
-- **UJ-1. Rafael recepciona um lead pescado e manda o Jotform.**
-  - **Persona + contexto:** Rafael, prospecção, recebe leads que vieram de campanhas de e-mail e chamaram no número novo de WhatsApp.
-  - **Entry state:** autenticado no Chatwoot, inbox "WhatsApp Prospecção" aberta.
-  - **Path:** chega uma conversa nova de número desconhecido → o agente N8N já respondeu a saudação e mandou o link Jotform automaticamente → Rafael vê a conversa espelhada com a label `lead-frio` → confirma que o link foi enviado e adiciona uma nota.
-  - **Climax:** o contato aparece na central com histórico e label, sem Rafael ter feito nada manual no primeiro toque.
-  - **Resolution:** conversa fica registrada; quando o lead responde o Jotform, o CRM cria o lead e a label muda para `lead-qualificado`.
-  - **Edge case:** se o número já for cliente ativo (casou por telefone), a conversa entra já com `cliente-ativo` e é roteada para relacionamento, não prospecção.
 
 - **UJ-2. Marina atende um cliente que já opera, com contexto completo.**
   - **Persona + contexto:** Marina, relacionamento, atende quem já tem operação ativa.
   - **Entry state:** autenticada, recebe atribuição de uma conversa no WhatsApp oficial/relacionamento.
-  - **Path:** abre a conversa → na barra lateral vê nome, CNPJ, `cliente-ativo`, status da operação e link clicável para o registro no Supabase/Twenty → responde com base no contexto.
+  - **Path:** abre a conversa → na barra lateral vê os atributos que o disparo carimbou (CNPJ, valor em aberto, dias de atraso, título) → responde com base no contexto.
   - **Climax:** responde certo de primeira porque o contexto estava do lado, sem abrir outro sistema.
   - **Resolution:** conversa resolvida e etiquetada; histórico preservado para a próxima interação.
 
@@ -60,8 +51,8 @@ O Inbox Flash Capital consolida numa única tela todos os canais de conversa da 
 - **UJ-4. Bruno atende um e-mail que virou conversa.**
   - **Persona + contexto:** Bruno, operação, monitora a caixa Gmail de atendimento.
   - **Entry state:** autenticado, inbox "E-mail" aberta.
-  - **Path:** chega um e-mail → vira uma conversa na central, casada ao mesmo contato do WhatsApp por e-mail/documento → Bruno responde de dentro do Chatwoot → o cliente recebe por e-mail normalmente.
-  - **Climax:** e-mail e WhatsApp do mesmo cliente aparecem sob o mesmo contato.
+  - **Path:** chega um e-mail → vira uma conversa na inbox `E-mail` → Bruno responde de dentro do Chatwoot → o cliente recebe por e-mail normalmente, na mesma thread.
+  - **Climax:** o e-mail entra no mesmo fluxo de atendimento do WhatsApp, sem trocar de ferramenta.
   - **Resolution:** thread de e-mail registrada no histórico unificado.
 
 - **UJ-5. Ana (gestão) audita o atendimento.**
@@ -75,25 +66,20 @@ O Inbox Flash Capital consolida numa única tela todos os canais de conversa da 
 - **Inbox (Caixa)** — no Chatwoot, um canal conectado (um número de WhatsApp ou uma caixa de e-mail). Um número = uma Inbox.
 - **Conversa** — thread bidirecional de mensagens entre um Contato e a Flash dentro de uma Inbox. Fonte da verdade da conversa é o Chatwoot.
 - **Contato** — a identidade de conversa no Chatwoot (nome, telefone, e-mail, atributos custom). Não é dono do dado de domínio; é enriquecido a partir dele.
-- **Provedor** — serviço que conecta um número ao Chatwoot. Dois no MVP: **Evolution API** (WhatsApp não-oficial via Baileys) e **Twilio** (WhatsApp oficial via Meta API).
-- **Evolution API** — servidor self-hosted de WhatsApp (Baileys), multi-instância. Já existe na infra do CRM.
-- **Instância (Evolution)** — uma sessão/conexão de um número dentro do Evolution. **Instância A** = número novo de prospecção (escopo MVP).
+- **Provedor** — serviço que conecta um número ao Chatwoot. Um só: **Twilio** (WhatsApp oficial via Meta API).
 - **Twilio / número oficial** — número WhatsApp Business API oficial (Meta), já em uso no monorepo para cobrança/transacional.
-- **Serviço de Sync (Ponte)** — serviço próprio que empurra labels e atributos para o Chatwoot e resolve identidade de contato por telefone/documento. Único componente construído do zero.
 - **Twenty** — CRM open-source (fonte da verdade do funil comercial). Entidade central: **Lead** (empresa+contato achatados; tem CNPJ, telefone, e-mail).
 - **Supabase (monorepo)** — Postgres da plataforma interna (fonte da verdade operacional). Entidades: **cedentes**, **sacados**, **perfil**.
 - **Label (Etiqueta)** — marcador de segmento/estado no Chatwoot, filtrável e acionável por automação. Ex.: `lead-frio`, `lead-qualificado`, `cliente-ativo`, `em-cobranca`, `regua-etapa-N`, `inadimplente`.
-- **Atributo custom** — dado-ponto exibido na barra lateral do Contato/Conversa. Ex.: `cnpj`, `status_operacao`, `dias_atraso`, `valor_em_aberto`, `link_twenty`, `link_supabase`.
-- **Identidade de contato** — chave dupla de reconciliação: **telefone em E.164** + **documento (CPF/CNPJ)**.
-- **Agente N8N** — automação já existente no CRM que recepciona leads no WhatsApp e envia o Jotform. Convive com a central no número de prospecção.
-- **Jotform** — formulário de captação de lead enviado ao contato na recepção da prospecção.
-- **Régua de cobrança** — máquina de estados de cobrança cuja lógica vive no worker/API do monorepo; cada transição empurra label/atributo para a central.
+- **Atributo custom** — dado-ponto exibido na barra lateral da Conversa, gravado pelo monorepo no disparo. Ex.: `titulo_id`, `cnpj`, `dias_atraso`, `valor_em_aberto`.
+- **Espelho** — o push do monorepo para a central: a mensagem que saiu pela Twilio é replicada na conversa, com `source_id` = `MessageSid`. Best-effort e sem retry (AD-12).
+- **Régua de cobrança** — máquina de estados de cobrança cuja lógica vive no worker/API do monorepo; cada disparo dela é espelhado na central com o contexto do título.
 
 ## 4. Features
 
 ### 4.1 Plataforma Chatwoot self-hosted
 
-**Description:** Stand up da instância Chatwoot na infra da Flash, via imagem oficial Docker com versão fixada, servindo como base de todas as inboxes. Roda como espelho/cockpit e é o sistema da verdade **apenas** de conversas e da identidade de contato de conversa. Realiza UJ-5 e sustenta UJ-1..UJ-4. `[ASSUMPTION: deploy num host/VM próprio da Flash com Docker; TLS via Caddy, mesmo padrão já usado no CRM.]`
+**Description:** Stand up da instância Chatwoot na infra da Flash, via imagem oficial Docker com versão fixada, servindo como base de todas as inboxes. Roda como espelho/cockpit e é o sistema da verdade **apenas** de conversas e da identidade de contato de conversa. Realiza UJ-5 e sustenta UJ-1..UJ-4. `[ASSUMPTION: deploy num host/VM próprio da Flash com Docker; o TLS é do ingresso, quando houver — hoje a central só publica em loopback (AD-10, AD-11).]`
 
 **Functional Requirements:**
 
@@ -119,34 +105,6 @@ Operação pode restaurar a central a partir de backup do Postgres e do storage 
 
 **Feature-specific NFRs:**
 - Isolamento: o banco do Chatwoot é **separado** dos bancos do CRM (Twenty) e do monorepo (Supabase) — sem compartilhamento de instância.
-
-### 4.2 Canal WhatsApp Prospecção (Evolution — Instância A)
-
-**Description:** Conecta o número novo (pré-pago) como inbox de prospecção, via Evolution API, usando a integração nativa Evolution↔Chatwoot. Esse número opera **só em modo inbound** (recepção de leads pescados); nenhuma prospecção fria sai por ele. Convive com o Agente N8N que já recepciona e envia o Jotform. Realiza UJ-1. `[ASSUMPTION: usa-se a integração nativa da Evolution com o Chatwoot; o número entra como um device vinculado (Baileys), sem migrar para Cloud API.]`
-
-**Functional Requirements:**
-
-#### FR-4: Inbox de prospecção espelhada
-Atendente de prospecção pode ver, na central, toda conversa recebida no número de prospecção, com mensagens inbound e outbound refletidas em tempo hábil.
-**Consequences (testable):**
-- Mensagem enviada pelo lead ao número aparece como conversa/mensagem na inbox "WhatsApp Prospecção".
-- Resposta enviada pela central chega ao lead no WhatsApp.
-- Mídia (imagem/documento) recebida é anexada à conversa.
-
-#### FR-5: Convivência com o Agente N8N (dois consumidores)
-O Agente N8N pode continuar recepcionando o lead e enviando o Jotform, e a central pode espelhar essa conversa **sem** um consumidor engolir o evento do outro.
-**Consequences (testable):**
-- Uma mensagem inbound é entregue tanto ao fluxo do N8N quanto ao Chatwoot.
-- A saudação + link Jotform disparados pelo N8N aparecem na conversa da central.
-- Não há mensagem perdida nem duplicada de forma sistemática entre os dois consumidores.
-**Out of Scope:**
-- Reescrever o Agente N8N ou movê-lo para dentro do Chatwoot.
-
-#### FR-6: Aquecimento e proteção do número
-Operação pode operar o número novo em ritmo de aquecimento para reduzir risco de bloqueio.
-**Consequences (testable):**
-- O número não dispara outbound frio em massa.
-- Existe orientação/limite documentado de volume inicial crescente.
 
 ### 4.3 Canal WhatsApp Oficial (Twilio / Meta API)
 
@@ -185,38 +143,21 @@ Conversas de e-mail e de WhatsApp do mesmo cliente aparecem sob o mesmo Contato 
 **Consequences (testable):**
 - Um contato com e-mail conhecido e telefone conhecido não é duplicado entre a inbox de e-mail e as de WhatsApp.
 
-### 4.5 Enriquecimento de Contato (contexto mastigado)
+### 4.5 Contexto de domínio na conversa (AD-13)
 
-**Description:** Um Serviço de Sync (a Ponte) empurra para o Chatwoot, via API, labels de segmento/estado e atributos de domínio, resolvendo a identidade do contato por telefone (E.164) + documento (CPF/CNPJ). O fluxo é **orientado a evento e unidirecional** (sistemas de domínio → Chatwoot); o Chatwoot nunca consulta os bancos de domínio em runtime. Sustenta UJ-2 e UJ-3. Este é o único componente construído do zero.
+**Description:** O monorepo já conhece `titulo_id`, CNPJ, valor em aberto e dias de atraso **no instante em que dispara**. Em vez de um serviço reconciliar isso depois, o próprio espelho grava esses valores nos `custom_attributes` da conversa, no mesmo caminho de código que espelha a mensagem. Push unidirecional, sem reconciliação. Sustenta UJ-2 e UJ-3.
 
 **Functional Requirements:**
 
-#### FR-11: Resolução de identidade de contato
-O serviço pode reconciliar uma conversa recebida a um contato conhecido no Twenty e/ou Supabase por telefone e/ou documento, sem duplicar.
+#### FR-10: Contexto carimbado no disparo
+A conversa exibe, na barra lateral, o contexto do título que originou o disparo.
 **Consequences (testable):**
-- Telefone normalizado para E.164 antes de casar (reaproveitando normalizadores já existentes nos dois projetos).
-- Um contato reconhecido nos dois sistemas resulta num único Contato no Chatwoot, com links para ambos.
-- Número/e-mail desconhecido gera um Contato novo marcado como não reconhecido (ex.: label `nao-identificado`).
+- Ao abrir uma conversa de cobrança, o operador vê `titulo_id`, `cnpj`, `valor_em_aberto` e `dias_atraso` preenchidos.
+- O carimbo acontece **também quando a conversa é reusada**, não só quando é criada — o reuso é o caminho comum, e carimbar só na criação não entrega nada em produção.
+- A central continua sem fazer chamada síncrona a banco de domínio no caminho de atendimento (AD-2).
+- Falha ao carimbar **não derruba o disparo**: como todo caminho do espelho, é best-effort (AD-12).
 
-#### FR-12: Push de labels de segmento/estado
-O serviço pode aplicar/atualizar labels no Contato/Conversa quando o estado muda nos sistemas de domínio.
-**Consequences (testable):**
-- Transição de estado no domínio (ex.: lead converteu, entrou na régua, virou inadimplente) reflete a label correspondente no Chatwoot em tempo hábil.
-- As labels são as do Glossário (dicionário fechado, sem sinônimos).
-
-#### FR-13: Push de atributos de domínio
-O serviço pode preencher atributos custom do Contato (cnpj, status_operacao, dias_atraso, valor_em_aberto, link_twenty, link_supabase).
-**Consequences (testable):**
-- Ao abrir uma conversa, o operador vê os atributos preenchidos na barra lateral.
-- Cada atributo de link abre o registro-fonte no Twenty/Supabase.
-
-#### FR-14: Direção de fluxo e desacoplamento
-A central pode operar mesmo se um sistema de domínio estiver indisponível (o enriquecimento degrada, o atendimento não para).
-**Consequences (testable):**
-- Indisponibilidade do Twenty/Supabase não impede receber/responder mensagens; apenas o enriquecimento fica desatualizado até normalizar.
-- O Chatwoot não faz chamadas síncronas aos bancos de domínio no caminho de atendimento.
-
-**Notes:** `[NOTE FOR PM]` A profundidade da reconciliação (só telefone? telefone+documento com merge automático vs. sugestão de merge?) é a decisão de engenharia mais sensível — detalhada na Architecture.
+**Notes:** o que morreu com o AD-13 não foi o contexto, foi a reconciliação. Um serviço que casasse identidade por telefone+documento depois do fato só faria sentido se o dado não estivesse na mão — e ele está.
 
 ### 4.6 Operação de atendimento (nativo Chatwoot)
 
@@ -239,8 +180,8 @@ Operador pode assumir/atribuir conversas, aplicar labels manualmente e usar resp
 ## 5. Non-Goals (Explicit)
 
 - A central **não é fonte da verdade** de dados de negócio (contatos de domínio, contratos, operações, cobrança) — esses moram no Twenty e no Supabase.
-- A central **não é motor de disparo em massa** no MVP — cobrança/prospecção em massa continuam no pipeline do monorepo.
-- A central **não faz prospecção fria por WhatsApp** — prospecção fria sai por e-mail; WhatsApp de prospecção é inbound-iniciado.
+- A central **não é motor de disparo em massa** — a cobrança em massa continua no pipeline do monorepo.
+- A Flash **não faz prospecção fria por WhatsApp** — ela sai por e-mail. O número oficial é exclusivo de cobrança e transacional; um número queimado por cold outreach levaria a cobrança junto.
 - A central **não substitui** o CRM (Twenty) nem a plataforma interna (monorepo).
 - Não há **fork do Chatwoot** no MVP — usa-se imagem oficial + pontos de extensão (API, webhooks, automações, atributos custom).
 - Não há **agente de IA** respondendo dentro do Chatwoot no MVP.
@@ -250,17 +191,16 @@ Operador pode assumir/atribuir conversas, aplicar labels manualmente e usar resp
 ### 6.1 In Scope
 
 - Chatwoot self-hosted (web + Sidekiq + Postgres/pgvector + Redis) na infra da Flash, versão fixada, com backup.
-- Inbox WhatsApp Prospecção via Evolution (número novo, instância A), convivendo com o Agente N8N, modo inbound.
 - Inbox WhatsApp Oficial via Twilio/Meta, com espelho dos disparos do monorepo.
 - Inbox E-mail via Gmail.
-- Serviço de Sync (Ponte) v1: resolução de identidade por telefone+documento e push de labels + atributos.
+- Contexto de domínio carimbado na conversa pelo próprio disparo do monorepo (AD-13).
 - Operação nativa: cockpit único, papéis, atribuição, labels, respostas rápidas, relatórios.
 
 ### 6.2 Out of Scope for MVP
 
-- Número de relacionamento (Evolution instância B) — fase 2. `[NOTE FOR PM: emocionalmente relevante; revisar se o cronograma permitir incluir cedo, pois é baixo esforço — só espelho, sem agente.]`
 - Dashboard App (iframe) com dado de operação ao vivo — fase 2 (MVP usa só atributos empurrados).
-- Sincronização bidirecional (central → domínio) — fase 2; MVP é unidirecional.
+- Sincronização bidirecional (central → domínio) — fase 2; hoje o fluxo é unidirecional.
+- Reconciliação de identidade por telefone+documento entre Twenty e Supabase — fora de escopo por decisão (AD-13): o contexto chega no disparo, não por reconciliação posterior.
 - Disparo em massa originado na central / campanhas Chatwoot — fase 2.
 - SSO e embutir a central na plataforma interna (:3000) — fase 2.
 - Novos canais (Instagram, webchat, Telegram) — futuro.
@@ -268,49 +208,45 @@ Operador pode assumir/atribuir conversas, aplicar labels manualmente e usar resp
 ## 7. Success Metrics
 
 **Primary**
-- **SM-1**: Cobertura de canais — % das conversas dos 3 canais visíveis na central. Target: 100%. Valida FR-4, FR-7, FR-9.
+- **SM-1**: Cobertura de canais — % das conversas dos 2 canais visíveis na central. Target: 100%. Valida FR-7, FR-9.
+  ⚠️ Teto real: o espelho não tem retry nem backfill (AD-12), então indisponibilidade da central vira buraco permanente. Enquanto isso valer, esta métrica é **amostral por construção**.
 - **SM-2**: Tempo de primeira resposta (TPR) — mediana do tempo entre inbound e primeira resposta humana, por inbox. Target: reduzir vs. baseline pré-central. Valida FR-15, FR-16.
-- **SM-3**: Contexto no ponto de contato — % de conversas de contatos conhecidos que abrem com labels+atributos preenchidos. Target: ≥ 90% dos contatos que existem no domínio. Valida FR-11, FR-12, FR-13.
+- **SM-3**: Contexto no ponto de contato — % de conversas de cobrança que abrem com os `custom_attributes` preenchidos. Target: 100% dos disparos espelhados, porque o dado sai da mesma transação do disparo. Valida FR-10.
 
 **Secondary**
 - **SM-4**: Persistência/rastreabilidade — % de conversas com histórico completo recuperável por contato. Target: 100%. Valida FR-1, FR-10.
-- **SM-5**: Saúde do número de prospecção — número não bloqueado durante o período de aquecimento. Valida FR-6.
 
 **Counter-metrics (não otimizar)**
-- **SM-C1**: Volume de mensagens automáticas no número de prospecção — não aumentar para "parecer produtivo"; aumentaria risco de bloqueio. Contrabalança SM-1/SM-5.
-- **SM-C2**: Quantidade de atributos empurrados — não inflar o enriquecimento a ponto de acoplar a central aos bancos de domínio; contrabalança SM-3 (preferir Dashboard App na fase 2 para dado profundo).
+- **SM-C1**: Volume de mensagens automáticas no número oficial — não aumentar para "parecer produtivo". O número é o ativo mais caro da cobrança: bloqueio dele para a operação inteira. Contrabalança SM-1.
+- **SM-C2**: Quantidade de atributos carimbados — não inflar a ponto de acoplar a central aos bancos de domínio; contrabalança SM-3 (dado profundo é Dashboard App na fase 2).
 
 ## 8. Cross-Cutting NFRs
 
-- **Desacoplamento:** nenhuma chamada síncrona da central aos bancos de domínio no caminho de atendimento (FR-14).
-- **Segurança:** segredos (tokens Evolution/Twilio/Chatwoot, credenciais Gmail) fora do repositório; TLS em todo tráfego externo; validação de assinatura nos webhooks (o webhook Twilio inbound já valida `X-Twilio-Signature` no monorepo).
+- **Desacoplamento:** nenhuma chamada síncrona da central aos bancos de domínio no caminho de atendimento (AD-2). O contexto chega empurrado, no disparo.
+- **Segurança:** segredos (tokens Twilio/Chatwoot, credenciais Gmail) fora do repositório; validação de assinatura nos webhooks (o webhook Twilio inbound já valida `X-Twilio-Signature` no monorepo). ⚠️ O `/twilio/callback` da própria central **não valida assinatura nenhuma** — hoje quem protege é a topologia (AD-10).
 - **Privacidade / LGPD:** retenção de conversas configurável; base legal e política de acesso definidas; dados sensíveis (CPF/CNPJ) tratados como internos.
-- **Observabilidade:** logs e healthcheck de cada serviço; alerta na saúde da conexão Evolution (o CRM já tem cron de saúde do WhatsApp que pode inspirar).
-- **Confiabilidade:** entrega de mensagens tolerante a falha transitória; a convivência N8N↔Chatwoot no número de prospecção não pode perder mensagens (FR-5).
+- **Observabilidade:** logs e healthcheck de cada serviço; alerta na saúde dos canais (Twilio e IMAP).
+- **Confiabilidade:** o fan-out do inbound alimenta a confirmação de sacado **e** a central; a confirmação (dinheiro) nunca pode ficar refém da central (chat).
 
 ## 9. Constraints and Guardrails
 
-- **Reputação de número (guardrail de negócio):** prospecção fria nunca no número oficial; número de prospecção só inbound; cobrança isolada.
+- **Reputação de número (guardrail de negócio):** prospecção fria nunca por WhatsApp — sai por e-mail. O número oficial é exclusivo de cobrança e transacional.
 - **Licença:** usar Chatwoot Community Edition (MIT); não habilitar features da pasta `enterprise/` sem licença.
-- **Custo:** incremental limitado a um host para a stack Chatwoot + o Serviço de Sync; sem SaaS pago obrigatório.
+- **Custo:** incremental limitado a um host para a stack Chatwoot; sem SaaS pago obrigatório.
 - **Soberania:** todos os dados na infra da Flash (Postgres/Redis/anexos próprios).
 
 ## 10. Open Questions
 
 **Resolvidas (2026-07-13):**
-1. ✅ **Instância Evolution permanece no compose do CRM**, alimentando o agente N8N e o Chatwoot (fan-out de eventos). Ver AD-5 na Architecture.
-2. ✅ **Reconciliação:** merge **automático** quando telefone (E.164) **e** documento casam; **sugestão de merge** para revisão humana quando só uma das chaves casa. Ver AD-3.
-3. ✅ **Espelho dos disparos em massa:** o **monorepo empurra o outbound** para a conversa via API do Chatwoot (não depende só do inbound nativo). Ver AD-6.
+1. ✅ **Espelho dos disparos em massa:** o **monorepo empurra o outbound** para a conversa via API do Chatwoot (não depende só do inbound nativo). Ver AD-6.
 
 **Em aberto (defaults assumidos, ajustáveis):**
-4. Retenção de conversas (LGPD): qual janela e qual base legal? `[default: reter enquanto houver relação comercial + prazo legal; confirmar com jurídico.]`
-5. Domínio/subdomínio da central (ex.: `atendimento.flashcapital.com.br`) e onde hospedar (VM dedicada vs. host existente).
-6. Gmail: conta única de atendimento ou várias caixas? Conexão por IMAP/SMTP direto atende, ou precisa de OAuth Google? `[default: uma caixa de atendimento via IMAP/SMTP no MVP.]`
+2. **Retenção de conversas (LGPD): a pergunta mais urgente em aberto.** `scripts/retencao-conversas.sh` existe e nunca foi agendado, com conversa de cliente real entrando todo dia. O default do script é 1825 dias (5 anos, prescrição civil comum de dívida). Apagar cedo destrói a prova de uma negociação; tarde viola a minimização. **Precisa do jurídico antes do cron.**
+3. Onde a central executa e como se acessa — decisão de diretoria, fora do escopo das fases de simplificação. Hoje: localhost, sem ingresso.
 
 ## 11. Assumptions Index
 
 - §4.1 — Deploy em host/VM próprio da Flash com Docker; o TLS é do ingresso, quando houver.
-- §4.2 — Integração nativa Evolution↔Chatwoot; número entra como device vinculado (Baileys), sem migrar para Cloud API.
 - §4.3 — Reaproveita o provider Twilio do monorepo (ABC WhatsAppProvider, webhook inbound, templates Meta); central conecta o mesmo número como inbox Twilio.
-- §4.4 — Gmail conectado via IMAP/SMTP; modelo caixa de suporte.
-- §4.5 — Enriquecimento unidirecional e orientado a evento; identidade por telefone E.164 + documento.
+- §4.4 — Gmail conectado por **OAuth de usuário** (não service account: o grant JWT-bearer nunca emite `refresh_token`, e o Chatwoot exige um).
+- §4.5 — Contexto empurrado no disparo, não reconciliado depois (AD-13).

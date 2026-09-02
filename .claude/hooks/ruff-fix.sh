@@ -9,7 +9,7 @@ file=$(printf '%s' "$input" \
   | python3 -c 'import sys,json; print(json.load(sys.stdin).get("tool_input",{}).get("file_path",""))' 2>/dev/null)
 
 if [ -n "$file" ]; then
-  # Só age em .py; outros arquivos (md/json/yml/Caddyfile) não são tocados.
+  # Só age em .py; outros arquivos (md/json/yml/sh) não são tocados.
   case "$file" in
     *.py)
       [ -f "$file" ] || exit 0

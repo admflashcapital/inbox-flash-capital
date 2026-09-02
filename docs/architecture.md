@@ -80,10 +80,10 @@ Mapa de camadas → responsabilidade:
   `127.0.0.1:${CHATWOOT_HOST_PORT}` (3001). Sem Makefile, sem Caddy, sem `/etc/hosts`. Quando houver
   ingresso remoto, ele é um `cloudflared` dentro do compose **deste** repo — nunca um proxy
   compartilhado com o CRM.
-- **A porta publicada é do NAVEGADOR; a via máquina-a-máquina é rede privada.** O barramento
-  `flash-canais` (5 containers, 3 repos) morreu; no lugar fica a **`flash-espelho`**, com exatamente
-  dois membros — `fastapi_api` (monorepo) e `chatwoot-web` — e nada publicado nela. O CRM não entra:
-  é isso que torna inbox e crm independentes.
+- **A porta publicada é do NAVEGADOR; a via máquina-a-máquina é rede privada.** A rede
+  **`flash-espelho`** tem exatamente dois membros — `fastapi_api` (monorepo) e `chatwoot-web` — e
+  nada publicado nela. O CRM não entra: é isso que torna inbox e crm independentes, e é a asserção
+  que `verificar-invariantes.sh` cobra.
   **Não substituir por `host.docker.internal`:** medido em 2026-09-02, um bind em `127.0.0.1` recusa
   pacote vindo da bridge do Docker (`172.17.0.1`). E o espelho falha em silêncio (AD-12), então essa
   troca não daria erro — daria um painel com buracos. É também o mesmo formato na VPS e no Railway
@@ -153,7 +153,7 @@ Duas coisas que o desenho torna óbvias e que decidem o resto:
 | --- | --- |
 | Naming (labels) | kebab-case, **dicionário fechado** do Glossário do PRD (`lead-frio`, `lead-qualificado`, `cliente-ativo`, `em-cobranca`, `regua-etapa-N`, `inadimplente`, `nao-identificado`). Sem sinônimos. |
 | Naming (atributos custom) | snake_case: `cnpj`, `cpf`, `status_operacao`, `dias_atraso`, `valor_em_aberto`, `origem`, `link_twenty`, `link_supabase`, `source_twenty_id`, `source_supabase_id`. |
-| Naming (inboxes) | fixos: `WhatsApp Prospecção`, `WhatsApp Oficial`, `E-mail`. |
+| Naming (inboxes) | fixos: `WhatsApp Oficial`, `E-mail`. |
 | Data & formats | telefone E.164; documento = só dígitos para casar; timestamps UTC; ids de origem guardados como atributos `source_*_id` para link reverso. |
 | State & cross-cutting | enriquecimento **idempotente** (upsert por identidade); retry com backoff exponencial em falha transitória; auth por token; toda config por env; logs estruturados por serviço. |
 
@@ -281,7 +281,6 @@ inbox-flash-capital/
 
 ## Deferred
 
-- **Instância B (número de relacionamento):** mesmo padrão do canal de prospecção sem agente; adiada para fase 2 por escopo (baixo esforço, revisar se cronograma permitir).
 - **Dashboard App (iframe) com dado ao vivo:** adiada; MVP usa só atributos empurrados (AD-2 mantém a central leve).
 - **Sync bidirecional (central → domínio):** adiada; MVP é unidirecional (AD-2).
 - **Campanhas/disparo em massa na central:** adiada; permanece no monorepo (AD-6).

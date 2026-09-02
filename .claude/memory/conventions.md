@@ -11,10 +11,10 @@
   `lead-frio` · `lead-qualificado` · `cliente-ativo` · `em-cobranca` · `regua-etapa-N` ·
   `inadimplente` · `nao-identificado`
   Label nova = atualizar o Glossário em `docs/prd.md` **primeiro**. Sinônimo solto mata o filtro.
-- **Atributos custom:** snake_case.
-  `cnpj` · `cpf` · `status_operacao` · `dias_atraso` · `valor_em_aberto` · `origem` ·
-  `link_twenty` · `link_supabase` · `source_twenty_id` · `source_supabase_id`
-- **Nomes de inbox:** fixos — `WhatsApp Prospecção` · `WhatsApp Oficial` · `E-mail`
+- **Atributos custom:** snake_case. Quem os grava é o **monorepo**, no instante do disparo
+  (AD-13) — a central não os deriva de nada:
+  `titulo_id` · `cnpj` · `valor_em_aberto` · `dias_atraso`
+- **Nomes de inbox:** fixos — `WhatsApp Oficial` · `E-mail`
 
 ## Dados e formatos
 

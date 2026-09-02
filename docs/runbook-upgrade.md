@@ -22,10 +22,10 @@ se alguém trocar por uma tag não-`-ce` ou por `latest`.
    bash scripts/backup.sh
    bash scripts/restore.sh --verificar     # restaura num ambiente limpo e confere conversas + anexos
    ```
-3. Confira se a nova versão mexe em algo de que a central depende: **integração Evolution**
-   (EPIC-2), **canal Twilio/WhatsApp** (EPIC-3), **canal IMAP/e-mail** (EPIC-4) ou a **API de
-   contatos/labels/atributos** que o Serviço de Sync usa (EPIC-5). Mudança na API de contatos quebra
-   o Sync em silêncio — o enriquecimento simplesmente para de aparecer.
+3. Confira se a nova versão mexe em algo de que a central depende: **canal Twilio/WhatsApp**
+   (EPIC-3), **canal IMAP/e-mail** (EPIC-4), ou a **API de contatos/conversas/atributos** que o
+   espelho do monorepo usa. Mudança nessa API quebra o espelho **em silêncio** (AD-12): a cobrança
+   segue disparando e o painel simplesmente para de receber.
 
 ## O procedimento (staging → produção)
 

@@ -21,7 +21,7 @@ A alternativa oposta — o Chatwoot receber e avisar o monorepo — seria pior: 
 de **dinheiro** refém da disponibilidade de uma ferramenta de **chat**. É exatamente o que a regra de
 ouro proíbe.
 
-Então o monorepo continua dono do webhook e faz **fan-out**, no mesmo padrão do canal de prospecção:
+Então o monorepo continua dono do webhook e faz **fan-out**:
 
 ```
    cliente (WhatsApp)
@@ -131,23 +131,19 @@ Telefone fora de E.164 = thread partida. O `bash scripts/verificar-canal-oficial
 só filtra os params e enfileira o job. Exposto na internet, qualquer um forja uma mensagem inbound na
 central.
 
-Como o inbound legítimo chega pelo **relay do monorepo** (que já validou a assinatura), o Caddy barra
-esse path para o mundo:
+O inbound legítimo chega pelo **relay do monorepo**, que já validou a assinatura. O que impede um
+terceiro de postar direto no `/twilio/callback` é **topológico**: a central publica em
+`127.0.0.1:${CHATWOOT_HOST_PORT}` e só o `fastapi_api` a alcança, pela rede `flash-espelho`. Ninguém
+mais consegue abrir a conexão.
 
-```
-@callback_sem_token {
-    path /twilio/callback*
-    not header X-Relay-Token "{$RELAY_TOKEN:relay-token-nao-configurado}"
-}
-respond @callback_sem_token 403
-```
+O `RELAY_TOKEN` viaja no header `X-Relay-Token` a cada relay e é conferido por
+`verificar-canal-oficial.sh` — mas **hoje nada o exige na entrada**. Enquanto a central não publica
+nada além de loopback isso é suficiente; **no dia em que houver ingresso, exigir esse header é
+pré-condição bloqueante**, porque o controller do Chatwoot não vai barrar nada sozinho.
 
-Falha fechada: sem `RELAY_TOKEN` no `.env`, o default não casa com nada e todo POST leva 403.
-Verificado: sem token → 403 · token errado → 403 · token certo → 204.
-
-O **`/twilio/delivery_status` continua aberto** — é a própria Twilio que o chama, do IP dela, para as
+O **`/twilio/delivery_status`** tem o mesmo desenho: é a própria Twilio que o chama, para as
 mensagens que a *central* envia. Forjá-lo só altera o status de entrega de uma mensagem existente
-(baixo impacto). Está registrado na dívida técnica.
+(baixo impacto), e hoje ninguém o alcança.
 
 ## ⚠️ O webhook do Twilio é a peça que mais apodrece
 
@@ -246,7 +242,7 @@ conversa duplicada para o mesmo cliente, é aqui que se olha.
 |---|---|
 | Mensagem chega na Twilio (`status=received`) e **nada acontece**, sem log em lugar nenhum | erro **11200**: a Twilio não conseguiu chamar o webhook. Veja os Alerts — eles dizem a URL exata que ela tentou |
 | A confirmação de sacado parou de funcionar | o webhook do número foi repontado para o Chatwoot. Ele deve apontar para o **monorepo** |
-| Mensagem do cliente não aparece na central | o relay do monorepo não está entregando: `RELAY_TOKEN` diferente entre os dois `.env` (→ 403 no Caddy) |
+| Mensagem do cliente não aparece na central | o relay do monorepo não está entregando. Confira se `fastapi_api` e `chatwoot-web` estão os dois na rede `flash-espelho`, e se `CHATWOOT_MIRROR_ENABLED` está ligado — o espelho falha em silêncio (AD-12) |
 | O cliente recebeu a cobrança **duas vezes** | o push do monorepo foi feito **sem `source_id`** — a central reenviou. Ver § "O disparo não pode sair duas vezes" |
 | Fora das 24h a atendente escreve e a mensagem falha | a inbox foi criada com `medium: sms` — sem janela. Recrie com `whatsapp` |
 | A UI não oferece template nenhum | templates não sincronizados: `conectar-twilio.sh --templates` |

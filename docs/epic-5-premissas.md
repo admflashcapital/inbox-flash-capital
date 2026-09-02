@@ -1,4 +1,4 @@
-# EPIC-5 — Premissas, requisitos e dívida a resolver antes de construir
+# EPIC-5 — Premissas, requisitos e dívida a resolver antes de construir  `[REGISTRO DE MEDIÇÃO — EPIC-5 cancelado em 2026-09-02, ver AD-13]`
 
 > Levantamento feito em 2026-07-14 **lendo os três repos e medindo os bancos reais**, antes de
 > escrever qualquer linha do Serviço de Sync. Nada aqui é suposição: cada número foi contado, cada

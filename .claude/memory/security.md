@@ -31,11 +31,8 @@
 | Origem | Como validar |
 |---|---|
 | **Twilio** (inbound oficial) | assinatura `X-Twilio-Signature` — quem valida é o **monorepo**, dono do webhook (`api/routers/twilio_webhooks_router.py`) |
-| **Relay monorepo → central** (`/twilio/callback`) | ⚠️ o `Twilio::CallbackController` do Chatwoot **NÃO valida assinatura nenhuma**. Quem protege é o **`RELAY_TOKEN`** no header `X-Relay-Token`, barrado no **Caddy** (falha fechada: sem token → 403). O inbound legítimo chega pelo monorepo, que já validou a assinatura |
-| **`/twilio/delivery_status`** | fica **aberto de propósito** — é a Twilio que o chama direto, para as mensagens que a própria central envia. Forjá-lo só altera status de entrega. Dívida técnica: allowlist de IP no Caddy (EPIC-6) |
-| **Evolution** (fan-out do CRM) | token compartilhado no header |
-| **Chatwoot** (eventos → Serviço de Sync) | token compartilhado no header |
-| **Serviço de Sync → API do Chatwoot** | access token de agente/bot, escopo mínimo |
+| **Relay monorepo → central** (`/twilio/callback`) | ⚠️ o `Twilio::CallbackController` do Chatwoot **NÃO valida assinatura nenhuma**. Hoje quem protege é a **topologia**: a central só publica em `127.0.0.1` e só o `fastapi_api` a alcança, pela rede `flash-espelho`. O **`RELAY_TOKEN`** viaja no header `X-Relay-Token` e é o contrato com o monorepo, mas **nada o exige na borda** — passar a exigi-lo é pré-condição bloqueante de qualquer ingresso futuro |
+| **`/twilio/delivery_status`** | fica **aberto de propósito** — é a Twilio que o chama direto, para as mensagens que a própria central envia. Forjá-lo só altera status de entrega. Inalcançável hoje; com ingresso, precisa de allowlist de origem |
 
 ## Segredo que o Chatwoot NÃO criptografa (EPIC-4)
 
@@ -52,8 +49,7 @@ Webhook público sem verificação = ingestão forjada (mensagem falsa na conver
 
 - **Gmail:** conta/app password dedicada à caixa de atendimento — não a conta pessoal de ninguém
 - **Twilio:** credencial já existente no monorepo; a central **não** ganha permissão de disparo em massa
-- **Evolution:** apikey interna, sem exposição externa
-- **Chatwoot:** token de bot para o Sync, separado do token de admin humano
+- **Chatwoot:** o `CENTRAL_ACCESS_TOKEN` que o espelho do monorepo usa é de agente, separado do token de admin humano
 
 ## LGPD (Story 6.3)
 

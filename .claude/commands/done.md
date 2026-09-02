@@ -17,8 +17,8 @@ Para encerrar a STORY-$ARGUMENTS:
 3. **Documentar (NÃO pule — evita o gap de docs desatualizadas):**
    - **Registro de sessões** (`PROGRESS.md`): adicione/atualize a linha do dia com o que a story
      entregou (1 frase).
-   - **Passo manual?** Se a story dependeu de configuração fora do repo (QR da Evolution, app no
-     Google, template Meta na Twilio, DNS), documente no runbook de `docs/` — senão o conhecimento
+   - **Passo manual?** Se a story dependeu de configuração fora do repo (app no Google, template
+     Meta na Twilio, DNS), documente no runbook de `docs/` — senão o conhecimento
      morre nesta sessão.
    - **Desvio as-built?** Se a story divergiu de `docs/architecture.md` (provider diferente,
      comportamento inesperado, decisão nova): adicione uma **nota as-built** no doc relevante — sem

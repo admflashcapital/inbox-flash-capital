@@ -12,23 +12,23 @@ skill: bmad-create-epics-and-stories
 
 ## Overview
 
-Decomposição completa em epics e stories a partir do [PRD](./prd.md) e da [Architecture](./architecture.md). Cada story referencia os FRs que realiza e traz critérios de aceite testáveis. A ordem de execução respeita as dependências: a Fundação (Epic 1) habilita os canais (Epics 2–4); o Serviço de Sync (Epic 5) depende de ao menos um canal vivo; a Operação & Governança (Epic 6) fecha o MVP.
+Decomposição completa em epics e stories a partir do [PRD](./prd.md) e da [Architecture](./architecture.md). Cada story referencia os FRs que realiza e traz critérios de aceite testáveis. A ordem de execução respeita as dependências: a Fundação (Epic 1) habilita os canais (Epics 3 e 4); a Operação & Governança (Epic 6) fecha o MVP.
+
+A numeração tem lacunas em **2** e **5**, e elas não são reaproveitadas: os números continuam presos aos épicos que foram cancelados (AD-11 e AD-13), e reciclá-los faria referência antiga apontar para escopo novo.
 
 ## Requirements Inventory
 
 ### Functional Requirements
 - **FR-1** Deploy self-hosted reproduzível · **FR-2** Versão fixada e upgrade controlado · **FR-3** Backup e retenção
-- **FR-4** Inbox de prospecção espelhada · **FR-5** Convivência com Agente N8N (dois consumidores) · **FR-6** Aquecimento/proteção do número
 - **FR-7** Inbox oficial espelhada · **FR-8** Espelho dos disparos em massa
-- **FR-9** Inbox de e-mail espelhada · **FR-10** Unificação sob o mesmo contato
-- **FR-11** Resolução de identidade · **FR-12** Push de labels · **FR-13** Push de atributos · **FR-14** Direção de fluxo/desacoplamento
+- **FR-9** Inbox de e-mail espelhada · **FR-10** Contexto de domínio na conversa
 - **FR-15** Cockpit unificado e papéis · **FR-16** Atribuição, labels e respostas rápidas
 
 ### NonFunctional Requirements
-- Desacoplamento (sem chamada síncrona central→domínio) · Segurança (segredos, TLS, assinatura de webhook) · Privacidade/LGPD (retenção, acesso) · Observabilidade (logs, healthcheck, alerta de conexão) · Confiabilidade (entrega tolerante a falha; fan-out sem perda).
+- Desacoplamento (sem chamada síncrona central→domínio) · Segurança (segredos, TLS, assinatura de webhook) · Privacidade/LGPD (retenção, acesso) · Observabilidade (logs, healthcheck, alerta de conexão) · Confiabilidade (entrega tolerante a falha; o fan-out do inbound alimenta a confirmação de sacado **e** a central, e a confirmação nunca fica refém da central).
 
 ### Additional Requirements
-- Chatwoot Community Edition (MIT), sem fork (AD-7) · Banco da central isolado (AD-9) · Guardrail de reputação de número (prospecção só inbound).
+- Chatwoot Community Edition (MIT), sem fork (AD-7) · Banco da central isolado (AD-9) · Guardrail de reputação de número: **prospecção fria sai por e-mail, nunca por WhatsApp** — o número oficial é exclusivo de cobrança e transacional.
 
 ### UX Design Requirements
 - Sem telas novas: UI é a do Chatwoot. UX = configuração de inboxes, labels, papéis e barra lateral de atributos.
@@ -40,27 +40,18 @@ Decomposição completa em epics e stories a partir do [PRD](./prd.md) e da [Arc
 | FR-1 | 1.1, 1.2 |
 | FR-2 | 1.3 |
 | FR-3 | 1.4 |
-| FR-4 | 2.1 |
-| FR-5 | 2.2 |
-| FR-6 | 2.3 |
 | FR-7 | 3.1 |
 | FR-8 | 3.2 |
 | FR-9 | 4.1 |
-| FR-10 | 4.2, 5.2 |
-| FR-11 | 5.1, 5.2 |
-| FR-12 | 5.3 |
-| FR-13 | 5.4 |
-| FR-14 | 5.5 |
+| FR-10 | 4.2 |
 | FR-15 | 6.1 |
 | FR-16 | 6.2 |
 
 ## Epic List
 
 1. **Fundação da Plataforma** — Chatwoot self-hosted na infra da Flash (deploy, versão, backup). *(MVP)*
-2. **Canal WhatsApp Prospecção (Evolution)** — número novo, inbound, convivendo com N8N. *(MVP)*
 3. **Canal WhatsApp Oficial (Twilio/Meta)** — cobrança/transacional + espelho de disparos. *(MVP)*
 4. **Canal E-mail (Gmail)** — thread de e-mail como conversa unificada. *(MVP)*
-5. **Serviço de Sync — Enriquecimento de Contato** — identidade + labels + atributos. *(MVP)*
 6. **Operação de Atendimento & Governança** — cockpit, papéis, labels, LGPD, observabilidade. *(MVP)*
 
 ---
@@ -135,59 +126,6 @@ So that eu recupere a central após uma falha, em conformidade com LGPD.
 
 ---
 
-## Epic 2: Canal WhatsApp Prospecção (Evolution)
-
-Conectar o número novo (pré-pago) como inbox de prospecção via Evolution, em modo inbound, convivendo com o Agente N8N sem perda de mensagem.
-
-### Story 2.1: Inbox de prospecção espelhada no Chatwoot
-
-As a atendente de prospecção,
-I want ver na central toda conversa do número de prospecção,
-So that eu acompanhe os leads pescados num lugar só.
-
-**Acceptance Criteria:**
-
-**Given** o número novo conectado via Evolution (integração nativa Chatwoot) como inbox `WhatsApp Prospecção`
-**When** um lead envia mensagem ao número
-**Then** a mensagem aparece como conversa/mensagem na inbox `WhatsApp Prospecção`.
-
-**Given** uma conversa aberta na central
-**When** respondo pela central
-**Then** o lead recebe a resposta no WhatsApp
-**And** mídia recebida (imagem/documento) é anexada à conversa.
-
-### Story 2.2: Convivência com o Agente N8N sem perda (fan-out)
-
-As a arquiteto,
-I want que o N8N e o Chatwoot recebam cada mensagem do número de prospecção,
-So that a automação de recepção e o espelho coexistam sem um engolir o evento do outro.
-
-**Acceptance Criteria:**
-
-**Given** a instância Evolution no CRM configurada para fan-out
-**When** chega uma mensagem inbound no número de prospecção
-**Then** o fluxo N8N e o Chatwoot recebem o evento (at-least-once, consumidores idempotentes).
-
-**Given** um lead novo desconhecido
-**When** o Agente N8N envia a saudação e o link Jotform
-**Then** essas mensagens outbound aparecem na conversa da central
-**And** não há mensagem sistematicamente perdida ou duplicada entre os dois consumidores.
-
-### Story 2.3: Aquecimento e proteção do número
-
-As a operação,
-I want operar o número novo em ritmo de aquecimento e só inbound,
-So that eu reduza o risco de bloqueio do WhatsApp.
-
-**Acceptance Criteria:**
-
-**Given** o número de prospecção
-**When** reviso sua operação
-**Then** ele não dispara outbound frio em massa
-**And** existe um limite/orientação documentado de volume inicial crescente (aquecimento).
-
----
-
 ## Epic 3: Canal WhatsApp Oficial (Twilio/Meta)
 
 Conectar o número oficial (Twilio) como inbox de cobrança/transacional e espelhar os disparos em massa originados no monorepo.
@@ -248,100 +186,26 @@ So that o e-mail entre no mesmo fluxo de atendimento.
 **When** respondo pela central
 **Then** o remetente recebe a resposta por e-mail na mesma thread.
 
-### Story 4.2: Unificação sob o mesmo contato
+### Story 4.2: Contexto de domínio carimbado na conversa (AD-13)
 
 As a atendente,
-I want que e-mail e WhatsApp do mesmo cliente apareçam sob o mesmo contato,
-So that eu veja a história completa sem duplicidade.
+I want ver o título, o CNPJ, o valor e os dias de atraso ao lado da conversa,
+So that eu atenda sem sair da central para consultar outro sistema.
+
+O contexto **não** é reconciliado depois: o monorepo já o conhece no instante do disparo e o empurra
+junto. A central continua sem consultar banco de domínio em runtime (AD-2).
 
 **Acceptance Criteria:**
 
-**Given** um contato com e-mail e telefone conhecidos
-**When** existem conversas de e-mail e de WhatsApp desse cliente
-**Then** ambas aparecem sob o mesmo Contato quando e-mail/documento casam
-**And** o contato não é duplicado entre as inboxes (depende de Epic 5).
+**Given** um disparo de cobrança originado no monorepo
+**When** o espelho grava a mensagem na central
+**Then** a conversa carrega `titulo_id`, `cnpj`, `valor_em_aberto` e `dias_atraso` em
+`custom_attributes`, visíveis na barra lateral.
 
----
-
-## Epic 5: Serviço de Sync — Enriquecimento de Contato
-
-Construir a Ponte: resolução de identidade por telefone+documento e push unidirecional de labels e atributos, mantendo a central desacoplada dos bancos de domínio. Único componente construído do zero.
-
-### Story 5.1: Resolução de identidade por telefone + documento
-
-As a Serviço de Sync,
-I want reconciliar uma conversa a um contato conhecido no Twenty e/ou Supabase,
-So that o operador saiba com quem está falando sem duplicar contatos.
-
-**Acceptance Criteria:**
-
-**Given** uma conversa recebida com um telefone
-**When** o serviço normaliza o telefone para E.164 e busca nos sistemas de domínio
-**Then** um contato reconhecido resulta num único Contato no Chatwoot com `source_twenty_id`/`source_supabase_id` preenchidos.
-
-**Given** um número/e-mail desconhecido
-**When** não há match
-**Then** cria um Contato marcado com label `nao-identificado`.
-
-### Story 5.2: Regra de merge (auto vs. sugestão)
-
-As a Serviço de Sync,
-I want aplicar merge automático só quando telefone E documento casam,
-So that eu evite juntar contatos errados.
-
-**Acceptance Criteria:**
-
-**Given** um contato cujo telefone (E.164) e documento casam na mesma fonte
-**When** o serviço reconcilia
-**Then** faz merge automático num único Contato.
-
-**Given** um contato onde só o telefone OU só o documento casa
-**When** o serviço reconcilia
-**Then** cria uma **sugestão de merge** com status `pending` para revisão humana
-**And** não altera o contato até aprovação.
-
-### Story 5.3: Push de labels de segmento/estado
-
-As a Serviço de Sync,
-I want aplicar/atualizar labels quando o estado muda no domínio,
-So that o operador filtre e enxergue o segmento do contato.
-
-**Acceptance Criteria:**
-
-**Given** uma transição de estado no domínio (ex.: lead converteu, entrou na régua, virou inadimplente)
-**When** o serviço recebe o evento
-**Then** a label correspondente do dicionário fechado é aplicada ao Contato/Conversa em tempo hábil
-**And** apenas labels do Glossário são usadas (sem sinônimos).
-
-### Story 5.4: Push de atributos de domínio
-
-As a Serviço de Sync,
-I want preencher atributos custom do Contato,
-So that o contexto apareça na barra lateral no ponto de contato.
-
-**Acceptance Criteria:**
-
-**Given** um contato reconhecido
-**When** o serviço empurra os atributos (`cnpj`, `status_operacao`, `dias_atraso`, `valor_em_aberto`, `link_twenty`, `link_supabase`)
-**Then** eles aparecem na barra lateral ao abrir a conversa
-**And** os atributos de link abrem o registro-fonte no Twenty/Supabase.
-
-### Story 5.5: Desacoplamento e degradação graciosa
-
-As a arquiteto,
-I want que a central funcione mesmo com o domínio indisponível,
-So that uma falha no CRM/monorepo nunca derrube o atendimento.
-
-**Acceptance Criteria:**
-
-**Given** o Twenty ou o Supabase indisponível
-**When** chega uma mensagem
-**Then** receber e responder continua funcionando; só o enriquecimento fica desatualizado até normalizar.
-
-**Given** o caminho de atendimento
-**When** inspeciono as chamadas do Chatwoot
-**Then** não há chamada síncrona da central aos bancos de domínio (AD-2)
-**And** o push de enriquecimento é idempotente e faz retry com backoff em falha transitória.
+**Given** um cliente que **já tinha** conversa aberta nesta inbox
+**When** um novo disparo reusa essa conversa em vez de abrir outra
+**Then** os atributos são atualizados na conversa reusada — carimbar só na criação não atende o
+critério, porque o reuso é o caminho comum.
 
 ---
 
@@ -391,8 +255,12 @@ So that a central seja auditável e conforme.
 **Acceptance Criteria:**
 
 **Given** a central em produção
-**When** um serviço falha ou a conexão Evolution cai
+**When** um serviço falha ou o canal (Twilio/IMAP) perde a conexão
 **Then** há log estruturado e alerta de saúde da conexão.
+
+**Given** que o espelho descarta o que não conseguiu entregar (AD-12)
+**When** a central fica indisponível durante um disparo
+**Then** a perda é visível em log — o painel não tem como se reconciliar depois.
 
 **Given** a política de retenção definida
 **When** verifico a configuração
@@ -403,8 +271,5 @@ So that a central seja auditável e conforme.
 ## Sequenciamento sugerido
 
 1. **Epic 1** (fundação) — bloqueia tudo.
-2. **Epic 2, 3, 4** (canais) — podem correr em paralelo após o Epic 1; o Epic 2 tem a complexidade extra da convivência com o N8N.
-3. **Epic 5** (sync) — inicia após ≥1 canal vivo; entrega o valor de contexto.
-4. **Epic 6** (operação/governança) — fecha o MVP.
-
-**Próximo passo BMAD:** `bmad-check-implementation-readiness` (alinhar PRD ↔ Architecture ↔ Epics) e depois `bmad-sprint-planning` para iniciar a implementação.
+2. **Epic 3 e 4** (canais) — podem correr em paralelo após o Epic 1.
+3. **Epic 6** (operação/governança) — fecha o MVP. No Chatwoot é majoritariamente configuração, não código.

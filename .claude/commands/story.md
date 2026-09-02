@@ -19,12 +19,12 @@ Responda, em PT-BR:
 
 1. **O que será implementado** (3 linhas) e **quais FRs/ADs** a story realiza
 2. **Natureza da story** — declare qual das duas:
-   - **Código** (Serviço de Sync, EPIC-5): TDD obrigatório → siga o item 4
+   - **Código** (scripts, seed, verificadores): TDD obrigatório → siga o item 4
    - **Configuração/infra** (subir container, conectar inbox, configurar label/papel/retenção):
      não force pytest. O "verde" é o **critério de aceite verificado ao vivo** + o artefato
      versionado (`compose.yaml`, `scripts/`, `.env.example`, runbook em `docs/`)
-3. **Arquivos a criar/modificar** — e, se a story exige passo manual fora do repo (conectar QR da
-   Evolution, criar app no Google, cadastrar template Meta na Twilio), **liste o passo manual** e
+3. **Arquivos a criar/modificar** — e, se a story exige passo manual fora do repo (criar app no
+   Google, cadastrar template Meta na Twilio, cadastrar redirect URI), **liste o passo manual** e
    diga em qual runbook de `docs/` ele será documentado
 4. **Skills a acionar** — pelo roteador (`.claude/memory/skills.md`): as do épico desta story +
    as transversais aplicáveis
