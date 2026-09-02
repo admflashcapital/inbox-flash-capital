@@ -134,6 +134,32 @@ services:
     entrypoint: ["docker/entrypoints/rails.sh"]
     command: ["bundle", "exec", "rails", "db:chatwoot_prepare"]
 
+
+  # ── Seed idempotente — os canais nascem prontos (AD-10) ──────────
+  # Roda a CADA `up`, entre o init e o web. Usa `rails runner`, não a API HTTP:
+  # sem isso o seed precisaria do web de pé, de um token e de um container
+  # `curl` numa rede compartilhada — as três coisas que este refactor apagou.
+  # NÃO cria conta nem admin: no Chatwoot os dois nascem juntos no onboarding
+  # (AccountBuilder), e o admin tem senha — escolha humana. Ver o cabeçalho do
+  # próprio script.
+  chatwoot-seed:
+    <<: *chatwoot-base
+    restart: "no"
+    entrypoint: ["docker/entrypoints/rails.sh"]
+    command: ["bundle", "exec", "rails", "runner", "/seed/chatwoot_seed.rb"]
+    # `volumes:` num serviço SUBSTITUI o da âncora (não soma) — por isso o
+    # storage_data volta aqui explicitamente.
+    volumes:
+      - storage_data:/app/storage
+      - ./scripts/seed:/seed:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chatwoot-init:
+        condition: service_completed_successfully
+
   # ── Chatwoot web (Rails) — a UI e a API da central ───────────────
   # Publica em LOOPBACK, nunca em 0.0.0.0 (AD-10): sem TLS, nada de LAN.
   # A porta é parametrizada porque a 3001 é disputada com o front de dev do
@@ -151,6 +177,8 @@ services:
       redis:
         condition: service_healthy
       chatwoot-init:
+        condition: service_completed_successfully
+      chatwoot-seed:
         condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api || exit 1"]
@@ -170,6 +198,8 @@ services:
       redis:
         condition: service_healthy
       chatwoot-init:
+        condition: service_completed_successfully
+      chatwoot-seed:
         condition: service_completed_successfully
     healthcheck:
       # Processo vivo = Sidekiq respondendo. Não há endpoint HTTP aqui.
