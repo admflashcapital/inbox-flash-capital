@@ -183,6 +183,33 @@ printf '%s' "$CENTRAL_URL_PUBLICA" | grep -qE '^https://[a-zA-Z0-9-]+(\.[a-zA-Z0
 printf '%s' "$CENTRAL_URL_PUBLICA" | grep -qE '^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?(/|$)' \
   && aceito_pelo_google=true
 
+# ── Guard do túnel efêmero ────────────────────────────────────────
+# Uma URL de ngrok É aceitável para o Google (https, domínio público), então o
+# guard acima passa — e o consent falharia com redirect_uri_mismatch mesmo assim,
+# porque essa URL específica muda todo dia e não está cadastrada no Google Cloud.
+# O erro sairia do lado do Google, longe daqui, e custaria uma investigação.
+#
+# O caminho barato existe e é este: o `localhost:3001` está cadastrado de forma
+# PERMANENTE. Volte a variável para ele só durante o consent — não é preciso
+# cadastrar nada novo.
+if printf '%s' "$CENTRAL_URL_PUBLICA" | grep -qE 'ngrok(-free)?\.(app|dev|io)'; then
+  echo
+  echo "  ⚠️  CENTRAL_URL_PUBLICA aponta para um túnel EFÊMERO do ngrok."
+  echo "      O Google aceita a forma da URL, mas ela não está nos Authorized"
+  echo "      redirect URIs — a dança morreria com redirect_uri_mismatch."
+  echo
+  echo "      Faça o consent pelo localhost, que está cadastrado em caráter permanente:"
+  echo
+  echo "        sed -i 's|^CENTRAL_URL_PUBLICA=.*|CENTRAL_URL_PUBLICA=http://localhost:3001|' .env"
+  echo "        docker compose up -d --force-recreate --wait chatwoot-web"
+  echo "        bash scripts/conectar-gmail.sh --url        # autorize no navegador"
+  echo "        ../monorepo-flash-capital/scripts/tuneis-manha.sh   # devolve a URL do túnel"
+  echo
+  echo "      O canal já autorizado NÃO é afetado por essa troca — o refresh usa"
+  echo "      grant_type=refresh_token, que não passa redirect_uri."
+  exit 1
+fi
+
 if [ "$aceito_pelo_google" != "true" ]; then
   echo
   echo "  ⚠️  CENTRAL_URL_PUBLICA='${CENTRAL_URL_PUBLICA}' NÃO é um redirect URI que o Google aceita."
