@@ -8,12 +8,6 @@ skill: bmad-prd
 
 # PRD: Inbox Flash Capital
 
-> ### ⚠️ REESCOPO — 2026-09-02
->
-> **Anulados:** a §4.2 e os requisitos **FR-4, FR-5 e FR-6** (canal de prospecção via Evolution), e os **FR-11..FR-14** (Serviço de Sync). O enriquecimento que os FR-11..14 pediam é entregue pelo AD-13 — `custom_attributes` carimbados no instante do disparo.
->
-> Ver **AD-10..AD-13** em `inbox/docs/architecture.md`, **ADR-010** em `crm/docs/07_Decisoes.md`, e o `HANDOFF-espelho-chatwoot.md`.
-
 *Working title — confirmar.*
 
 ## 0. Document Purpose
@@ -106,7 +100,7 @@ O Inbox Flash Capital consolida numa única tela todos os canais de conversa da 
 #### FR-1: Deploy self-hosted reproduzível
 Operação pode subir a central com um `docker compose up` a partir do repositório, com todos os serviços necessários (web, Sidekiq, Postgres/pgvector, Redis, reverse proxy TLS).
 **Consequences (testable):**
-- `docker compose up` sobe web, worker Sidekiq, Postgres (com extensão pgvector), Redis e Caddy sem passos manuais além de preencher o `.env`.
+- `docker compose up -d --wait` sobe web, Sidekiq, Postgres (com pgvector) e Redis sem passos manuais além de preencher o `.env`.
 - A UI responde em HTTPS num domínio da Flash com certificado válido.
 - Reiniciar os containers preserva conversas, contatos e configurações (dados em volume/DB persistente).
 
@@ -255,7 +249,7 @@ Operador pode assumir/atribuir conversas, aplicar labels manualmente e usar resp
 
 ### 6.1 In Scope
 
-- Chatwoot self-hosted (web + Sidekiq + Postgres/pgvector + Redis + Caddy) na infra da Flash, versão fixada, com backup.
+- Chatwoot self-hosted (web + Sidekiq + Postgres/pgvector + Redis) na infra da Flash, versão fixada, com backup.
 - Inbox WhatsApp Prospecção via Evolution (número novo, instância A), convivendo com o Agente N8N, modo inbound.
 - Inbox WhatsApp Oficial via Twilio/Meta, com espelho dos disparos do monorepo.
 - Inbox E-mail via Gmail.
@@ -315,7 +309,7 @@ Operador pode assumir/atribuir conversas, aplicar labels manualmente e usar resp
 
 ## 11. Assumptions Index
 
-- §4.1 — Deploy em host/VM próprio da Flash com Docker; TLS via Caddy (mesmo padrão do CRM).
+- §4.1 — Deploy em host/VM próprio da Flash com Docker; o TLS é do ingresso, quando houver.
 - §4.2 — Integração nativa Evolution↔Chatwoot; número entra como device vinculado (Baileys), sem migrar para Cloud API.
 - §4.3 — Reaproveita o provider Twilio do monorepo (ABC WhatsAppProvider, webhook inbound, templates Meta); central conecta o mesmo número como inbox Twilio.
 - §4.4 — Gmail conectado via IMAP/SMTP; modelo caixa de suporte.

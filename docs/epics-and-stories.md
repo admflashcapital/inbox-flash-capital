@@ -10,13 +10,6 @@ skill: bmad-create-epics-and-stories
 
 # Inbox Flash Capital - Epic Breakdown
 
-> ### ⚠️ REESCOPO — 2026-09-02
->
-> **EPIC-2 (Evolution) e EPIC-5 (Sync) cancelados** — o escopo cai de 19 para **16 stories**. A **STORY-4.2 está destravada** pelo AD-13 (não espera mais o Sync). O detalhamento das stories canceladas fica abaixo só para leitura do histórico.
->
-> Ver **AD-10..AD-13** em `inbox/docs/architecture.md`, **ADR-010** em `crm/docs/07_Decisoes.md`, e o `HANDOFF-espelho-chatwoot.md`.
-
-
 ## Overview
 
 Decomposição completa em epics e stories a partir do [PRD](./prd.md) e da [Architecture](./architecture.md). Cada story referencia os FRs que realiza e traz critérios de aceite testáveis. A ordem de execução respeita as dependências: a Fundação (Epic 1) habilita os canais (Epics 2–4); o Serviço de Sync (Epic 5) depende de ao menos um canal vivo; a Operação & Governança (Epic 6) fecha o MVP.
@@ -86,7 +79,7 @@ So that a plataforma esteja disponível sem passos manuais frágeis.
 
 **Given** o repositório `inbox-flash-capital` com `compose.yaml` e `.env` preenchido
 **When** executo `docker compose up`
-**Then** sobem os serviços web, Sidekiq, Postgres (com pgvector), Redis e Caddy
+**Then** sobem os serviços web, Sidekiq, Postgres (com pgvector) e Redis
 **And** a UI do Chatwoot responde em HTTPS num domínio da Flash com certificado válido.
 
 **Given** a stack no ar

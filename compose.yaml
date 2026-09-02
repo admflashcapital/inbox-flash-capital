@@ -31,9 +31,7 @@ networks:
   # espelho: a via MÁQUINA-A-MÁQUINA entre o monorepo e a central. Exatamente
   # DOIS membros — `fastapi_api` e `chatwoot-web` — e nada é publicado nela.
   #
-  # Substitui a antiga `flash-canais`, que era um barramento de 5 containers em
-  # 3 repos (Evolution, Caddy do CRM, sidekiq…) e a razão de inbox e crm não
-  # serem independentes. O CRM não entra aqui.
+  # O CRM não entra aqui: inbox e crm são independentes.
   #
   # Por que uma rede e não `host.docker.internal:3001`: a central publica em
   # 127.0.0.1, e um bind de loopback só aceita conexão pela loopback do host —

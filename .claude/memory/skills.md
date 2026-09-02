@@ -1,13 +1,13 @@
 # Skills — roteador de acionamento por estágio — Inbox Flash Capital
 
-> **Reescopo 2026-09-02, JÁ APLICADO** — EPIC-2 (Evolution) e EPIC-5 (Sync) cancelados; Caddy, Makefile e a rede `flash-canais` saíram na Fase 1. Hoje: `compose.yaml`, `.env` e `scripts/` na raiz, `docker compose up -d --wait` como comando único, central em `127.0.0.1:3001`, rede `flash-espelho` com 2 membros (AD-10..AD-13 em `docs/architecture.md`).
+> **Escopo: 16 stories** (EPIC-2 e EPIC-5 estão fora). `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-13).
 >
-> **Como ficou:** as skills ligadas à Evolution/prospecção perderam uso — a Evolution saiu do repo.
+> as skills ligadas à Evolution/prospecção perderam uso — a Evolution saiu do repo.
 
 
 > Carregado pelo `/story`. Ao iniciar uma story, acione as skills da linha do épico dela **+** as
 > transversais aplicáveis.
-> Stack: Docker/Caddy (infra) · Chatwoot (config, sem código) · Python/FastAPI (Serviço de Sync).
+> Stack: Docker (infra) · Chatwoot (config, sem código) · Serviço de Sync).
 > **Sem frontend próprio** — a UI é a do Chatwoot.
 
 ## Sempre
@@ -22,7 +22,7 @@
 
 | Épico | Skills a acionar |
 |---|---|
-| **EPIC-1** Fundação (Docker/Caddy/Postgres/backup) | `chatwoot-cli` (conhecer a API/CLI oficial antes de modelar o deploy) · `secrets-management` (`.env`, AD-8) |
+| **EPIC-1** Fundação (Docker/Postgres/backup) | `chatwoot-cli` (conhecer a API/CLI oficial antes de modelar o deploy) · `secrets-management` (`.env`, AD-8) |
 | **EPIC-2** WhatsApp Prospecção (Evolution) | `api-design-principles` (contrato do webhook de fan-out) · `systematic-debugging` (**o fan-out é o ponto de falha mais provável do MVP** — dois consumidores no mesmo evento) |
 | **EPIC-3** WhatsApp Oficial (Twilio/Meta) | `twilio-messaging-overview` (janela de 24h, qualidade do número) · `twilio-content-template-builder` (**templates Meta aprovados** — obrigatório fora da janela de 24h) · `api-design-principles` (push do outbound do monorepo) |
 | **EPIC-4** E-mail (Gmail) | `chatwoot-cli` (config de inbox de e-mail) · `api-design-principles` (unificação de contato) |

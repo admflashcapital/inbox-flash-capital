@@ -1,12 +1,5 @@
 # Runbook — Canal E-mail (Gmail Workspace via OAuth)
 
-> ### ⚠️ DOC EM TRANSIÇÃO — Fase 1.3
->
-> **Vigente e as-built desde 2026-09-02 (AD-10).** A central publica em `127.0.0.1:${CHATWOOT_HOST_PORT}` (hoje 3001), então a antiga ponte socat do Passo 5 **foi removida** — a própria `FRONTEND_URL` já é um redirect URI que o Google aceita. O `refresh_token` já obtido não é afetado por mudança de `FRONTEND_URL`; só um consent **novo** exige o redirect URI novo cadastrado e a revogação do grant antigo.
->
-> Ver **AD-10..AD-13** em `inbox/docs/architecture.md`, **ADR-010** em `crm/docs/07_Decisoes.md`, e o `HANDOFF-espelho-chatwoot.md`.
-
-
 **Épico:** EPIC-4 · **Stories:** 4.1 (inbox espelhada) e 4.2 (unificação de contato)
 **FRs:** FR-9, FR-10 · **Comandos:** `bash scripts/conectar-gmail.sh` · `bash scripts/conectar-gmail.sh --status` · `bash scripts/conectar-gmail.sh --url` · `bash scripts/verificar-canal-email.sh`
 
@@ -124,17 +117,6 @@ O Google exige HTTPS **exceto para `localhost`**, que é isento — mas a isenç
 
 **Trocou `CHATWOOT_HOST_PORT`? Cadastre a porta nova antes de mexer na `FRONTEND_URL`** — senão o
 consent falha com `redirect_uri_mismatch`.
-
-> 📦 **Histórico — a ponte socat (removida em 2026-09-02).** Até o AD-10, a central não publicava porta:
-> quem tinha 80/443 era o Caddy, servindo `https://inbox.localhost` — um subdomínio, que o Google recusa.
-> A saída era subir um `alpine/socat` ligando `127.0.0.1:3000` do host ao `chatwoot-web:3000` só durante
-> o clique do consent, com a `FRONTEND_URL` apontada para a ponte e devolvida depois. Com a central
-> publicando direto em `127.0.0.1:${CHATWOOT_HOST_PORT}`, a ponte deixou de ter função: a própria
-> `FRONTEND_URL` já é um redirect URI aceitável. O passo inteiro (~65 linhas) saiu.
->
-> Continua valendo o que ela ensinou: **ngrok não serve aqui** — URL efêmera exigiria recadastrar o
-> redirect URI a cada sessão, e expor a central para resolver um clique local é trocar um problema
-> pequeno por uma superfície de ataque.
 
 ---
 

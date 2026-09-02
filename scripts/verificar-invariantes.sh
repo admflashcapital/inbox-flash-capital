@@ -7,7 +7,7 @@
 #
 #   AD-7 / FR-2 — imagem com tag FIXA (nunca `latest`)          [STORY-1.3]
 #   AD-9        — banco da central ISOLADO do Twenty/Supabase   [STORY-1.2]
-#   AD-8        — só o Caddy publica porta; segredos fora do git [STORY-1.1]
+#   AD-8/AD-10  — nada publica fora de 127.0.0.1; segredos fora do git [STORY-1.1]
 #
 # Nenhum VALOR de variável é impresso — só nomes de chave e veredito.
 # ═══════════════════════════════════════════════════════════════════
@@ -132,8 +132,8 @@ fi
 # Comparação SIMÉTRICA, de propósito. A versão anterior só olhava uma direção e
 # mesmo assim afirmava "mesmas chaves" — ficou verde enquanto 6 chaves da
 # STORY-3.1 faltavam no .env. É a direção que faltava que dói de verdade: sem
-# RELAY_TOKEN, por exemplo, o Caddy fecha /twilio/callback e TODO inbound do
-# número oficial leva 403 — em produção, em silêncio.
+# RELAY_TOKEN, por exemplo, o relay do monorepo não consegue entregar o inbound
+# do número oficial — em silêncio.
 #
 # Só nomes de chave são lidos e impressos aqui. Nenhum valor, nunca.
 CHAVES_ENV="$(grep -oE '^[A-Z_0-9]+=' "$ENV_FILE" 2>/dev/null | tr -d '=' | sort -u)"

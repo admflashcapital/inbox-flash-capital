@@ -1,8 +1,8 @@
 # Segurança — Regras Invioláveis — Inbox Flash Capital
 
-> **Reescopo 2026-09-02, JÁ APLICADO** — EPIC-2 (Evolution) e EPIC-5 (Sync) cancelados; Caddy, Makefile e a rede `flash-canais` saíram na Fase 1. Hoje: `compose.yaml`, `.env` e `scripts/` na raiz, `docker compose up -d --wait` como comando único, central em `127.0.0.1:3001`, rede `flash-espelho` com 2 membros (AD-10..AD-13 em `docs/architecture.md`).
+> **Escopo: 16 stories** (EPIC-2 e EPIC-5 estão fora). `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-13).
 >
-> **Como ficou:** o gate do `/twilio/callback` saiu do Caddy e hoje a proteção é **topológica** — a central só escuta em `127.0.0.1`. Qualquer ingresso futuro **precisa** do gate de volta (AD-11): o `Twilio::CallbackController` não valida assinatura. O `RELAY_TOKEN` continua no `.env` e é conferido por `verificar-canal-oficial.sh`. `/twilio/delivery_status` está registrado como "a Twilio chama direto" — **suposição herdada**, não fato medido: confirmar no console antes de expor.
+> A proteção do `/twilio/callback` é **topológica**: a central só escuta em `127.0.0.1`. Qualquer ingresso futuro **precisa** de um gate no `X-Relay-Token` (AD-11) — o `Twilio::CallbackController` não valida assinatura. O `RELAY_TOKEN` está no `.env` e é conferido por `verificar-canal-oficial.sh`. `/twilio/delivery_status` está registrado como "a Twilio chama direto" — **suposição herdada**, não fato medido: confirmar no console antes de expor.
 
 
 > A central concentra conversa de cliente com **CPF/CNPJ, valor em aberto e situação de
@@ -15,7 +15,7 @@
 - ❌ `git add .env` — conferir `git status` antes de todo commit
 - ❌ Logar valor de env var, ou logar **PII** (CPF/CNPJ, telefone, conteúdo de mensagem) em log de serviço
 - ❌ Commitar `.env`, `secrets/`, `*.key`, `*.pem`, JSON de service account
-- ❌ Expor Postgres/Redis da central fora da rede Docker interna — só o Caddy publica porta
+- ❌ Publicar QUALQUER porta fora de `127.0.0.1` (AD-10). Só `chatwoot-web`, e só em loopback; Postgres e Redis não publicam nada
 - ❌ Aceitar webhook sem validar a origem (ver abaixo)
 
 ## SEMPRE
@@ -23,7 +23,7 @@
 - ✅ Fluxo de nova env var: 1) `.env` (valor real) → 2) `.env.example` (placeholder + comentário) →
   3) `compose.yaml` → 4) commitar **apenas** o `.env.example` e a config
 - ✅ Manter o `.env.example` sincronizado com todas as chaves
-- ✅ TLS em todo tráfego externo (Caddy, auto-HTTPS)
+- ✅ TLS em todo tráfego externo — hoje não há nenhum: a central só escuta em loopback
 - ✅ Revogar credencial imediatamente ao suspeitar de vazamento
 
 ## Autenticação de webhook (AD-8) — cada canal tem o seu

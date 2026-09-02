@@ -15,13 +15,6 @@ companions: []
 
 # Architecture Spine — Inbox Flash Capital
 
-> ### ℹ️ COMO LER ESTE DOC — 2026-09-02
->
-> As decisões **AD-10..AD-13 são as vigentes**; **AD-5 está SUPERSEDED** e **AD-2/AD-3 REVISADOS**. O resto do documento (diagramas, árvore as-built, tabela de stack) ainda descreve o sistema **como ele é hoje** — com Caddy, Makefile, Evolution e a rede `flash-canais`. Isso é intencional: a reescrita acontece na Fase 1.7, depois que o código mudar. **Enquanto isso: as ADs mandam, o resto descreve.**
->
-> Ver **AD-10..AD-13** em `inbox/docs/architecture.md`, **ADR-010** em `crm/docs/07_Decisoes.md`, e o `HANDOFF-espelho-chatwoot.md`.
-
-
 ## Design Paradigm
 
 **Hub-and-spoke com enriquecimento unidirecional.** O Chatwoot é o **hub** (espelho + cockpit de conversas). Cada canal é um **spoke** conectado por um **provider-adapter** (Twilio, Gmail). O contexto de negócio entra **empurrado pelo domínio no instante do disparo** (AD-13), não por reconciliação posterior. Nenhuma dependência aponta do hub para os bancos de domínio.
@@ -175,9 +168,6 @@ Duas coisas que o desenho torna óbvias e que decidem o resto:
 | Gmail | IMAP/SMTP com OAuth (XOAUTH2) |
 | Docker Compose | v2 — sem Makefile, sem proxy, sem serviço próprio (AD-10, AD-13) |
 
-> Saíram em 2026-09-02: **Caddy 2.11.4** (AD-10 — nada de proxy; a central publica em loopback),
-> **Evolution API v2.3.7** (AD-11 — EPIC-2 cancelado) e o **Serviço de Sync** em Python/FastAPI
-> (AD-13 — EPIC-5 cancelado, nunca chegou a existir).
 
 ## Structural Seed
 
@@ -221,15 +211,11 @@ e é assim que se quer, porque um Chatwoot sem as inboxes aceitaria o espelho e 
 - **staging** e **produção** com a mesma composição; upgrades de versão do Chatwoot validados em staging antes de produção (FR-2).
 - Segredos por ambiente em `.env` fora do repo (AD-8).
 
-### Modelo de entidade da central `[SUPERSEDED 2026-09-02 — ver AD-13]`
+### Modelo de entidade da central
 
-> 📦 **Histórico.** O ERD abaixo descrevia o store de identidade do **Serviço de Sync**, que foi
-> **cancelado**. Não existe `identity_map` nem `merge_suggestion` — nada disto foi construído.
->
-> No lugar: o monorepo já conhece `titulo_id`, CNPJ, valor e dias de atraso **no instante do
-> disparo**, e carimba tudo nos `custom_attributes` da conversa dentro de
-> `chatwoot_mirror.py::_garantir_conversa`. A identidade é resolvida ali, com o dado na mão, em vez
-> de reconciliada depois. Fica só o Contact/Conversation/Message do próprio Chatwoot.
+A central usa **só** o Contact/Conversation/Message do próprio Chatwoot. Não há store de identidade
+próprio: o monorepo conhece `titulo_id`, CNPJ, valor e dias de atraso **no instante do disparo** e
+carimba tudo nos `custom_attributes` da conversa em `chatwoot_mirror.py::_garantir_conversa` (AD-13).
 
 ```mermaid
 erDiagram
@@ -277,18 +263,6 @@ inbox-flash-capital/
   .claude/                   # scaffold de dev: hooks, comandos, memories, skills
   CLAUDE.md  PROGRESS.md  README.md
 ```
-
-**O que saiu na Fase 1** — e por quê, para ninguém recriar:
-
-| Saiu | Motivo |
-|---|---|
-| `Makefile` (28 alvos) | com tudo na raiz, `docker compose` acha sozinho: era indireção pura (AD-10) |
-| `deploy/` | o nível extra só existia para justificar o `-f` e o `--env-file` |
-| `deploy/Caddyfile` + serviço `caddy` | a central publica em loopback; nada de proxy (AD-10) |
-| 5 scripts da Evolution + 2 runbooks | EPIC-2 cancelado (AD-11) |
-| `sync-service/` | nunca chegou a existir — EPIC-5 cancelado (AD-13) |
-| 14 cópias de `env_get()` | viraram `scripts/lib/env.sh` |
-| `curlimages/curl` em rede compartilhada | os scripts falam com a central pela porta em loopback |
 
 > O espelho do canal oficial (STORY-3.2) **não mora aqui** — é código do `monorepo-flash-capital`
 > (`api/integrations/chatwoot/chatwoot_mirror.py`), porque quem é dono do webhook do Twilio e do

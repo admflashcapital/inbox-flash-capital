@@ -28,9 +28,7 @@ COMPOSE="docker compose -f ${RAIZ}/compose.yaml --env-file ${ENV_FILE}"
 . "${RAIZ}/scripts/lib/env.sh"
 
 # Este script SEMEIA e APAGA uma conta de teste: nunca pode rodar em produção.
-# O guard antigo era `DOMAIN != localhost`, e a chave DOMAIN morreu com o Caddy.
-# O novo guard é a porta: a central só escuta em 127.0.0.1, e exigir o opt-in
-# explícito impede que um cron o dispare por engano.
+# O opt-in explícito é o guard — impede que um cron o dispare por engano.
 PORTA="$(env_get CHATWOOT_HOST_PORT)"; PORTA="${PORTA:-3001}"
 if [ "${SMOKE_EU_SEI_O_QUE_ESTOU_FAZENDO:-}" != "1" ]; then
   echo "[smoke] abortado: este script cria e apaga uma conta no banco."

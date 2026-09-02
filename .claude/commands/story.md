@@ -1,7 +1,7 @@
 
-> **Reescopo 2026-09-02, JÁ APLICADO** — EPIC-2 (Evolution) e EPIC-5 (Sync) cancelados; Caddy, Makefile e a rede `flash-canais` saíram na Fase 1. Hoje: `compose.yaml`, `.env` e `scripts/` na raiz, `docker compose up -d --wait` como comando único, central em `127.0.0.1:3001`, rede `flash-espelho` com 2 membros (AD-10..AD-13 em `docs/architecture.md`).
+> **Escopo: 16 stories** (EPIC-2 e EPIC-5 estão fora). `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-13).
 >
-> **Não abrir gate nem story do EPIC-2 ou do EPIC-5** — os dois foram cancelados; o escopo vigente é de **16 stories**. Não existe mais `make`: use `bash scripts/…` e `docker compose …`.
+> **Não abrir gate nem story do EPIC-2 ou do EPIC-5** — estão fora do escopo. Use `bash scripts/…` e `docker compose …`.
 
 ---
 description: Carrega o contexto de uma story para implementar. Uso: /story 2.1
@@ -22,7 +22,7 @@ Responda, em PT-BR:
    - **Código** (Serviço de Sync, EPIC-5): TDD obrigatório → siga o item 4
    - **Configuração/infra** (subir container, conectar inbox, configurar label/papel/retenção):
      não force pytest. O "verde" é o **critério de aceite verificado ao vivo** + o artefato
-     versionado (`compose.yaml`, `Caddyfile`, `.env.example`, runbook em `docs/`)
+     versionado (`compose.yaml`, `scripts/`, `.env.example`, runbook em `docs/`)
 3. **Arquivos a criar/modificar** — e, se a story exige passo manual fora do repo (conectar QR da
    Evolution, criar app no Google, cadastrar template Meta na Twilio), **liste o passo manual** e
    diga em qual runbook de `docs/` ele será documentado

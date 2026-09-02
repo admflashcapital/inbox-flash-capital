@@ -5,38 +5,6 @@
 
 **Legenda:** `[ ]` pendente · `[~]` em andamento · `[x]` concluída · `[!]` bloqueada
 
-> ### ⚠️ REESCOPO 2026-09-02 — leia antes de decidir qualquer coisa aqui
->
-> **O EPIC-2 (Evolution) e o EPIC-5 (Serviço de Sync) foram CANCELADOS.** Os milestones abaixo e vários
-> gates ainda descrevem o escopo antigo. Ver **AD-10..AD-13** em `docs/architecture.md`, o
-> `HANDOFF-espelho-chatwoot.md` e o ADR arquivado `docs/0014-atendimento-no-monorepo-corte-chatwoot.md`.
->
-> | O que mudou | Onde está a decisão |
-> |---|---|
-> | EPIC-2 sai — Evolution removida dos dois repos | AD-11 · `crm` ADR-010 |
-> | EPIC-5 cancelado — contexto vai nos `custom_attributes` no instante do disparo | **AD-13** |
-> | STORY-4.2 **destravada** — não espera mais o Sync | **AD-13** |
-> | Caddy, Makefile, `/etc/hosts` e `flash-canais` saem; só loopback | **AD-10** |
-> | A central **nunca** é site público | **AD-11** |
-> | Painel é amostral enquanto o uptime não for garantido (espelho sem retry) | **AD-12** |
->
-> **Escopo vigente: 16 stories** (19 − 3 do EPIC-2).
->
-> ### ✅ Fase 0 e Fase 1 CONCLUÍDAS — 2026-09-02
->
-> | Fase | O que entregou | Commit |
-> |---|---|---|
-> | **0** Rede de segurança | backup novo nos 2 repos (o anterior tinha 6 semanas) · `restore.sh --verificar` verde: 645 conversas, 777 mensagens, 277 anexos recompostos em ambiente limpo · volumes do CRM cobertos por snapshot · **Chatwoot medido pela 1ª vez: 864 MiB** (sidekiq 430 · web 342 · pg 77 · redis 16) | — |
-> | **1.1** Evolution fora | 5 scripts, 2 runbooks, 9 alvos de Makefile, 8 chaves de `.env` · inbox órfã `WhatsApp Prospecção` apagada do banco (0 conversas) · `SAFE_FETCH_ALLOW_PRIVATE_NETWORK` volta a `false` | `eebbbb7` |
-> | **1.2** Caddy fora | `chatwoot-web` publica `127.0.0.1:${CHATWOOT_HOST_PORT}` · 3 asserções reescritas, 2 delas eram armadilhas (falso verde e no-op silencioso) · a ponte socat do runbook de e-mail morreu junto | `42424b0` |
-> | **1.3** Achatamento | `compose.yaml`/`.env`/`scripts/` na raiz, sem Makefile · `env_get` de 14 cópias para `scripts/lib/env.sh` · `docker compose up -d --wait` sem flag nenhuma | `dce440d` |
-> | **1.4** Seed no boot | `chatwoot-seed` entre init e web · provado num projeto docker separado, do volume vazio | `e4d83a9` |
-> | **1.5** Rede | `flash-canais` (5 membros, 3 repos) → `flash-espelho` (2 membros) · `curlimages/curl` eliminado dos scripts | `3ebf97b` |
-> | **1.7** Docs | toda a documentação reescrita como as-built | `3cc8baf` |
->
-> **Próximo trabalho: Fase 2 (CRM).** ⚠️ Lá a ordem é outra: o `commit-guard` roda a suíte inteira a
-> cada commit e **95 testes quebram na COLETA** se o código sair antes dos testes. Ver o plano.
-
 **Milestones (escopo ANTIGO — mantido para leitura do histórico):** M1 = EPIC-1 · M2 = EPIC-2 + 3 + 4
 (canais) · M3 = EPIC-5 (sync) · M4 = EPIC-6 (go-live).
 O EPIC-1 bloqueia tudo. Os EPICs 2/3/4 podem correr em paralelo depois dele.
@@ -137,13 +105,9 @@ o chip pré-pago pelo QR (`docs/runbook-canal-prospeccao.md`) — só então dá
 (mensagem real do lead, resposta chegando no WhatsApp, mídia anexada). A story só vira `[x]` depois
 disso.
 
-**Dois achados que mudaram o desenho** `[📦 os dois foram REVERTIDOS na Fase 1 — 2026-09-02]`:
-1. ~~**`SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true` é obrigatório na central.**~~ Era: o Chatwoot recusa
-   webhook e download de mídia em host sem IP público (anti-SSRF do `SafeFetch`), e a Evolution vivia
-   em rede privada; sem o flag a resposta falhava em silêncio. **Com a Evolution fora, a
-   justificativa sumiu e o flag voltou a `false`.**
-2. ~~**Um host = um Caddy.**~~ Não há mais Caddy nenhum (AD-10): a central publica em
-   `127.0.0.1:${CHATWOOT_HOST_PORT}` e não disputa porta com ninguém.
+**Nota:** os dois achados de desenho registrados nesta story (o `SAFE_FETCH_ALLOW_PRIVATE_NETWORK` e
+a disputa pela 443) não valem mais — a central publica em `127.0.0.1:${CHATWOOT_HOST_PORT}`, sozinha,
+e o anti-SSRF está ligado.
 
 **Gate EPIC-2:** mensagem inbound no número novo aparece na inbox `WhatsApp Prospecção`; resposta pela central chega ao lead; mídia é anexada; **N8N e Chatwoot recebem cada evento** (fan-out at-least-once, sem mensagem engolida nem duplicada); a saudação + link Jotform do agente aparecem na conversa; limite de aquecimento documentado e zero outbound frio em massa.
 
@@ -232,11 +196,11 @@ Nenhum destes dava erro. Todos falhavam **calados** — é o padrão de falha qu
    `CENTRAL_ACCOUNT_ID=1`; e as duas inboxes foram criadas **dentro da conta de teste**. O operador
    logava na conta real e via uma central vazia. → `smoke-test.sh` agora destrói a conta que cria e
    **falha se ela sobreviver**; `bash scripts/verificar-invariantes.sh` recusa conta de teste e exige **uma única** conta.
-2. **O Caddy 2.11 descarta header com underscore** (`dropping header containing underscore`, sem opção
-   de desligar) — e o Chatwoot autentica com `api_access_token`. Cliente de API pela URL pública levava
-   **401 com token válido**. A UI não sofria (cookie) e a rede interna também não — o bug só apareceria
-   no dia em que a central e o monorepo ficassem em hosts separados, e aí **o espelho morreria calado**.
-   → ponte hífen→underscore no Caddyfile + `bash scripts/verificar-invariantes.sh` prova ao vivo (chama a API pública, exige 200).
+2. **Proxy que reescreve header quebra a autenticação da API.** O Chatwoot autentica com
+   `api_access_token`, e proxy que descarta header com underscore (defesa contra request smuggling)
+   faz o cliente levar **401 com token válido** — a UI não sofre, porque usa cookie. Falando direto
+   com o Rails o problema não existe. → `bash scripts/verificar-invariantes.sh` prova ao vivo que a
+   API responde 200 com o token; qualquer ingresso futuro tem de manter essa prova verde.
 3. **`env_get` não aparava espaço/`\r`** do valor lido do `.env`. Espaço sobrando num SID vira URL
    inválida; numa senha de banco, falha de autenticação sem pista. → aparado nos 10 scripts, e o
    `bash scripts/verificar-invariantes.sh` detecta a sujeira (o Docker Compose **não** apara — passa o valor cru ao container).

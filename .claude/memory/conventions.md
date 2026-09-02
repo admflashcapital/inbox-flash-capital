@@ -1,8 +1,8 @@
 # Convenções — Inbox Flash Capital
 
-> **Reescopo 2026-09-02, JÁ APLICADO** — EPIC-2 (Evolution) e EPIC-5 (Sync) cancelados; Caddy, Makefile e a rede `flash-canais` saíram na Fase 1. Hoje: `compose.yaml`, `.env` e `scripts/` na raiz, `docker compose up -d --wait` como comando único, central em `127.0.0.1:3001`, rede `flash-espelho` com 2 membros (AD-10..AD-13 em `docs/architecture.md`).
+> **Escopo: 16 stories** (EPIC-2 e EPIC-5 estão fora). `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-13).
 >
-> **Como ficou:** não há Python neste repo (o Sync foi cancelado) nem `Caddyfile`. Bash em `scripts/` (com `scripts/lib/env.sh` para ler o `.env` sem `source`) e um seed Ruby em `scripts/seed/`, idempotente por contrato.
+> Não há Python neste repo. Bash em `scripts/` (com `scripts/lib/env.sh` para ler o `.env` sem `source`) e um seed Ruby em `scripts/seed/`, idempotente por contrato.
 
 
 ## Chatwoot (dicionário fechado — a consistência é o produto)
@@ -36,7 +36,7 @@
 
 ## Infra
 
-- `compose.yaml` + `(removido — Caddy)` + `.env.example`
+- `compose.yaml` + `.env.example` + `scripts/`
 - Imagem do Chatwoot **sempre com tag explícita** — `latest` é proibido (AD-7/FR-2)
 - Upgrade: bump da tag + migrações, **validado em staging antes de produção**
 

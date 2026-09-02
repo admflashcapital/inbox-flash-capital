@@ -99,10 +99,9 @@ fi
 
 # ── 6. O /twilio/callback não pode estar alcançável de fora ───────
 # O Twilio::CallbackController do Chatwoot NÃO confere X-Twilio-Signature:
-# alcançável, ele aceita mensagem forjada. Até 2026-09-02 quem barrava era um
-# gate 403 no Caddy; sem Caddy (AD-10), a proteção passa a ser topológica —
-# a central só escuta em 127.0.0.1. A asserção acompanha: em vez de ler um
-# arquivo de config, prova que nada publica fora da loopback.
+# alcançável, ele aceita mensagem forjada. A proteção é TOPOLÓGICA — a central só
+# escuta em 127.0.0.1 — então a asserção prova exatamente isso: que nada publica
+# fora da loopback. Qualquer ingresso futuro precisa de um gate no X-Relay-Token.
 FORA="$($COMPOSE config --format json 2>/dev/null \
   | python3 -c "
 import sys, json

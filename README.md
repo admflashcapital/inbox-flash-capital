@@ -10,23 +10,6 @@ operador **mastigado** — `titulo_id`, CNPJ, valor e dias de atraso carimbados 
 `custom_attributes` da conversa **no instante do disparo** — sem que a central consulte banco de
 domínio nenhum.
 
-> ### Estado — 2026-09-02
->
-> **O MVP são 2 canais, não 3.** O canal de prospecção via Evolution (EPIC-2) e o Serviço de Sync
-> (EPIC-5) foram **cancelados**. Caddy, Makefile e a rede `flash-canais` saíram; a central publica
-> **só em `127.0.0.1:3001`** e **nunca** é site público.
->
-> **Fase 0 e Fase 1 concluídas.** Escopo vigente: **16 stories**. Decisões em
-> `docs/architecture.md` **AD-10..AD-13**; roteiro no `HANDOFF-espelho-chatwoot.md` em `~/projects/`.
->
-> **EPIC-1, EPIC-3 e a STORY-4.1 fechados e verificados ao vivo.** A central sobe com um comando,
-> tem backup/restore ensaiados e banco isolado. O **número oficial (Twilio) está em produção**:
-> recebe do cliente, responde dentro da janela de 24h e espelha os disparos de cobrança do
-> monorepo — **sem reenviá-los**. A caixa `operacional@` recebe e responde na mesma thread.
->
-> ⚠️ O código do espelho vive na linhagem `feat/espelho-chatwoot` do monorepo, que **ainda não está
-> na `main` de lá** (é ancestral de `feat/regua-comunicacao-v2`, e entra junto com a régua).
-
 ## As 2 inboxes do MVP
 
 | Inbox | Número/caixa | Provider | Uso |
@@ -37,10 +20,8 @@ domínio nenhum.
 Os nomes são **fixos**: é por eles que o `chatwoot-seed` decide se cria ou reaproveita. Renomear
 pela UI faz o seed criar uma inbox duplicada.
 
-**Prospecção fria sai por e-mail, nunca por WhatsApp.** A segmentação de risco é de propósito: um
-número queimado por cold outreach levaria o canal de cobrança junto. Foi para proteger isso que
-existiu o número de prospecção; com o EPIC-2 cancelado, o guardrail fica pela via mais simples —
-**a central só tem o número oficial**.
+**Prospecção fria sai por e-mail, nunca por WhatsApp.** Um número queimado por cold outreach levaria
+o canal de cobrança junto — por isso **a central só tem o número oficial**.
 
 ## Arquitetura em uma tela
 
@@ -80,8 +61,8 @@ Detalhe completo (AD-1..AD-13, diagramas, ERD, convenções) em **`docs/architec
 
 ## Subir o ambiente
 
-Não há Makefile e não há `deploy/`: o compose, o `.env` e os `scripts/` estão na raiz, então
-`docker compose` acha tudo sozinho — sem `-f`, sem `--env-file`.
+O compose, o `.env` e os `scripts/` estão na raiz, então `docker compose` acha tudo sozinho — sem
+`-f`, sem `--env-file`.
 
 ```bash
 cp .env.example .env                       # preencha os segredos (nunca commite o .env)
@@ -129,15 +110,14 @@ Compose v2. **Só isso.** Imagem do Chatwoot **sempre com tag fixa** — `latest
 | `docs/prd.md` | Requisitos funcionais, glossário fechado, jornadas, NFRs |
 | `docs/architecture.md` | Arquitetura: paradigma, decisões (AD-1..AD-13), stack, árvore |
 | `docs/epics-and-stories.md` | Epics · stories com critérios de aceite Given/When/Then |
-| `docs/0014-…-corte-chatwoot.md` | 📦 ADR arquivado: a direção rejeitada (cortar o Chatwoot), com medição |
 | `CLAUDE.md` | Instruções de desenvolvimento (regra de ouro, convenções, regras invioláveis) |
 | `PROGRESS.md` | **Fonte da verdade do estado** — story a story, com gate e dívida técnica |
 
 ## Desenvolvimento
 
 **EPIC-1 bloqueia tudo**; os canais podem correr em paralelo depois dele; a Operação (EPIC-6) fecha
-o MVP. Não há código de aplicação neste repo — o Chatwoot é imagem oficial sem fork (AD-7) e o
-Serviço de Sync foi cancelado (AD-13). O que existe é infra, scripts de operação e um seed em Ruby.
+o MVP. Não há código de aplicação neste repo — o Chatwoot é imagem oficial sem fork (AD-7). O que
+existe é infra, scripts de operação e um seed em Ruby.
 
 Comandos do Claude Code (em `.claude/commands/`):
 
@@ -156,6 +136,6 @@ verificadores passando. Não force pytest onde não há código.
 
 | Repo | Papel |
 |---|---|
-| `crm-flash-capital` | comercial: Twenty + N8N. Verdade do **lead**. Sem relação de infra com este repo (AD-10) — nenhuma rede, nenhum proxy em comum |
+| `crm-flash-capital` | comercial: Twenty + N8N. Verdade do **lead**. Independente deste repo: nenhuma rede e nenhum proxy em comum |
 | `monorepo-flash-capital` | plataforma interna + app + site + FastAPI/worker + Supabase. Verdade de **cedente/sacado/cobrança**; origina os disparos e os espelha aqui |
 | `inbox-flash-capital` (este) | a central. **Espelho e cockpit — dono de nenhum dado de negócio** |

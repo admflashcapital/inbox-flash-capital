@@ -1,12 +1,5 @@
 # Runbook — Canal WhatsApp Oficial (Twilio/Meta)
 
-> ### ⚠️ DOC EM TRANSIÇÃO — Fase 1.2
->
-> **Vigente.** A seção *“O Caddy come o token da API”* sai com o Caddy — era workaround do bug de header com underscore do Caddy 2.11, e sem proxy o header chega inteiro. Já o gate do `/twilio/callback` **continua obrigatório em qualquer exposição**: o `Twilio::CallbackController` não valida assinatura da Twilio, e quem chama esse endpoint é o **monorepo**, não a Twilio (AD-11).
->
-> Ver **AD-10..AD-13** em `inbox/docs/architecture.md`, **ADR-010** em `crm/docs/07_Decisoes.md`, e o `HANDOFF-espelho-chatwoot.md`.
-
-
 > **Stories:** 3.1 (inbox oficial espelhada) · 3.2 (espelho dos disparos) · **FR-7, FR-8** · **AD-4**
 > (um número = uma inbox) · **AD-6** (o disparo em massa origina no monorepo) · **AD-8** (webhook
 > autenticado)
@@ -156,31 +149,6 @@ O **`/twilio/delivery_status` continua aberto** — é a própria Twilio que o c
 mensagens que a *central* envia. Forjá-lo só altera o status de entrega de uma mensagem existente
 (baixo impacto). Está registrado na dívida técnica.
 
-## ⚠️ O Caddy come o token da API (e o Chatwoot depende dele)
-
-**O Caddy 2.11 descarta todo header cujo nome tenha underscore** — é defesa contra request
-smuggling, o log dele diz literalmente `dropping header containing underscore`, e **não há opção
-para desligar**. O Chatwoot autentica a API com exatamente `api_access_token`.
-
-Consequência: um cliente de API que chame a central pela **URL pública** tem o token removido no
-caminho e leva **401**, sem nenhuma pista de por quê. A UI não sofre (usa cookie de sessão), e quem
-fala pela **rede interna** (`chatwoot-web:3000` — Evolution, os scripts, o espelho do monorepo)
-também não, porque não passa pelo Caddy.
-
-A ponte está no `Caddyfile`: o cliente manda **`api-access-token`** (com hífen, que sobrevive) e o
-Caddy reconstrói o nome que o Rails espera.
-
-```bash
-# ❌ pela URL pública, isto leva 401 e você vai culpar o token:
-curl -H "api_access_token: $TOKEN" https://inbox.<DOMAIN>/api/v1/accounts/1/inboxes
-# ✅ assim funciona:
-curl -H "api-access-token: $TOKEN" https://inbox.<DOMAIN>/api/v1/accounts/1/inboxes
-```
-
-`bash scripts/verificar-invariantes.sh` **prova isso ao vivo** (faz a chamada e exige 200), justamente para não voltar a falhar
-em silêncio. Se um dia o monorepo e a central ficarem em **hosts separados**, o `CHATWOOT_URL` de lá
-vira `https://inbox.<DOMAIN>` — e aí o espelho depende dessa ponte.
-
 ## ⚠️ O webhook do Twilio é a peça que mais apodrece
 
 **Sintoma:** a mensagem chega na Twilio (`status=received`) mas **nada acontece** — nem no monorepo,
@@ -284,5 +252,5 @@ conversa duplicada para o mesmo cliente, é aqui que se olha.
 | A UI não oferece template nenhum | templates não sincronizados: `conectar-twilio.sh --templates` |
 | Resposta do cliente abre conversa NOVA em vez de cair na thread | `contact_inbox.source_id` fora do formato `whatsapp:+E164` no push do monorepo |
 | `bash scripts/conectar-twilio.sh` falha com erro de credencial | o Chatwoot testa a credencial (`client.messages.list`) antes de criar a inbox — SID/token errados |
-| Chamada à API da central pela URL pública dá **401** com token válido | o Caddy comeu o `api_access_token` (underscore). Use `api-access-token` — ver a seção acima |
+| Chamada à API da central dá **401** com token válido | proxy no caminho descartando header com underscore. Falando direto com `127.0.0.1:${CHATWOOT_HOST_PORT}` isso não acontece |
 | Webhook do Twilio devolve **403** no monorepo | `PUBLIC_BOLETO_BASE_URL` diferente da URL pública real (ngrok): a assinatura é validada contra a URL reconstruída dela |

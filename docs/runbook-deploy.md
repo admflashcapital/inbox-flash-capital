@@ -1,12 +1,9 @@
 # Runbook — Deploy da Central
 
-> **As-built desde 2026-09-02 (AD-10).** Não há Caddy, não há Makefile e não há `deploy/`: o
-> `compose.yaml`, o `.env` e os `scripts/` moram na raiz, e `docker compose` acha tudo sozinho.
-> A central publica **uma** porta, em `127.0.0.1` — e **nunca** é site público (AD-11).
->
-> **Ingresso remoto está em aberto** — é a Fase 4, decisão de diretoria. Enquanto não houver, este
-> runbook cobre o ciclo inteiro em localhost. Ver **AD-10..AD-13** em `docs/architecture.md`,
-> **ADR-010** em `crm/docs/07_Decisoes.md`, e o `HANDOFF-espelho-chatwoot.md`.
+> O `compose.yaml`, o `.env` e os `scripts/` moram na raiz, e `docker compose` acha tudo sozinho.
+> A central publica **uma** porta, em `127.0.0.1`, e **nunca** é site público (AD-11).
+> **Ingresso remoto está em aberto** — decisão de diretoria; até lá este runbook cobre o ciclo
+> inteiro em localhost.
 
 > **Stories:** 1.1 (stack sobe com um comando) e 1.2 (banco isolado) · **FR-1** · **AD-8, AD-9, AD-10**
 > Este runbook é a fonte de verdade operacional do deploy. Arquitetura em `docs/architecture.md`.
@@ -144,9 +141,9 @@ Não abra porta sem estes três, que hoje são cobertos pela topologia e deixari
    `X-Twilio-Signature`**. Hoje ninguém o alcança; exposto sem gate, qualquer um forja inbound. O
    `RELAY_TOKEN` já está no `.env` e é conferido por `verificar-canal-oficial.sh` — falta o ponto que
    o exige na borda.
-2. **Headers de segurança.** O `nosniff` e o `Referrer-Policy` vinham do Caddy; o Chatwoot não os
-   emite sozinho.
-3. **Limite de corpo.** O teto de 40 MB para anexo vinha do Caddy; o Puma não impõe limite próprio.
+2. **Headers de segurança.** O Chatwoot não emite `nosniff` nem `Referrer-Policy` sozinho — o
+   ingresso precisa adicioná-los.
+3. **Limite de corpo.** Não há teto para o tamanho do anexo — o Puma não impõe limite próprio, então o ingresso precisa impor.
 
 E a armadilha registrada: **um Cloudflare Access mal configurado devolve a página de login em HTML
 com status 200** — o `raise_for_status()` do espelho passa, e ele acha que deu certo.

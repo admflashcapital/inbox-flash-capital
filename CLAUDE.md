@@ -7,52 +7,26 @@ Guia para o Claude Code (claude.ai/code) trabalhar neste repositório.
 
 ---
 
-## ⚠️ REESCOPO 2026-09-02 — leia ANTES de tudo
-
-O projeto foi retomado com uma simplificação. **Boa parte do que este arquivo descreve abaixo continua
-verdadeira como as-built, mas a direção mudou.** Se algo aqui conflitar com esta seção, esta seção ganha.
-
-| Cancelado / mudado | Onde está a decisão |
-|---|---|
-| **EPIC-2 (Evolution) cancelado** — sai dos dois repos | AD-11 · `crm/docs/07_Decisoes.md` ADR-010 |
-| **EPIC-5 (Serviço de Sync) cancelado** — `sync-service/` **não será construído** | **AD-13** |
-| **STORY-4.2 destravada** — o contexto vai nos `custom_attributes` no instante do disparo | **AD-13** |
-| **Caddy, Makefile, `/etc/hosts` e a rede `flash-canais` saem** — só `docker compose`, tudo em loopback | **AD-10** |
-| **A central nunca é site público** — a Twilio fala com o monorepo; o e-mail é polling IMAP | **AD-11** |
-| **O painel é amostral** enquanto o uptime não for garantido — o espelho não tem retry | **AD-12** |
-
-**Escopo vigente: 16 stories** (19 − 3 do EPIC-2). **Fase 0 e Fase 1 CONCLUÍDAS em 2026-09-02** —
-Evolution, Caddy e Makefile fora; tudo na raiz; seed no boot; rede `flash-espelho`.
-**Próximo trabalho: Fase 2 (CRM) → Fase 3 (espelho ponta a ponta).**
-
-**Onde ler:** `docs/architecture.md` (AD-10..AD-13) · `HANDOFF-espelho-chatwoot.md` em `~/projects/` ·
-`docs/0014-atendimento-no-monorepo-corte-chatwoot.md` (ADR arquivado: a direção rejeitada, com medição).
-
-**Não há mais `make` nem Caddy neste repo** (Fase 1, 2026-09-02): `docker compose up -d --wait` sobe
-tudo, sem `-f` e sem `--env-file`. No **CRM**, a Fase 2.1 (consertar os testes) precede qualquer
-remoção de arquivo — lá o `commit-guard` roda a suíte inteira a cada commit e 95 testes quebram na
-COLETA se o código sair primeiro.
-
----
-
 ## Estado atual do repositório (leia primeiro)
 
 > **`PROGRESS.md` é a fonte da verdade do estado.** Esta seção dá o mapa grosso; o rastreamento
 > story a story (com hash de commit, gate e dívida técnica) vive lá. Se as duas divergirem,
 > **`PROGRESS.md` ganha** — e conserte esta seção.
 
-**A central está no ar** (embora a stack esteja **desligada** no momento — os volumes persistem, com PII
-real desde 2026-07-14). a raiz do repo existe (6 containers, 12 scripts de operação) e **os dois canais do
-escopo vigente** estão ligados: WhatsApp Oficial (Twilio) e E-mail (Gmail). O `sync-service/` **não
-existe e não será construído** — o EPIC-5 foi cancelado (AD-13).
+**A central está no ar.** A stack sobe com `docker compose up -d --wait` (6 serviços, 11 scripts de
+operação) e **os dois canais do escopo** estão ligados: WhatsApp Oficial (Twilio) e E-mail (Gmail).
+O banco tem **PII real de cliente desde 2026-07-14** — trate backup como segredo.
+
+**Escopo: 16 stories.** Próximo trabalho: **espelho ponta a ponta** (STORY-4.2 — carimbar
+`titulo_id`, CNPJ, valor e dias de atraso nos `custom_attributes`, AD-13).
 
 | Épico | Estado |
 |---|---|
 | **EPIC-1** Fundação | ✅ fechado, gate verificado ao vivo — a stack sobe com `docker compose up -d --wait`, backup/restore validados |
-| **EPIC-2** WhatsApp Prospecção | ❌ **CANCELADO** (2026-09-02) — a Evolution saiu dos dois repos; scripts, runbooks e chaves apagados na Fase 1.1 |
+| **EPIC-2** WhatsApp Prospecção | ❌ **CANCELADO** — fora do escopo |
 | **EPIC-3** WhatsApp Oficial | ✅ fechado, gate verificado **com o número real de produção** — recebe, responde e espelha os disparos do monorepo sem reenviá-los |
 | **EPIC-4** E-mail (Gmail) | ✅ STORY-4.1 fechada e verificada ao vivo; a 4.2 está destravada pelo AD-13 (contexto nos `custom_attributes`) |
-| **EPIC-5** Serviço de Sync | ❌ **CANCELADO** (AD-13) — `sync-service/` não será construído |
+| **EPIC-5** Serviço de Sync | ❌ **CANCELADO** (AD-13) — não se constrói serviço de reconciliação |
 | **EPIC-6** Operação & Governança | ⬜ não iniciado |
 
 O que **já está decidido e não se re-discute** está em `docs/architecture.md` (AD-1..AD-9) e
@@ -60,8 +34,8 @@ condensado em `.claude/memory/decisions.md`.
 
 ### Comandos de operação
 
-Não há Makefile (AD-10). O compose, o `.env` e os `scripts/` estão na raiz, então `docker compose`
-acha tudo sozinho.
+O compose, o `.env` e os `scripts/` estão na raiz, então `docker compose` acha tudo sozinho — sem
+`-f`, sem `--env-file`.
 
 | Comando | O quê |
 |---|---|
@@ -158,8 +132,6 @@ Não duplique aqui o que esses docs já dizem — vá à fonte.
 Quebrar isso empobrece o dado relacional do domínio e coloca o canal financeiro (cobrança) refém
 da disponibilidade de uma ferramenta de chat.
 
-### As 4 camadas
-
 ### As 3 camadas
 
 1. **Hub** (Chatwoot) — modelo de Conversa/Contato, UI de atendimento, labels, atribuição, relatórios.
@@ -168,10 +140,8 @@ da disponibilidade de uma ferramenta de chat.
 3. **Domínio** (Supabase/monorepo) — fonte da verdade. Empurra o espelho; **nunca** é consultado em
    runtime pelo hub.
 
-> Havia uma 4ª camada — o **Bridge / Serviço de Sync**, que faria reconciliação posterior. Foi
-> **cancelada** (AD-13): o monorepo já conhece `titulo_id`, CNPJ, valor e dias de atraso **no instante
-> do disparo**, então o contexto vai nos `custom_attributes` da conversa ali mesmo. Push no momento em
-> que o dado está na mão, em vez de reconciliar depois.
+Não há camada de reconciliação (AD-13): o monorepo já conhece `titulo_id`, CNPJ, valor e dias de
+atraso **no instante do disparo**, e carimba tudo nos `custom_attributes` da conversa ali mesmo.
 
 O enriquecimento é **unidirecional** (domínio → central). Domínio fora do ar degrada o
 enriquecimento, **nunca** o atendimento (AD-2).
@@ -179,7 +149,7 @@ enriquecimento, **nunca** o atendimento (AD-2).
 ### Decisões travadas (não re-discutir — detalhe em `docs/architecture.md`)
 
 - **AD-3** — identidade por **chave dupla**: merge automático só quando telefone (E.164) **E** documento casam; casando só uma chave → **sugestão de merge** para revisão humana.
-- **AD-10** — infra é só `docker compose`; nada publica além de `127.0.0.1`. Sem Makefile, sem Caddy, sem proxy compartilhado. (Supersede o **AD-5**, que descrevia o fan-out da Evolution.)
+- **AD-10** — infra é só `docker compose`; nada publica além de `127.0.0.1`, e nunca há proxy compartilhado entre repos.
 - **AD-11** — a central **nunca** é site público: a Twilio entrega ao monorepo, o e-mail entra por polling IMAP de saída.
 - **AD-12** — o espelho **não tem retry, fila nem backfill**: cada minuto com a central inalcançável é buraco permanente no painel, não atraso.
 - **AD-13** — sem Serviço de Sync; o contexto é carimbado no instante do disparo.
@@ -189,16 +159,14 @@ enriquecimento, **nunca** o atendimento (AD-2).
 
 ### Stack
 
-Chatwoot CE (tag fixa) · PostgreSQL 16 + pgvector · Redis 7 · Twilio WhatsApp (existente no
-monorepo) · Gmail IMAP/SMTP com OAuth · Docker Compose v2. **Só isso** — sem proxy, sem Makefile,
-sem serviço próprio em Python (AD-10, AD-13).
+Chatwoot CE (tag fixa) · PostgreSQL 16 + pgvector · Redis 7 · Twilio WhatsApp (no monorepo) ·
+Gmail IMAP/SMTP com OAuth · Docker Compose v2. **Só isso.**
 
 ### Segmentação de risco de número (guardrail de reputação)
 
-Prospecção fria sai por **e-mail**, nunca por WhatsApp. O número oficial (cobrança) fica isolado de
-qualquer atividade de risco — um número queimado não pode levar o canal de dinheiro junto. Foi para
-proteger essa separação que existiu o número de prospecção com a Evolution; com o EPIC-2 cancelado,
-o guardrail permanece pela via mais simples: **a central só tem o número oficial**.
+Prospecção fria sai por **e-mail**, nunca por WhatsApp: um número queimado por cold outreach levaria
+o canal de dinheiro junto. **A central só tem o número oficial**, e ele é exclusivo de cobrança e
+transacional.
 
 ---
 
@@ -206,8 +174,8 @@ o guardrail permanece pela via mais simples: **a central só tem o número ofici
 
 Ciclo por story (configurado em `.claude/`):
 
-- **Este repo não tem código de aplicação** — o Chatwoot é imagem oficial sem fork (AD-7), e o
-  Serviço de Sync foi cancelado (AD-13). O que existe é infra e scripts de operação.
+- **Este repo não tem código de aplicação** — o Chatwoot é imagem oficial sem fork (AD-7). O que
+  existe é infra, scripts de operação e o seed em Ruby.
 - O "teste" de uma story é o **critério de aceite verificado ao vivo** + o artefato versionado
   (`compose.yaml`, `scripts/`, runbook em `docs/`) + os `scripts/verificar-*.sh` verdes. Não force
   pytest onde não há código.
@@ -218,8 +186,8 @@ Ciclo por story (configurado em `.claude/`):
   ferramenta ou os testes ainda não existirem).
 - `PROGRESS.md` rastreia as 19 stories por épico (`[ ]` pendente · `[~]` em andamento · `[x]` done ·
   `[!]` bloqueada), com gate de saída por épico.
-- Ordem de build: **EPIC-1** (fundação) bloqueia tudo → **EPIC-2/3/4** (canais, podem correr em
-  paralelo) → **EPIC-5** (sync, precisa de ≥1 canal vivo) → **EPIC-6** (operação/governança).
+- Ordem de build: **EPIC-1** (fundação) bloqueia tudo → **EPIC-3/4** (canais, podem correr em
+  paralelo) → **EPIC-6** (operação/governança).
 - **Skills:** roteador por épico em `.claude/memory/skills.md` (carregado pelo `/story`).
 
 ---
@@ -250,7 +218,7 @@ Ciclo por story (configurado em `.claude/`):
 2. **NUNCA** fazer o Chatwoot consultar banco de domínio de forma síncrona no caminho de atendimento (AD-2).
 3. **NUNCA** forkar o Chatwoot nem habilitar features da pasta `enterprise/` (AD-7). Extensão só via API/webhook/automação/atributo custom.
 4. **NUNCA** usar tag `latest` na imagem do Chatwoot — versão fixada, upgrade validado em staging (FR-2).
-5. **NUNCA** disparar prospecção fria em massa pelo número de WhatsApp — sai por e-mail. O número de prospecção é **só inbound**.
+5. **NUNCA** disparar prospecção fria em massa por WhatsApp — sai por e-mail. O número oficial é exclusivo de cobrança e transacional.
 6. **NUNCA** originar disparo em massa dentro da central (AD-6) — o motor é o monorepo.
 7. **NUNCA** criar label fora do dicionário fechado do Glossário, nem merge automático de contato sem casar telefone **E** documento (AD-3).
 8. **NUNCA** commitar `.env`/segredos/credenciais; todo webhook valida origem (assinatura Twilio, token compartilhado nos demais) e todo tráfego externo é TLS (AD-8).
