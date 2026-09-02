@@ -32,12 +32,12 @@ Mapa de camadas → responsabilidade:
 - **Prevents:** perda de soberania do dado e acoplamento do domínio à central.
 - **Rule:** nenhum dado de negócio autoritativo (contato de domínio, contrato, operação, cobrança) é criado ou editado somente na central. A verdade de conversa é do Chatwoot; a verdade de negócio é do Twenty/Supabase.
 
-### AD-2 — Enriquecimento é unidirecional e assíncrono (domínio → central) `[ADOPTED]`
+### AD-2 — Enriquecimento é unidirecional e assíncrono (domínio → central) `[REVISADO 2026-09-02 — ver AD-13]`
 - **Binds:** FR-11, FR-12, FR-13, FR-14
 - **Prevents:** a central entrar no caminho crítico do domínio.
 - **Rule:** o Serviço de Sync só empurra para o Chatwoot. O Chatwoot nunca faz chamada síncrona aos bancos de domínio no caminho de atendimento. Indisponibilidade do domínio degrada o enriquecimento, não o atendimento.
 
-### AD-3 — Identidade de contato por chave dupla E.164 + documento `[ADOPTED]`
+### AD-3 — Identidade de contato por chave dupla E.164 + documento `[REVISADO 2026-09-02 — a regra passa a viver no `chatwoot_mirror.py`; ver AD-13]`
 - **Binds:** FR-10, FR-11
 - **Prevents:** contatos duplicados e merges errados.
 - **Rule:** telefone sempre normalizado para E.164 e documento para dígitos antes de casar. **Merge automático só quando telefone E documento casam.** Casando só uma chave → cria **sugestão de merge** para revisão humana. O Serviço de Sync é o único lugar onde essa regra vive.
@@ -47,7 +47,7 @@ Mapa de camadas → responsabilidade:
 - **Prevents:** lógica de canal vazando para o hub ou para o domínio.
 - **Rule:** cada canal conectado por seu provider (Evolution/Twilio/Gmail) como uma Inbox distinta. O modelo Conversa/Contato do hub é agnóstico de provider.
 
-### AD-5 — Convivência multi-consumidor no número de prospecção sem perda `[ADOPTED]`
+### AD-5 — Convivência multi-consumidor no número de prospecção sem perda `[SUPERSEDED 2026-09-02 — Evolution removida dos dois repos; ver AD-11]`
 - **Binds:** FR-5
 - **Prevents:** o agente N8N e o Chatwoot "engolirem" o evento um do outro.
 - **Rule:** a instância Evolution permanece no CRM e faz **fan-out** dos eventos (N8N **e** Chatwoot recebem cada mensagem); não é uma fila competida. Entrega at-least-once; consumidores idempotentes.
@@ -71,6 +71,44 @@ Mapa de camadas → responsabilidade:
 - **Binds:** FR-1
 - **Prevents:** acoplamento de dados e risco de blast-radius.
 - **Rule:** Postgres próprio do Chatwoot; o Serviço de Sync tem seu próprio store de mapeamento de identidade. Sem cross-DB com Twenty/Supabase.
+
+### AD-10 — Infra é só `docker compose`; nada publica além de loopback `[ACCEPTED 2026-09-02]`
+- **Binds:** all
+- **Prevents:** camada de indireção (Makefile, Caddyfile) e um porteiro compartilhado entre dois repos.
+- **Rule:** um `compose.yaml` na raiz, `.env` na raiz, `scripts/` na raiz. Seed idempotente por
+  `rails runner`, encadeado por `service_completed_successfully`; `docker compose up -d --wait` é o
+  comando único. **Nenhum serviço publica em `0.0.0.0`** — só `chatwoot-web`, em `127.0.0.1:3001`. Sem
+  Makefile, sem Caddy, sem `/etc/hosts`, sem a rede `flash-canais`. Quando houver ingresso remoto, ele é
+  um `cloudflared` dentro do compose **deste** repo — nunca um proxy compartilhado com o CRM.
+
+### AD-11 — A central nunca é site público `[ACCEPTED 2026-09-02]`
+- **Binds:** FR-4, FR-6, AD-8
+- **Prevents:** expor uma ferramenta interna e herdar a premissa falsa de que a Twilio precisa alcançar
+  a central.
+- **Rule:** nenhum terceiro alcança o Chatwoot. A Twilio entrega o inbound ao **monorepo**, que valida
+  `X-Twilio-Signature` e relaya para `/twilio/callback` com token compartilhado
+  (`conectar-twilio.sh:19`, `chatwoot_mirror.py::relay_inbound`); o e-mail entra por **polling IMAP de
+  saída** (`trigger_imap_email_inboxes_job`). Sobram dois consumidores: o navegador do colaborador
+  (sempre autenticado) e o monorepo (máquina-a-máquina). O `Twilio::CallbackController` **não valida
+  assinatura da Twilio**, então o gate do relay é obrigatório em qualquer exposição.
+
+### AD-12 — O painel é tão completo quanto o uptime de quem o alimenta `[ACCEPTED 2026-09-02]`
+- **Binds:** FR-8, AD-6
+- **Prevents:** a equipe de cobrança confiar num painel com buracos silenciosos.
+- **Rule:** `chatwoot_mirror.py` **não tem retry, fila nem backfill** — a falha é logada e descartada, e
+  nenhum job reconcilia depois. Em produção o espelho sai do Railway. Logo **cada minuto com a central
+  inalcançável é um buraco permanente**, não um atraso. Decidir onde a central roda é decidir a
+  completude do painel. Enquanto a central rodar em máquina de disponibilidade não-garantida, o painel é
+  declarado **amostral** por escrito, na UI e no runbook.
+
+### AD-13 — Sem Serviço de Sync: o contexto é carimbado no instante do disparo `[ACCEPTED 2026-09-02]`
+- **Binds:** FR-11..FR-14 (anulados), STORY-4.2
+- **Prevents:** construir reconciliação posterior para um dado que já está na mão.
+- **Rule:** **EPIC-5 cancelado.** O monorepo já conhece `titulo_id`, CNPJ, valor e dias de atraso no
+  instante do disparo; esse contexto vai nos `custom_attributes` da conversa, dentro de
+  `chatwoot_mirror.py::_garantir_conversa`. Push unidirecional no momento do disparo em vez de
+  reconciliação. A central continua sem consultar banco de domínio em runtime — o espírito do AD-2 é
+  preservado sem o serviço que ele pressupunha.
 
 ### Diagrama de direção de dependência (quem pode depender de quem)
 

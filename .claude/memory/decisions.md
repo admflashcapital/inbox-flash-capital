@@ -1,6 +1,6 @@
 # Decisões Arquiteturais — Inbox Flash Capital
 
-> Condensado de `docs/architecture.md` (AD-1..AD-9). NÃO violar durante a implementação.
+> Condensado de `docs/architecture.md` (AD-1..AD-13). NÃO violar durante a implementação.
 > Mudar exige atualizar o AD no doc, não uma decisão de sessão.
 
 - **AD-1 — Chatwoot é espelho, nunca fonte da verdade de dado de domínio.**
@@ -60,3 +60,26 @@ capacidade técnica a provar — mas **só em contato de teste**.
 **Service account não pluga no canal de e-mail (2026-07-14).** O Chatwoot só sabe o fluxo OAuth de
 **usuário** (`grant_type=refresh_token`); service account usa JWT-bearer e nunca emite
 `refresh_token`. Não há caminho de código. Ver `docs/runbook-canal-email.md`.
+
+- **AD-10 — Infra é só `docker compose`; nada publica além de loopback.** `[2026-09-02]`
+  `compose.yaml`/`.env`/`scripts/` na raiz; seed por `rails runner` encadeado com
+  `service_completed_successfully`; `docker compose up -d --wait` é o comando único.
+  **Nenhum serviço em `0.0.0.0`** — só `chatwoot-web` em `127.0.0.1:3001`.
+  Proibido: Makefile, Caddy, `/etc/hosts`, rede `flash-canais`, proxy compartilhado com o CRM.
+  Ingresso remoto = um `cloudflared` no compose **deste** repo.
+
+- **AD-11 — A central nunca é site público.** `[2026-09-02]`
+  A Twilio fala com o **monorepo**, não com a central; o e-mail é **polling IMAP de saída**.
+  Só dois consumidores: navegador do colaborador (autenticado) e monorepo (máquina-a-máquina).
+  O `Twilio::CallbackController` não valida assinatura → o gate do relay é obrigatório em qualquer
+  exposição.
+
+- **AD-12 — O painel é tão completo quanto o uptime de quem o alimenta.** `[2026-09-02]`
+  O espelho **não tem retry, fila nem backfill**. Central inalcançável = **buraco permanente**, não
+  atraso. Onde a central roda decide a completude do painel; sem uptime garantido, o painel é
+  declarado **amostral** por escrito.
+
+- **AD-13 — Sem Serviço de Sync: contexto carimbado no instante do disparo.** `[2026-09-02]`
+  **EPIC-5 cancelado.** `titulo_id`/CNPJ/valor/atraso vão nos `custom_attributes` da conversa em
+  `chatwoot_mirror.py::_garantir_conversa`. Supersede a premissa do AD-2/AD-3 de que a regra vive no
+  Sync.
