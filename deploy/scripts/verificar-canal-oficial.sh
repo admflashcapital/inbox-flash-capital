@@ -25,7 +25,6 @@ set -uo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_FILE="${RAIZ}/deploy/.env"
-CADDYFILE="${RAIZ}/deploy/Caddyfile"
 COMPOSE="docker compose -f ${RAIZ}/deploy/docker-compose.yml --env-file ${ENV_FILE}"
 env_get() { sed -n "s/^$1=//p" "$ENV_FILE" | head -1 | sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
 
@@ -98,19 +97,31 @@ else
   falha "${CAMPANHAS} campanha(s) na inbox oficial — a central NÃO origina disparo em massa (AD-6)"
 fi
 
-# ── 6. O /twilio/callback não pode estar aberto na internet ───────
-# Sem isso, qualquer um forja uma mensagem inbound na central: o
-# Twilio::CallbackController do Chatwoot não confere X-Twilio-Signature.
-if grep -q 'twilio/callback' "$CADDYFILE" && grep -q 'RELAY_TOKEN' "$CADDYFILE"; then
-  ok "Caddy protege /twilio/callback com o token do relay (AD-8 — quem valida a assinatura é o monorepo)"
+# ── 6. O /twilio/callback não pode estar alcançável de fora ───────
+# O Twilio::CallbackController do Chatwoot NÃO confere X-Twilio-Signature:
+# alcançável, ele aceita mensagem forjada. Até 2026-09-02 quem barrava era um
+# gate 403 no Caddy; sem Caddy (AD-10), a proteção passa a ser topológica —
+# a central só escuta em 127.0.0.1. A asserção acompanha: em vez de ler um
+# arquivo de config, prova que nada publica fora da loopback.
+FORA="$($COMPOSE config --format json 2>/dev/null \
+  | python3 -c "
+import sys, json
+s = json.load(sys.stdin)['services']
+print(' '.join(
+    f\"{n}:{(p.get('host_ip') if isinstance(p, dict) else None) or '0.0.0.0'}\"
+    for n, c in s.items() for p in (c.get('ports') or [])
+    if (p.get('host_ip') if isinstance(p, dict) else None) != '127.0.0.1'
+))" 2>/dev/null)"
+if [ -z "$FORA" ]; then
+  ok "/twilio/callback inalcançável de fora: nada publica além de 127.0.0.1 (AD-10/AD-11)"
 else
-  falha "o Caddyfile não protege /twilio/callback. O controller do Chatwoot não valida a assinatura da Twilio: exposto, aceita mensagem forjada."
+  falha "publicando fora da loopback (${FORA}) e o /twilio/callback ficou exposto — o Chatwoot não valida a assinatura da Twilio. Qualquer ingresso PRECISA do gate do X-Relay-Token antes."
 fi
 
 if [ -n "$(env_get RELAY_TOKEN)" ]; then
   ok "RELAY_TOKEN presente no .env"
 else
-  falha "RELAY_TOKEN ausente no deploy/.env — o fan-out do monorepo não conseguiria entregar o inbound"
+  falha "RELAY_TOKEN ausente no .env — o fan-out do monorepo não conseguiria entregar o inbound"
 fi
 
 echo

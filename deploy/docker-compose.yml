@@ -1,16 +1,18 @@
 # ═══════════════════════════════════════════════════════════════════
 # Inbox Flash Capital — stack da central (STORY-1.1 / EPIC-1)
 # ═══════════════════════════════════════════════════════════════════
-# Chatwoot CE (web + Sidekiq) + Postgres 16/pgvector + Redis 7 + Caddy.
-# Sobe com UM comando:  make up   (=  docker compose up -d --wait)
+# Chatwoot CE (web + Sidekiq) + Postgres 16/pgvector + Redis 7.
+# Sobe com UM comando:  docker compose up -d --wait
 #
 # Regras que este arquivo materializa:
 #   • AD-7 — imagem oficial CE com TAG FIXA. `latest` é proibido (FR-2).
 #   • AD-9 — Postgres PRÓPRIO da central. Nenhuma credencial ou conexão
 #            com os bancos do CRM (Twenty) ou do monorepo (Supabase).
-#   • AD-8 — segredos só no .env (gitignored); TLS externo pelo Caddy.
-#   • Só o Caddy publica porta no host. Postgres, Redis e o Rails do
-#     Chatwoot ficam acessíveis apenas pela rede Docker interna.
+#   • AD-8 — segredos só no .env (gitignored).
+#   • AD-10 — nada publica em 0.0.0.0. Só `chatwoot-web`, e só em
+#     127.0.0.1: é o navegador do colaborador, e mais ninguém. Postgres e
+#     Redis não publicam nada. Quando houver ingresso remoto, ele é um
+#     `cloudflared` dentro DESTE compose — nunca um proxy compartilhado.
 # ═══════════════════════════════════════════════════════════════════
 
 name: inbox-flash-capital
@@ -19,16 +21,12 @@ name: inbox-flash-capital
 # internal: `internal: true` ⇒ rede FECHADA (sem egress, sem exposição
 #           ao host). Postgres e Redis vivem só aqui.
 # outbound: bridge com egress. Só quem precisa falar com a internet:
-#           web e sidekiq (Evolution no CRM, Twilio, IMAP/SMTP do Gmail,
-#           ACME não passa por aqui — é do Caddy).
-# external: porta de entrada do host (80/443). Só o Caddy.
+#           web e sidekiq (Twilio, IMAP/SMTP do Gmail).
 networks:
   internal:
     driver: bridge
     internal: true
   outbound:
-    driver: bridge
-  external:
     driver: bridge
   # canais: ponte com o compose do CRM (repo crm-flash-capital), onde mora a
   # Evolution. É por ela que a Evolution posta a mensagem do lead na central e
@@ -44,8 +42,6 @@ volumes:
   postgres_data:   # banco da central (conversas, contatos, config)
   redis_data:      # filas do Sidekiq
   storage_data:    # anexos das conversas (ActiveStorage local) — web e sidekiq compartilham
-  caddy_data:      # certificados TLS (não perder: rate limit do Let's Encrypt)
-  caddy_config:
 
 # ── Base comum do Chatwoot (web, sidekiq e init usam a MESMA imagem) ─
 x-chatwoot-base: &chatwoot-base
@@ -139,10 +135,14 @@ services:
     command: ["bundle", "exec", "rails", "db:chatwoot_prepare"]
 
   # ── Chatwoot web (Rails) — a UI e a API da central ───────────────
-  # Sem porta publicada: o acesso externo entra só pelo Caddy (TLS).
+  # Publica em LOOPBACK, nunca em 0.0.0.0 (AD-10): sem TLS, nada de LAN.
+  # A porta é parametrizada porque a 3001 é disputada com o front de dev do
+  # monorepo (api/common/origins.py) — colisão vira ajuste de uma linha no .env.
   chatwoot-web:
     <<: *chatwoot-base
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:${CHATWOOT_HOST_PORT:-3001}:3000"
     entrypoint: ["docker/entrypoints/rails.sh"]
     command: ["bundle", "exec", "rails", "s", "-p", "3000", "-b", "0.0.0.0"]
     depends_on:
@@ -178,43 +178,3 @@ services:
       timeout: 10s
       retries: 5
       start_period: 60s
-
-  # ── Caddy — porta de entrada da central; TLS automático (AD-8) ───
-  # PERFIL `edge`, e não um serviço sempre-ligado, porque só UM processo pode
-  # ficar com as portas 80/443 do host:
-  #   • central sozinha no host (dev, staging)  → COMPOSE_PROFILES=edge (default
-  #     do .env.example): este Caddy sobe e serve https://inbox.<DOMAIN>.
-  #   • central DIVIDINDO o host com o CRM      → COMPOSE_PROFILES= (vazio):
-  #     este Caddy fica fora, e o Caddy do CRM — que já é o porteiro do domínio
-  #     (crm., n8n.) — serve o vhost inbox.<DOMAIN> apontando para chatwoot-web
-  #     pela rede `canais`. Dois Caddys no mesmo host brigariam pela 443.
-  caddy:
-    image: caddy:2.11.4
-    profiles: ["edge"]
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      DOMAIN: ${DOMAIN}
-      ADMIN_EMAIL: ${ADMIN_EMAIL}
-      # Token do fan-out do inbound Twilio (EPIC-3). O Caddy usa para barrar
-      # chamada direta da internet em /twilio/callback — o Chatwoot não valida
-      # a assinatura da Twilio; quem valida é o monorepo, dono do webhook.
-      RELAY_TOKEN: ${RELAY_TOKEN:-}
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    networks:
-      - internal
-      - external
-    depends_on:
-      chatwoot-web:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s

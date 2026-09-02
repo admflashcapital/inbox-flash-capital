@@ -13,8 +13,8 @@
 # Os dados semeados também alimentam o `restore.sh --verificar` (STORY-1.4):
 # sem conversa e sem anexo, o teste de restore não prova nada.
 #
-# ⚠️ AMBIENTE DE DESENVOLVIMENTO/STAGING. Em produção este script não roda
-#    (aborta se DOMAIN não for localhost) — não se semeia lixo em prod.
+# ⚠️ AMBIENTE DE DESENVOLVIMENTO/STAGING. Exige o opt-in explícito
+#    SMOKE_EU_SEI_O_QUE_ESTOU_FAZENDO=1 — não se semeia lixo em prod.
 # ═══════════════════════════════════════════════════════════════════
 set -euo pipefail
 
@@ -27,9 +27,14 @@ COMPOSE="docker compose -f ${RAIZ}/deploy/docker-compose.yml --env-file ${ENV_FI
 # aspas seria interpretado pelo shell). Aqui só entram chaves NÃO-secretas.
 env_get() { sed -n "s/^$1=//p" "$ENV_FILE" | head -1 | sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
 
-DOMAIN="$(env_get DOMAIN)"
-if [ "${DOMAIN:-}" != "localhost" ]; then
-  echo "[smoke] abortado: DOMAIN=${DOMAIN} não é 'localhost'. Este script só roda em dev/staging."
+# Este script SEMEIA e APAGA uma conta de teste: nunca pode rodar em produção.
+# O guard antigo era `DOMAIN != localhost`, e a chave DOMAIN morreu com o Caddy.
+# O novo guard é a porta: a central só escuta em 127.0.0.1, e exigir o opt-in
+# explícito impede que um cron o dispare por engano.
+PORTA="$(env_get CHATWOOT_HOST_PORT)"; PORTA="${PORTA:-3001}"
+if [ "${SMOKE_EU_SEI_O_QUE_ESTOU_FAZENDO:-}" != "1" ]; then
+  echo "[smoke] abortado: este script cria e apaga uma conta no banco."
+  echo "[smoke] rode com  SMOKE_EU_SEI_O_QUE_ESTOU_FAZENDO=1 bash scripts/smoke-test.sh"
   exit 1
 fi
 
@@ -108,10 +113,10 @@ falhou=0
 [ "$ARQUIVOS" -ge 1 ] || { echo "[smoke] FALHOU: volume de anexos vazio após restart."; falhou=1; }
 [ "$falhou" = 0 ] || exit 1
 
-# ── 4. A UI responde em HTTPS pelo Caddy ───────────────────────────
-CODIGO="$(curl -sk -o /dev/null -w '%{http_code}' --resolve "inbox.${DOMAIN}:443:127.0.0.1" "https://inbox.${DOMAIN}/app/login")"
-echo "[smoke] https://inbox.${DOMAIN}/app/login → HTTP ${CODIGO}"
-[ "$CODIGO" = "200" ] || [ "$CODIGO" = "302" ] || { echo "[smoke] FALHOU: UI não respondeu em HTTPS."; exit 1; }
+# ── 4. A UI responde na porta publicada ────────────────────────────
+CODIGO="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "http://127.0.0.1:${PORTA}/app/login")"
+echo "[smoke] http://127.0.0.1:${PORTA}/app/login → HTTP ${CODIGO}"
+[ "$CODIGO" = "200" ] || [ "$CODIGO" = "302" ] || { echo "[smoke] FALHOU: UI não respondeu."; exit 1; }
 
 # ── 5. Limpeza — o smoke NÃO pode deixar conta para trás ───────────
 # Aprendido do jeito difícil (2026-07-13): a conta semeada aqui SOBREVIVEU ao

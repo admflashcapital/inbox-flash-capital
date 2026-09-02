@@ -179,13 +179,17 @@ if [ "$aceito_pelo_google" != "true" ]; then
   echo "      A dança falharia com redirect_uri_mismatch."
   echo
   echo "      O Google exige HTTPS, e só isenta o localhost PURO. Um subdomínio como"
-  echo "      'inbox.localhost' NÃO é isento — por isso, em dev, a central é alcançada"
-  echo "      por uma ponte de loopback em http://localhost:3000."
+  echo "      'inbox.localhost' NÃO é isento — foi por isso que existiu a ponte socat."
+  echo "      Desde o AD-10 a central publica direto em 127.0.0.1, então a ponte morreu:"
+  echo "      a própria FRONTEND_URL já é um redirect URI aceitável."
   echo
-  echo "      Válido:   https://inbox.<DOMAIN>   (produção)"
-  echo "                http://localhost:3000    (dev, com a ponte de pé)"
+  echo "      Válido:   http://localhost:<CHATWOOT_HOST_PORT>   (dev — hoje 3001)"
+  echo "                https://<host-publico>                  (quando houver ingresso)"
   echo
-  echo "      Passo a passo: docs/runbook-canal-email.md § Passo 5"
+  echo "      ⚠️  A porta precisa constar em Authorized redirect URIs no Google Cloud,"
+  echo "          com o sufixo /google/callback. Trocou a porta? Cadastre a nova."
+  echo
+  echo "      Passo a passo: docs/runbook-canal-email.md"
   exit 1
 fi
 

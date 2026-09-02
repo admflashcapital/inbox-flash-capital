@@ -42,10 +42,11 @@ echo "── AD-9 — banco da central isolado (STORY-1.2) ───────
 # 1. Nenhuma credencial de BANCO de domínio mora no .env da central.
 #
 # A linha é entre BANCO e API de canal, e não no nome do sistema:
-#   ❌ EVOLUTION_DB_PASSWORD, TWENTY_*, SUPABASE_*, *_CONNECTION_URI  → cross-DB (AD-9)
-#   ✅ EVOLUTION_URL / EVOLUTION_API_KEY                              → adapter de canal (AD-4)
-# A central FALA com a Evolution por HTTP (é assim que o WhatsApp entra); o que
-# ela não pode é abrir conexão em banco de domínio nenhum.
+#   ❌ TWENTY_*, SUPABASE_*, *_DB_*, *_CONNECTION_URI  → cross-DB (AD-9)
+#   ✅ TWILIO_ACCOUNT_SID, GOOGLE_OAUTH_*              → adapter de canal (AD-4)
+# A central FALA com provedor de canal por HTTP; o que ela não pode é abrir
+# conexão em banco de domínio nenhum. O padrão EVOLUTION_* segue no regex de
+# propósito: é guarda barata contra alguém ressuscitar a integração pelo banco.
 VAZADAS="$(grep -oE '^[A-Z_0-9]*(TWENTY|SUPABASE)[A-Z_0-9]*=|^[A-Z_0-9]*(EVOLUTION|N8N|CHATWOOT)[A-Z_0-9]*(DB|DATABASE|CONNECTION_URI|POSTGRES)[A-Z_0-9]*=' "$ENV_FILE" 2>/dev/null | tr -d '=' | tr '\n' ' ')"
 if [ -n "$VAZADAS" ]; then
   falha "o .env da central tem credencial de BANCO de domínio: ${VAZADAS}(AD-9: sem cross-DB)"
@@ -94,20 +95,37 @@ fi
 
 echo
 echo "── AD-8 — superfície e segredos (STORY-1.1) ───────────────────"
-# Só o Caddy pode publicar porta no host.
+# AD-10: nada publica em 0.0.0.0. Só `chatwoot-web`, e só em 127.0.0.1 — é o
+# navegador do colaborador, e mais ninguém. A asserção é sobre o IP de bind,
+# não sobre o nome do serviço: publicar em 0.0.0.0 sem TLS é o erro que ela
+# existe para pegar.
+EXPOSTOS="$($COMPOSE config --format json 2>/dev/null \
+  | python3 -c "
+import sys, json
+s = json.load(sys.stdin)['services']
+ruins = []
+for nome, cfg in s.items():
+    for p in cfg.get('ports') or []:
+        ip = p.get('host_ip') if isinstance(p, dict) else None
+        if ip != '127.0.0.1':
+            ruins.append(f\"{nome}:{ip or '0.0.0.0'}\")
+print(' '.join(ruins))
+" 2>/dev/null)"
 PUBLICADORES="$($COMPOSE config --format json 2>/dev/null \
   | python3 -c "import sys,json; s=json.load(sys.stdin)['services']; print(' '.join(n for n,v in s.items() if v.get('ports')))" 2>/dev/null)"
-if [ "$PUBLICADORES" = "caddy" ]; then
-  ok "só o Caddy publica porta no host (Postgres/Redis/Rails na rede interna)"
+if [ -n "$EXPOSTOS" ]; then
+  falha "publicando fora de 127.0.0.1: ${EXPOSTOS} (AD-10: sem TLS, nada de LAN)"
+elif [ "$PUBLICADORES" = "chatwoot-web" ]; then
+  ok "só chatwoot-web publica porta, e só em 127.0.0.1 (Postgres/Redis na rede interna)"
 else
-  falha "serviços publicando porta no host: ${PUBLICADORES:-nenhum} (esperado: só 'caddy')"
+  falha "serviços publicando porta: ${PUBLICADORES:-nenhum} (esperado: só 'chatwoot-web')"
 fi
 
 # O .env não pode estar versionado.
-if git -C "$RAIZ" ls-files --error-unmatch deploy/.env >/dev/null 2>&1; then
-  falha "deploy/.env está VERSIONADO no git — revogue os segredos e remova do índice"
+if git -C "$RAIZ" ls-files --error-unmatch deploy/.env .env >/dev/null 2>&1; then
+  falha ".env está VERSIONADO no git — revogue os segredos e remova do índice"
 else
-  ok "deploy/.env não está versionado"
+  ok ".env não está versionado"
 fi
 
 # ── .env e .env.example têm que ter EXATAMENTE o mesmo conjunto de chaves ──
@@ -182,22 +200,24 @@ if $COMPOSE ps --status running --services 2>/dev/null | grep -q '^postgres$'; t
   fi
 fi
 
-# ── O token da API tem que sobreviver ao Caddy ────────────────────
-# O Caddy 2.11 descarta header com underscore (anti request-smuggling), e o
-# Chatwoot autentica com `api_access_token`. Sem a ponte hífen→underscore no
-# Caddyfile, todo cliente de API que use a URL PÚBLICA leva 401 sem entender
-# por quê. Prova viva, não inspeção de config.
+# ── A API da central responde autenticada ─────────────────────────
+# Prova viva, não inspeção de config: o monorepo espelha os disparos por esta
+# mesma API (AD-6), com este mesmo token. Se ela não responde 200, o espelho
+# fica mudo — e ele falha em SILÊNCIO por design (AD-12), então esta é a única
+# chance de o problema aparecer.
 TOKEN="$(env_get CENTRAL_ACCESS_TOKEN)"
-DOM="$(env_get DOMAIN)"; DOM="${DOM:-localhost}"
 CONTA="$(env_get CENTRAL_ACCOUNT_ID)"
-if [ -n "$TOKEN" ] && [ -n "$CONTA" ] && $COMPOSE ps --status running --services 2>/dev/null | grep -q '^caddy$'; then
-  CODIGO="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 \
-    -H "api-access-token: ${TOKEN}" "https://inbox.${DOM}/api/v1/accounts/${CONTA}/inboxes" 2>/dev/null)"
+PORTA="$(env_get CHATWOOT_HOST_PORT)"; PORTA="${PORTA:-3001}"
+if [ -n "$TOKEN" ] && [ -n "$CONTA" ] && $COMPOSE ps --status running --services 2>/dev/null | grep -q '^chatwoot-web$'; then
+  CODIGO="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
+    -H "api_access_token: ${TOKEN}" "http://127.0.0.1:${PORTA}/api/v1/accounts/${CONTA}/inboxes" 2>/dev/null)"
   if [ "$CODIGO" = "200" ]; then
-    ok "o token da API sobrevive ao Caddy (ponte hífen→underscore ativa)"
+    ok "a API da central responde 200 em 127.0.0.1:${PORTA} (é por aqui que o espelho entra)"
   else
-    falha "a API da central pela URL pública devolveu HTTP ${CODIGO} — o Caddy está comendo o token (falta a ponte 'header_up api_access_token' no Caddyfile)"
+    falha "a API da central em 127.0.0.1:${PORTA} devolveu HTTP ${CODIGO} — com isso o espelho do monorepo fica mudo"
   fi
+else
+  falha "não deu para provar a API ao vivo (stack parada, ou CENTRAL_ACCESS_TOKEN/CENTRAL_ACCOUNT_ID vazios)"
 fi
 
 echo

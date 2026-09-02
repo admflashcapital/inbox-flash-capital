@@ -2,7 +2,7 @@
 
 > ### ⚠️ DOC EM TRANSIÇÃO — Fase 1.3
 >
-> **Vigente.** Dois pontos mudam: os comandos `make gmail*` viram `bash scripts/conectar-gmail.sh` (AD-10), e a **§5 (ponte socat) continua sendo o caminho válido** — ela só sai quando houver URL pública, o que ainda não está decidido. O `refresh_token` já obtido não é afetado por mudança de `FRONTEND_URL`; só um consent **novo** exigiria revogar o grant antigo.
+> **Vigente e as-built desde 2026-09-02 (AD-10).** A central publica em `127.0.0.1:${CHATWOOT_HOST_PORT}` (hoje 3001), então a antiga ponte socat do Passo 5 **foi removida** — a própria `FRONTEND_URL` já é um redirect URI que o Google aceita. O `refresh_token` já obtido não é afetado por mudança de `FRONTEND_URL`; só um consent **novo** exige o redirect URI novo cadastrado e a revogação do grant antigo.
 >
 > Ver **AD-10..AD-13** em `inbox/docs/architecture.md`, **ADR-010** em `crm/docs/07_Decisoes.md`, e o `HANDOFF-espelho-chatwoot.md`.
 
@@ -48,15 +48,17 @@ Pode ser no **mesmo projeto** onde a service account já vive.
 
    | Ambiente | Redirect URI |
    |---|---|
-   | **dev** | `http://localhost:3000/google/callback` |
-   | produção | `https://inbox.<DOMAIN>/google/callback` |
+   | **dev** | `http://localhost:3001/google/callback` (a `CHATWOOT_HOST_PORT`) |
+   | com ingresso | `https://<host-publico>/google/callback` |
 
-   Pode registrar **os dois** no mesmo client — o Google aceita vários.
+   Pode registrar **os dois** no mesmo client — o Google aceita vários. E deixe o antigo
+   `http://localhost:3000/google/callback` cadastrado: não custa nada e cobre quem ainda tiver
+   um `.env` com a porta velha.
 
-   > **Por que `http://localhost:3000` e não `https://inbox.localhost`:** as regras de validação do
+   > **Por que `http://localhost:3001` e não `https://inbox.localhost`:** as regras de validação do
    > Google exigem HTTPS **exceto para `localhost`**, que é isento. Mas a isenção vale para o
-   > `localhost` **puro** — `inbox.localhost` é um **subdomínio** e é recusado. Daí a ponte de
-   > loopback do Passo 5.
+   > `localhost` **puro** — `inbox.localhost` é um **subdomínio** e é recusado. Como a central agora
+   > publica direto em loopback, o `localhost` puro é o endereço real dela, e não mais um artifício.
 4. Guarde o **Client ID** e o **Client secret**.
 
 > **Escopo:** o Chatwoot pede `email profile https://mail.google.com/` (`GoogleConcern#scope`) —
@@ -99,93 +101,44 @@ Cria a inbox `E-mail` (`Channel::Email`) com o endereço da caixa e devolve a **
 > (`find_channel_by_email`) e só anexa os tokens.
 
 ---
-
-## Passo 4 — Autorizar (produção)
+## Passo 4 — Autorizar
 
 Abra a URL devolvida, **logado na caixa de atendimento**, e conceda o acesso. O Google redireciona
-para `/google/callback`, o Chatwoot troca o `code` por tokens e grava tudo.
+para `<FRONTEND_URL>/google/callback`, o Chatwoot troca o `code` por tokens e grava tudo.
 
-> ⏱️ O `state` da URL é um sgid assinado que **expira em 15 minutos**. Demorou? `make gmail-url`.
+> ⏱️ O `state` da URL é um sgid assinado que **expira em 15 minutos**. Demorou? gere outra com
+> `bash scripts/conectar-gmail.sh --url`.
 
----
+### O redirect precisa estar cadastrado no Google Cloud
 
-## Passo 5 — Autorizar em dev (ponte de loopback — **NÃO use ngrok**)
+O redirect do OAuth é seguido pelo **seu navegador**, não pelo servidor do Google: ele só precisa ser
+alcançável **da sua máquina**. A central nunca precisa estar exposta na internet para isto (AD-11).
 
-O redirect do OAuth é seguido pelo **seu navegador**, não pelo servidor do Google. Logo, ele só
-precisa ser alcançável **da sua máquina** — e `http://localhost` é isento da exigência de HTTPS do
-Google. Não é preciso expor a central na internet.
+O Google exige HTTPS **exceto para `localhost`**, que é isento — mas a isenção vale para o `localhost`
+**puro**: `inbox.localhost` é subdomínio e é recusado.
 
-### ⚠️ Por que NÃO ngrok aqui
+| Ambiente | Authorized redirect URI |
+|---|---|
+| dev | `http://localhost:3001/google/callback` (= `CHATWOOT_HOST_PORT`) |
+| com ingresso | `https://<host-publico>/google/callback` |
 
-Este host já roda **dois túneis ngrok que são carga viva do monorepo**: um para o `fastapi_api`
-(porta 8001) — que é o **webhook do Twilio** e o `PUBLIC_BOLETO_BASE_URL` — e outro para o Supabase
-(54321). Os dois em URL **efêmera** do plano free.
+**Trocou `CHATWOOT_HOST_PORT`? Cadastre a porta nova antes de mexer na `FRONTEND_URL`** — senão o
+consent falha com `redirect_uri_mismatch`.
 
-Subir um **terceiro** agente esbarra no limite de sessões simultâneas do plano — e o candidato a cair
-é justamente o do Twilio. **Foi exatamente assim que a confirmação de sacado ficou quebrada por 10
-dias sem ninguém notar.** Não vale o risco por uma dança de OAuth de dois minutos.
-
-### 5a. Suba a ponte de loopback
-
-O `chatwoot-web` não publica porta no host (só o Caddy publica — invariante do `make check`). A ponte
-liga `127.0.0.1:3000` do host ao container, pela rede compartilhada:
-
-```bash
-docker run --rm -d --name inbox-oauth-bridge --network flash-canais \
-  -p 127.0.0.1:3000:3000 alpine/socat \
-  tcp-listen:3000,fork,reuseaddr tcp-connect:chatwoot-web:3000
-
-curl -s -o /dev/null -w '%{http_code}\n' http://localhost:3000/    # espere 200
-```
-
-Escuta **só em `127.0.0.1`** (nada exposto na rede) e vive **fora do compose** — então não viola o
-`make check`. É temporária: derrube no Passo 5d.
-
-> **WSL2:** o encaminhamento automático de localhost faz o navegador do Windows alcançar a ponte que
-> roda no WSL. Funciona sem configuração extra.
-
-### 5b. Aponte a `FRONTEND_URL` para a ponte, temporariamente
-
-No `deploy/.env`:
-
-```ini
-FRONTEND_URL=http://localhost:3000
-```
-
-```bash
-make up      # sem restart, a chave nova não chega no container
-```
-
-É de `FRONTEND_URL` que saem **as duas** URLs que precisam bater: a do consentimento
-(`OauthAuthorizationController#base_url`) e a da troca do `code` (`OauthCallbackController#show`).
-Se divergirem entre si ou do que está registrado no Google → `redirect_uri_mismatch`.
-
-### 5c. Autorize
-
-```bash
-make gmail-url     # gera a URL de consentimento com a FRONTEND_URL nova
-```
-
-Abra no navegador, **logado na caixa de atendimento**, e conceda o acesso.
-
-### 5d. Devolva a `FRONTEND_URL` e derrube a ponte
-
-```bash
-# no deploy/.env: FRONTEND_URL=https://inbox.localhost
-make up
-docker rm -f inbox-oauth-bridge
-make email         # prova que o canal continua vivo SEM a ponte
-```
-
-O canal continua funcionando: o `refresh_token` já está gravado e o refresh usa
-`grant_type=refresh_token`, que **não usa `redirect_uri`**. A ponte era só para o clique.
-
-> **Em produção não existe esse problema:** a central tem domínio público
-> (`https://inbox.<DOMAIN>`), então o redirect URI real já serve. A ponte é artefato de dev.
+> 📦 **Histórico — a ponte socat (removida em 2026-09-02).** Até o AD-10, a central não publicava porta:
+> quem tinha 80/443 era o Caddy, servindo `https://inbox.localhost` — um subdomínio, que o Google recusa.
+> A saída era subir um `alpine/socat` ligando `127.0.0.1:3000` do host ao `chatwoot-web:3000` só durante
+> o clique do consent, com a `FRONTEND_URL` apontada para a ponte e devolvida depois. Com a central
+> publicando direto em `127.0.0.1:${CHATWOOT_HOST_PORT}`, a ponte deixou de ter função: a própria
+> `FRONTEND_URL` já é um redirect URI aceitável. O passo inteiro (~65 linhas) saiu.
+>
+> Continua valendo o que ela ensinou: **ngrok não serve aqui** — URL efêmera exigiria recadastrar o
+> redirect URI a cada sessão, e expor a central para resolver um clique local é trocar um problema
+> pequeno por uma superfície de ataque.
 
 ---
 
-## Passo 6 — Verificar
+## Passo 5 — Verificar
 
 ```bash
 make email          # invariantes do canal
