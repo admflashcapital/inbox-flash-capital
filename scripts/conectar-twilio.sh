@@ -80,7 +80,12 @@ cw_curl() {  # cw_curl <método> <caminho>   [corpo JSON por stdin]
     printf 'request = "%s"\n' "$metodo"
     printf 'url = "%s"\n' "${CENTRAL_URL}${caminho}"
     printf 'silent\nshow-error\nwrite-out = "\\n%%{http_code}"\n'
-    [ -n "$corpo" ] && printf 'data-binary = "%s"\n' "$(printf '%s' "$corpo" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+    # `if`, não `[ … ] &&`: como esta é a ÚLTIMA linha do grupo, um teste falso
+    # viraria o status do grupo inteiro. Com `pipefail` + `set -e` isso mata o
+    # script em TODO GET (corpo vazio) — silenciosamente, sem imprimir nada.
+    if [ -n "$corpo" ]; then
+      printf 'data-binary = "%s"\n' "$(printf '%s' "$corpo" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+    fi
   } | curl --config - --max-time 30
 }
 
