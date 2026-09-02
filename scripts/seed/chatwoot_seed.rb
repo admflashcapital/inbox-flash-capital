@@ -119,10 +119,14 @@ GlobalConfig.clear_cache if defined?(GlobalConfig) && GlobalConfig.respond_to?(:
 # `attribute_key` casa exatamente o que `api/integrations/chatwoot/atributos.py`
 # monta no monorepo. Divergiu = atributo órfão, gravado e nunca exibido.
 ATRIBUTOS_DA_CONVERSA = [
-  { chave: "titulo_id",       nome: "Título",         tipo: :text,     desc: "Id do boleto em internal.boletos" },
-  { chave: "cnpj",            nome: "CNPJ/CPF",       tipo: :text,     desc: "Documento do sacado (CPF quando pessoa física)" },
+  { chave: "titulo_id",       nome: "Título",          tipo: :text,     desc: "Id do boleto em internal.boletos. Vazio quando o disparo cobre um LOTE — o id de um título só descreveria parte dele" },
+  { chave: "cnpj",            nome: "CNPJ/CPF",        tipo: :text,     desc: "Documento do sacado (CPF quando pessoa física)" },
+  { chave: "cedente",         nome: "Cedente",         tipo: :text,     desc: "De quem é o título — a primeira pergunta de quem atende" },
+  { chave: "numero_nf",       nome: "Nota fiscal",     tipo: :text,     desc: "A referência que o cliente cita. Vazio em lote" },
+  { chave: "data_vencimento", nome: "Vencimento",      tipo: :text,     desc: "Vencimento do título. Vazio em lote" },
   { chave: "valor_em_aberto", nome: "Valor em aberto", tipo: :currency, desc: "Soma do lote disparado, com multa e mora quando já calculados" },
-  { chave: "dias_atraso",     nome: "Dias de atraso",  tipo: :number,   desc: "Dias úteis; 0 significa vence hoje" }
+  { chave: "dias_atraso",     nome: "Dias de atraso",  tipo: :number,   desc: "Dias úteis; 0 significa vence hoje. Só o disparo da régua preenche" },
+  { chave: "link_boleto",     nome: "Boleto (PDF)",    tipo: :link,     desc: "A mesma URL que a Twilio entregou como anexo ao cliente" }
 ]
 
 ATRIBUTOS_DA_CONVERSA.each do |a|

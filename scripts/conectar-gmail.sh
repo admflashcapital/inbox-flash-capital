@@ -46,7 +46,7 @@ CENTRAL_URL="http://127.0.0.1:${PORTA}"
 CONTA="$(env_get CENTRAL_ACCOUNT_ID)"
 NOME_INBOX="$(env_get INBOX_EMAIL_NOME)"; NOME_INBOX="${NOME_INBOX:-E-mail}"
 CAIXA="$(env_get GMAIL_CAIXA_ATENDIMENTO)"
-FRONTEND_URL="$(env_get FRONTEND_URL)"
+CENTRAL_URL_PUBLICA="$(env_get CENTRAL_URL_PUBLICA)"
 DB="$(env_get POSTGRES_DATABASE)"
 
 # Secreto: expandido DENTRO do container, nunca no argv do host.
@@ -54,7 +54,7 @@ CENTRAL_ACCESS_TOKEN="$(env_get CENTRAL_ACCESS_TOKEN)"
 
 faltando=""
 for chave in CENTRAL_ACCOUNT_ID CENTRAL_ACCESS_TOKEN GMAIL_CAIXA_ATENDIMENTO \
-             GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET FRONTEND_URL; do
+             GOOGLE_OAUTH_CLIENT_ID GOOGLE_OAUTH_CLIENT_SECRET CENTRAL_URL_PUBLICA; do
   [ -n "$(env_get "$chave")" ] || faltando="${faltando} ${chave}"
 done
 if [ -n "$faltando" ]; then
@@ -165,8 +165,8 @@ except Exception:
   echo "[gmail] inbox criada (id ${INBOX_ID}). Ainda SEM tokens — falta autorizar no Google."
 fi
 
-# ── Guard: a FRONTEND_URL precisa ser um redirect URI que o Google ACEITA ──
-# O redirect é montado de FRONTEND_URL (OmniAuth.config.full_host), e o
+# ── Guard: a CENTRAL_URL_PUBLICA precisa ser um redirect URI que o Google ACEITA ──
+# O redirect é montado de CENTRAL_URL_PUBLICA (OmniAuth.config.full_host), e o
 # OauthCallbackController repete a MESMA URL na troca do code.
 #
 # Regra de validação do Google para client "Web application":
@@ -176,21 +176,21 @@ fi
 # e é RECUSADO — é por isso que em dev usamos a ponte de loopback na 3000.
 aceito_pelo_google=false
 # produção: https em domínio público
-printf '%s' "$FRONTEND_URL" | grep -qE '^https://[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*\.[a-zA-Z]{2,}(:[0-9]+)?(/|$)' \
-  && ! printf '%s' "$FRONTEND_URL" | grep -qE '\.localhost(:[0-9]+)?(/|$)' \
+printf '%s' "$CENTRAL_URL_PUBLICA" | grep -qE '^https://[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*\.[a-zA-Z]{2,}(:[0-9]+)?(/|$)' \
+  && ! printf '%s' "$CENTRAL_URL_PUBLICA" | grep -qE '\.localhost(:[0-9]+)?(/|$)' \
   && aceito_pelo_google=true
 # dev: localhost puro (http permitido pela isenção do Google)
-printf '%s' "$FRONTEND_URL" | grep -qE '^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?(/|$)' \
+printf '%s' "$CENTRAL_URL_PUBLICA" | grep -qE '^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?(/|$)' \
   && aceito_pelo_google=true
 
 if [ "$aceito_pelo_google" != "true" ]; then
   echo
-  echo "  ⚠️  FRONTEND_URL='${FRONTEND_URL}' NÃO é um redirect URI que o Google aceita."
+  echo "  ⚠️  CENTRAL_URL_PUBLICA='${CENTRAL_URL_PUBLICA}' NÃO é um redirect URI que o Google aceita."
   echo "      A dança falharia com redirect_uri_mismatch."
   echo
   echo "      O Google exige HTTPS, e só isenta o localhost PURO — um subdomínio como"
   echo "      'inbox.localhost' NÃO é isento. Por isso a central publica direto em"
-  echo "      127.0.0.1 (AD-10): a própria FRONTEND_URL já é um redirect URI aceitável."
+  echo "      127.0.0.1 (AD-10): a própria CENTRAL_URL_PUBLICA já é um redirect URI aceitável."
   echo
   echo "      Válido:   http://localhost:<CHATWOOT_HOST_PORT>   (dev — hoje 3001)"
   echo "                https://<host-publico>                  (quando houver ingresso)"

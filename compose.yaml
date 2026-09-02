@@ -60,6 +60,12 @@ x-chatwoot-base: &chatwoot-base
     NODE_ENV: production
     RAILS_ENV: production
     INSTALLATION_ENV: docker
+    # `FRONTEND_URL` é nome do CHATWOOT (lido em config/environments/*.rb e no
+    # mailer) — não dá para renomear sem fork, e fork é proibido (AD-7). Mas a
+    # chave que um humano edita no `.env` pode ter nome próprio: o monorepo tem a
+    # SUA `FRONTEND_URL`, com outro valor, e ler as duas no mesmo dia já confundiu.
+    # Aqui o mapeamento traduz na fronteira do container.
+    FRONTEND_URL: ${CENTRAL_URL_PUBLICA:?defina CENTRAL_URL_PUBLICA no .env}
   volumes:
     - storage_data:/app/storage
   networks:
