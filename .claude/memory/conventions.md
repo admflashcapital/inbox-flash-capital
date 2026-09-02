@@ -36,7 +36,7 @@
 
 ## Infra
 
-- `deploy/docker-compose.yml` + `deploy/Caddyfile` + `deploy/.env.example`
+- `compose.yaml` + `(removido — Caddy)` + `.env.example`
 - Imagem do Chatwoot **sempre com tag explícita** — `latest` é proibido (AD-7/FR-2)
 - Upgrade: bump da tag + migrações, **validado em staging antes de produção**
 

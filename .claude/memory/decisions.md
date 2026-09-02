@@ -53,7 +53,7 @@ oficial. Cold outreach queima reputação — e um número queimado leva o canal
 **Modo espelho na prospecção (decisão de operação, 2026-07-13).** Na inbox `WhatsApp Prospecção`
 quem responde o lead é o **Agente N8N**; a central **só espelha** (a atendente acompanha, não digita).
 Enquanto não existir handoff, uma resposta digitada ali chegaria **em dobro** ao lead. Não é só
-combinado: `MODO_ESPELHO_PROSPECCAO=true` faz `make aquecimento` **falhar** se aparecer resposta
+combinado: `MODO_ESPELHO_PROSPECCAO=true` faz `(removido — Evolution)` **falhar** se aparecer resposta
 digitada nessa inbox. O AC da STORY-2.1 ("responder pela central chega no lead") continua sendo a
 capacidade técnica a provar — mas **só em contato de teste**.
 

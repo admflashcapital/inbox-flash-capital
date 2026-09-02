@@ -2,7 +2,7 @@
 
 > ### ⚠️ DOC EM TRANSIÇÃO — Fase 1.3
 >
-> **Vigente e as-built desde 2026-09-02 (AD-10).** Sem Makefile e sem `deploy/`: o compose, o `.env` e os `scripts/` moram na raiz, e `docker compose` acha tudo sozinho — sem `-f` e sem `--env-file`.
+> **Vigente e as-built desde 2026-09-02 (AD-10).** Sem Makefile e sem a raiz do repo: o compose, o `.env` e os `scripts/` moram na raiz, e `docker compose` acha tudo sozinho — sem `-f` e sem `--env-file`.
 >
 > Ver **AD-10..AD-13** em `inbox/docs/architecture.md`, **ADR-010** em `crm/docs/07_Decisoes.md`, e o `HANDOFF-espelho-chatwoot.md`.
 
@@ -47,7 +47,7 @@ docker compose pull
 
 # 3. aplique as migrações ANTES de subir web e sidekiq.
 #    `chatwoot-init` roda `rails db:chatwoot_prepare` — one-shot e idempotente:
-#    cria o schema se for novo, migra se já existe. Era o antigo `make migrate`,
+#    cria o schema se for novo, migra se já existe. Era o antigo `docker compose run --rm chatwoot-init`,
 #    o único alvo do Makefile que não era alias óbvio de docker compose.
 docker compose run --rm chatwoot-init
 

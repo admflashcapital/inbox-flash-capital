@@ -1,140 +1,161 @@
 # Inbox Flash Capital
 
-Central de atendimento omnichannel da **Flash Capital** (FLASH SECURITIZADORA S.A, CNPJ
-52.297.978/0001-60). Consolida numa **única tela** os canais de conversa da Flash — dois WhatsApps
-e uma caixa de e-mail — usando **Chatwoot self-hosted** (Community Edition, imagem oficial, **sem
-fork**).
+Central de atendimento da **Flash Capital** (FLASH SECURITIZADORA S.A, CNPJ 52.297.978/0001-60).
+Consolida numa **única tela** os canais de conversa da Flash — o WhatsApp oficial e a caixa de
+e-mail — usando **Chatwoot self-hosted** (Community Edition, imagem oficial, **sem fork**).
 
 O princípio inegociável: **o Chatwoot é espelho e cockpit, não fonte da verdade.** As conversas são
-dele; os dados de negócio continuam no CRM (Twenty) e na plataforma interna (Supabase). O contexto
-chega ao operador **mastigado** — `titulo_id`, CNPJ, valor e dias de atraso carimbados nos
+dele; os dados de negócio continuam na plataforma interna (Supabase/monorepo). O contexto chega ao
+operador **mastigado** — `titulo_id`, CNPJ, valor e dias de atraso carimbados nos
 `custom_attributes` da conversa **no instante do disparo** — sem que a central consulte banco de
 domínio nenhum.
 
-> ### ⚠️ REESCOPO 2026-09-02
+> ### Estado — 2026-09-02
 >
-> **O MVP são 2 canais, não 3** — WhatsApp Oficial (Twilio) e E-mail (Gmail). O canal de prospecção via
-> Evolution (EPIC-2) e o Serviço de Sync (EPIC-5) foram **cancelados**; Caddy, Makefile e a rede
-> `flash-canais` saem, e a central passa a publicar **só em `127.0.0.1:3001`**. Ela **nunca** é site
-> público. Decisões em `docs/architecture.md` **AD-10..AD-13**; roteiro no `HANDOFF-espelho-chatwoot.md`.
-> **Escopo vigente: 16 stories.**
+> **O MVP são 2 canais, não 3.** O canal de prospecção via Evolution (EPIC-2) e o Serviço de Sync
+> (EPIC-5) foram **cancelados**. Caddy, Makefile e a rede `flash-canais` saíram; a central publica
+> **só em `127.0.0.1:3001`** e **nunca** é site público.
+>
+> **Fase 0 e Fase 1 concluídas.** Escopo vigente: **16 stories**. Decisões em
+> `docs/architecture.md` **AD-10..AD-13**; roteiro no `HANDOFF-espelho-chatwoot.md` em `~/projects/`.
+>
+> **EPIC-1, EPIC-3 e a STORY-4.1 fechados e verificados ao vivo.** A central sobe com um comando,
+> tem backup/restore ensaiados e banco isolado. O **número oficial (Twilio) está em produção**:
+> recebe do cliente, responde dentro da janela de 24h e espelha os disparos de cobrança do
+> monorepo — **sem reenviá-los**. A caixa `operacional@` recebe e responde na mesma thread.
+>
+> ⚠️ O código do espelho vive na linhagem `feat/espelho-chatwoot` do monorepo, que **ainda não está
+> na `main` de lá** (é ancestral de `feat/regua-comunicacao-v2`, e entra junto com a régua).
 
-> **Status: EPIC-1 e EPIC-3 concluídos; EPIC-2 pronto até onde é automatizável (7/19 stories).**
-> A central sobe com um comando (`make up`), responde em HTTPS, tem backup/restore validados e banco
-> isolado. O **número oficial (Twilio) está em produção**: recebe mensagem do cliente, responde pela
-> central dentro da janela de 24h e espelha os disparos de cobrança do monorepo — **sem reenviá-los**
-> (⚠️ o espelho vive na branch `feat/espelho-chatwoot` do monorepo, **ainda não mergeada na `main` de
-> lá** — até o merge+deploy, ele não roda em produção).
-> O canal de **prospecção** está ligado à Evolution com fan-out verificado; falta **parear o chip**.
-> Checklists em `docs/runbook-canal-oficial.md` e `docs/runbook-canal-prospeccao.md`.
-
-## As 3 inboxes do MVP
+## As 2 inboxes do MVP
 
 | Inbox | Número/caixa | Provider | Uso |
 |---|---|---|---|
-| `WhatsApp Prospecção` | chip novo pré-pago | Evolution API (roda no CRM) | recepciona leads pescados — **só inbound** |
 | `WhatsApp Oficial` | número Meta/Twilio | Twilio (roda no monorepo) | cobrança e transacional |
-| `E-mail` | caixa Gmail | IMAP/SMTP | atendimento por e-mail |
+| `E-mail` | caixa Gmail | IMAP/SMTP com OAuth | atendimento por e-mail |
+
+Os nomes são **fixos**: é por eles que o `chatwoot-seed` decide se cria ou reaproveita. Renomear
+pela UI faz o seed criar uma inbox duplicada.
 
 **Prospecção fria sai por e-mail, nunca por WhatsApp.** A segmentação de risco é de propósito: um
-número queimado por cold outreach levaria o canal de cobrança junto.
+número queimado por cold outreach levaria o canal de cobrança junto. Foi para proteger isso que
+existiu o número de prospecção; com o EPIC-2 cancelado, o guardrail fica pela via mais simples —
+**a central só tem o número oficial**.
 
 ## Arquitetura em uma tela
 
-**Hub-and-spoke com enriquecimento por eventos unidirecional.**
+**Hub-and-spoke com enriquecimento unidirecional.** Ninguém alcança a central de fora.
 
 ```
-   Canais (spokes)                Central (hub)              Domínio (verdade)
-   ┌──────────────┐            ┌────────────────┐         ┌──────────────────┐
-   │ Evolution    │──fan-out──▶│                │         │ Twenty CRM       │
-   │ (nº prospec) │──fan-out──▶│    Chatwoot    │         │ (leads)          │
-   ├──────────────┤            │  espelho +     │         ├──────────────────┤
-   │ Twilio       │───────────▶│    cockpit     │         │ Supabase/monorepo│
-   │ (nº oficial) │            │                │         │ (cedentes,       │
-   ├──────────────┤            │                │         │  cobrança)       │
-   │ Gmail (IMAP) │───────────▶│                │         └────────┬─────────┘
-   └──────────────┘            └───────▲────────┘                  │
-                                       │  labels + atributos       │ eventos
-                                 ┌─────┴───────────┐               │
-                                 │ Serviço de Sync │◀──────────────┘
-                                 │  (FastAPI)      │
-                                 └─────────────────┘
+   Canais (spokes)                  Central (hub)            Domínio (verdade)
+   ┌──────────────┐              ┌────────────────┐        ┌──────────────────┐
+   │ Twilio       │              │                │        │ Supabase/monorepo│
+   │ (nº oficial) │──┐           │    Chatwoot    │        │ (cedentes,       │
+   └──────────────┘  │           │  espelho +     │        │  cobrança)       │
+                     │           │    cockpit     │        └────────┬─────────┘
+   ┌──────────────┐  │           │                │                 │
+   │ Gmail (IMAP) │──┼──polling─▶│  127.0.0.1:3001│◀────────────────┘
+   └──────────────┘  │  DE SAÍDA └───────▲────────┘   push do espelho
+                     │                   │            (rede flash-espelho,
+                     └──▶ MONOREPO ──────┘             2 membros, nada publicado)
+                         valida a assinatura
+                         e faz o fan-out
+
               A central NUNCA consulta o domínio. O domínio empurra. ✗───▶
+              A Twilio NUNCA fala com a central. Fala com o monorepo. ✗───▶
 ```
 
 - **Hub** — Chatwoot: conversa, contato, labels, atribuição, relatório.
-- **Adapters** — Evolution / Twilio / Gmail. Trocar provider não muda o modelo de conversa.
-- **Bridge** — **Serviço de Sync** (Python/FastAPI): resolve identidade (**E.164 + documento**) e
-  empurra labels/atributos. **Único componente construído do zero.**
-- **Domínio** — Twenty e Supabase: fontes da verdade. Emitem eventos; nunca são consultados em runtime.
+- **Adapters** — Twilio e Gmail. Trocar provider não muda o modelo de conversa.
+- **Domínio** — Supabase/monorepo: fonte da verdade. Empurra; nunca é consultado em runtime.
 
-Consequência prática: **Twenty ou Supabase fora do ar não derruba o atendimento** — só deixa o
-enriquecimento desatualizado.
+Só existem **dois consumidores** da central: o navegador do colaborador (autenticado, em loopback)
+e o monorepo (máquina-a-máquina, pela rede `flash-espelho`). Consequência prática: **domínio fora
+do ar não derruba o atendimento** — só deixa o enriquecimento desatualizado.
 
-Detalhe completo (AD-1..AD-9, diagramas, ERD, convenções) em **`docs/architecture.md`**.
+E a recíproca, que é a decisão cara (AD-12): **o espelho não tem retry, fila nem backfill**. Cada
+minuto com a central inalcançável é um **buraco permanente** no painel, não um atraso.
+
+Detalhe completo (AD-1..AD-13, diagramas, ERD, convenções) em **`docs/architecture.md`**.
+
+## Subir o ambiente
+
+Não há Makefile e não há `deploy/`: o compose, o `.env` e os `scripts/` estão na raiz, então
+`docker compose` acha tudo sozinho — sem `-f`, sem `--env-file`.
+
+```bash
+cp .env.example .env                       # preencha os segredos (nunca commite o .env)
+docker compose up -d --wait                # sobe a central inteira e espera ficar saudável
+bash scripts/verificar-invariantes.sh      # tag fixa, banco isolado, nada fora de 127.0.0.1
+```
+
+A cadeia de boot é: `postgres`+`redis` healthy → **`chatwoot-init`** (migrações) →
+**`chatwoot-seed`** (canais e configs, idempotente) → `chatwoot-web` + `chatwoot-sidekiq`.
+
+UI em **http://localhost:3001** (a porta é `CHATWOOT_HOST_PORT`). **Primeiro boot de um ambiente
+novo:** o admin nasce em `/installation/onboarding` — conta e admin são criados juntos pelo
+Chatwoot, e a senha é escolha humana; o seed detecta e imprime o passo. Deste ponto em diante a
+stack sobe inteira sozinha. Signup público fica fechado.
+
+Stack: Chatwoot CE `v4.15.1-ce` (web + Sidekiq) · PostgreSQL 16 + pgvector · Redis 7 · Docker
+Compose v2. **Só isso.** Imagem do Chatwoot **sempre com tag fixa** — `latest` é proibido.
+
+| Runbook | Para quê |
+|---|---|
+| `docs/runbook-deploy.md` | subir em dev; passos manuais (`.env`, 1º admin) |
+| `docs/runbook-upgrade.md` | subir de versão do Chatwoot (staging antes de produção) |
+| `docs/runbook-backup.md` | backup do par banco+anexos, ensaio de restore, retenção LGPD |
+| `docs/runbook-canal-oficial.md` | WhatsApp oficial (Twilio), janela de 24h, templates, espelho |
+| `docs/runbook-canal-email.md` | caixa Gmail (OAuth), redirect URI, armadilhas do token |
+
+## Operar
+
+| Comando | O quê |
+|---|---|
+| `docker compose up -d --wait` · `down` · `ps` · `logs -f <svc>` | ciclo de vida |
+| `bash scripts/verificar-invariantes.sh` | invariantes AD-7/8/9/10 — **antes de commitar** |
+| `bash scripts/verificar-canal-oficial.sh` · `-canal-email.sh` | invariantes de cada canal |
+| `bash scripts/conectar-twilio.sh [--status\|--templates]` | canal oficial |
+| `bash scripts/conectar-gmail.sh [--status\|--url]` | canal de e-mail (o consent é clique humano) |
+| `bash scripts/backup.sh` · `bash scripts/restore.sh --verificar` | backup e ensaio de restore |
+| `docker compose run --rm chatwoot-seed` | re-semeia canais e configs (idempotente) |
+| `SMOKE_EU_SEI_O_QUE_ESTOU_FAZENDO=1 bash scripts/smoke-test.sh` | (dev) semeia, reinicia, prova persistência |
 
 ## Documentação
 
 | Doc | Para quê |
 |---|---|
 | `docs/product-brief.md` | Contexto de negócio, problema, usuários, escopo |
-| `docs/prd.md` | 16 requisitos funcionais, glossário fechado, jornadas, NFRs |
-| `docs/architecture.md` | Arquitetura: paradigma, decisões (AD-1..AD-9), stack, árvore-alvo |
-| `docs/epics-and-stories.md` | 6 epics · 19 stories com critérios de aceite Given/When/Then |
+| `docs/prd.md` | Requisitos funcionais, glossário fechado, jornadas, NFRs |
+| `docs/architecture.md` | Arquitetura: paradigma, decisões (AD-1..AD-13), stack, árvore |
+| `docs/epics-and-stories.md` | Epics · stories com critérios de aceite Given/When/Then |
+| `docs/0014-…-corte-chatwoot.md` | 📦 ADR arquivado: a direção rejeitada (cortar o Chatwoot), com medição |
 | `CLAUDE.md` | Instruções de desenvolvimento (regra de ouro, convenções, regras invioláveis) |
-| `PROGRESS.md` | Rastreamento das 19 stories + gate de saída por épico |
-
-## Subir o ambiente
-
-```bash
-cp deploy/.env.example deploy/.env    # preencha os segredos (nunca commite o .env)
-make up        # sobe a central inteira e espera ficar saudável
-make check     # invariantes: tag fixa, banco isolado, só o Caddy publica porta
-make smoke     # (dev) semeia, reinicia e prova que os dados persistem
-```
-
-UI em **https://inbox.\<DOMAIN\>** (dev: `https://inbox.localhost`). O primeiro admin nasce em
-`/installation/onboarding` — signup público fica fechado.
-
-Stack: Chatwoot CE `v4.15.1-ce` (web + Sidekiq) · PostgreSQL 16 + pgvector · Redis 7 · Caddy
-(auto-HTTPS) · Serviço de Sync (FastAPI — **EPIC-5, ainda não construído**). Imagem do Chatwoot
-**sempre com tag fixa** — `latest` é proibido. Passo a passo, DNS e segredos:
-**`docs/runbook-deploy.md`**.
-
-| Runbook | Para quê |
-|---|---|
-| `docs/runbook-deploy.md` | subir em dev e em produção; passos manuais (DNS, `.env`, 1º admin) |
-| `docs/runbook-upgrade.md` | subir de versão do Chatwoot (staging antes de produção) |
-| `docs/runbook-backup.md` | backup do par banco+anexos, ensaio de restore, retenção LGPD |
-| `docs/runbook-canal-prospeccao.md` | ligar o WhatsApp de prospecção (Evolution), fan-out, pareamento do QR |
-| `docs/runbook-aquecimento-numero.md` | rampa de aquecimento, só-inbound, playbook de número bloqueado |
-| `docs/runbook-canal-oficial.md` | ligar o WhatsApp oficial (Twilio), janela de 24h, templates Meta, espelho dos disparos |
-| `docs/runbook-canal-email.md` | ligar a caixa Gmail (OAuth), autorização via ngrok em dev, armadilhas do token |
+| `PROGRESS.md` | **Fonte da verdade do estado** — story a story, com gate e dívida técnica |
 
 ## Desenvolvimento
 
-Build sequencial por épico. **EPIC-1 bloqueia tudo**; os canais (2/3/4) podem correr em paralelo
-depois dele; o Sync (5) precisa de ≥1 canal vivo; a Operação (6) fecha o MVP.
+**EPIC-1 bloqueia tudo**; os canais podem correr em paralelo depois dele; a Operação (EPIC-6) fecha
+o MVP. Não há código de aplicação neste repo — o Chatwoot é imagem oficial sem fork (AD-7) e o
+Serviço de Sync foi cancelado (AD-13). O que existe é infra, scripts de operação e um seed em Ruby.
 
 Comandos do Claude Code (em `.claude/commands/`):
 
 | Comando | O quê |
 |---|---|
 | `/status` | épico atual, progresso, próxima story, bloqueadores |
-| `/story 2.1` | carrega a story + os ADs dela; define o primeiro teste/verificação |
-| `/test` | pytest + ruff (Sync) e validação do compose/Caddy (infra) |
-| `/done 2.1` | verifica o verde, atualiza `PROGRESS.md` + docs, commita |
-| `/gate EPIC-1` | verifica o gate de saída do épico **com evidência ao vivo** |
+| `/story 4.2` | carrega a story + os ADs dela; define a primeira verificação |
+| `/test` | valida compose e roda os `scripts/verificar-*.sh` |
+| `/done 4.2` | verifica o verde, atualiza `PROGRESS.md` + docs, commita |
+| `/gate EPIC-4` | verifica o gate de saída do épico **com evidência ao vivo** |
 
-**TDD é obrigatório onde há código** (Serviço de Sync, EPIC-5): `RED → GREEN → REFACTOR → commit`.
-Uma story = um commit. Boa parte das stories, porém, é **configuração** — nelas o verde é o critério
-de aceite verificado ao vivo + o artefato versionado (`deploy/`, runbook em `docs/`), não uma suíte
-de testes inventada.
+O verde de uma story é o **critério de aceite verificado ao vivo** + o artefato versionado + os
+verificadores passando. Não force pytest onde não há código.
 
 ## Repos irmãos
 
 | Repo | Papel |
 |---|---|
-| `crm-flash-capital` | comercial: Twenty + N8N + Evolution. Verdade do **lead**; hospeda a instância Evolution que espelha o número de prospecção |
-| `monorepo-flash-capital` | plataforma interna + app + site + FastAPI/worker + Supabase. Verdade de **cedente/sacado/cobrança**; origina os disparos |
+| `crm-flash-capital` | comercial: Twenty + N8N. Verdade do **lead**. Sem relação de infra com este repo (AD-10) — nenhuma rede, nenhum proxy em comum |
+| `monorepo-flash-capital` | plataforma interna + app + site + FastAPI/worker + Supabase. Verdade de **cedente/sacado/cobrança**; origina os disparos e os espelha aqui |
 | `inbox-flash-capital` (este) | a central. **Espelho e cockpit — dono de nenhum dado de negócio** |

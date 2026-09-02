@@ -84,7 +84,7 @@ So that a plataforma esteja disponível sem passos manuais frágeis.
 
 **Acceptance Criteria:**
 
-**Given** o repositório `inbox-flash-capital` com `deploy/docker-compose.yml` e `.env` preenchido
+**Given** o repositório `inbox-flash-capital` com `compose.yaml` e `.env` preenchido
 **When** executo `docker compose up`
 **Then** sobem os serviços web, Sidekiq, Postgres (com pgvector), Redis e Caddy
 **And** a UI do Chatwoot responde em HTTPS num domínio da Flash com certificado válido.
@@ -121,7 +121,7 @@ So that eu atualize sob demanda sem virar refém do upstream.
 **Given** uma nova versão desejada
 **When** sigo o runbook de upgrade
 **Then** o processo (bump da tag + migrações) é executado em staging antes de produção
-**And** está documentado em `docs/` ou `deploy/`.
+**And** está documentado em `docs/` ou a raiz do repo.
 
 ### Story 1.4: Backup e restore validados
 

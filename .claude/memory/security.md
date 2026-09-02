@@ -21,7 +21,7 @@
 ## SEMPRE
 
 - ✅ Fluxo de nova env var: 1) `.env` (valor real) → 2) `.env.example` (placeholder + comentário) →
-  3) `deploy/docker-compose.yml` → 4) commitar **apenas** o `.env.example` e a config
+  3) `compose.yaml` → 4) commitar **apenas** o `.env.example` e a config
 - ✅ Manter o `.env.example` sincronizado com todas as chaves
 - ✅ TLS em todo tráfego externo (Caddy, auto-HTTPS)
 - ✅ Revogar credencial imediatamente ao suspeitar de vazamento

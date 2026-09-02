@@ -20,13 +20,13 @@ Um backup da central são **dois artefatos com o mesmo timestamp**:
 | `db_<data>.sql.gz` | banco `chatwoot_production`: conversas, contatos, labels, config, inboxes | não há central |
 | `storage_<data>.tar.gz` | volume `storage_data`: **anexos** (nota fiscal, contrato, comprovante) | conversas restauram com anexo quebrado |
 
-`deploy/scripts/backup.sh` gera os dois no mesmo par. Restaurar só o banco produz uma central que
+`scripts/backup.sh` gera os dois no mesmo par. Restaurar só o banco produz uma central que
 *parece* íntegra até alguém clicar num anexo.
 
 ## Rodar o backup
 
 ```bash
-make backup        # = deploy/scripts/backup.sh
+bash scripts/backup.sh        # = scripts/backup.sh
 ```
 
 - Grava em `BACKUP_DIR` (`.env`; default `./backups`, permissão `700`, arquivos `600`).
@@ -38,7 +38,7 @@ make backup        # = deploy/scripts/backup.sh
 
 ```cron
 # 03:10 todo dia — backup da central
-10 3 * * *  cd /srv/inbox-flash-capital && BACKUP_DIR=/srv/backups/inbox deploy/scripts/backup.sh >> /var/log/inbox-backup.log 2>&1
+10 3 * * *  cd /srv/inbox-flash-capital && BACKUP_DIR=/srv/backups/inbox scripts/backup.sh >> /var/log/inbox-backup.log 2>&1
 ```
 
 **Passo manual, e é o que salva a empresa:** o backup local morre junto com o host. Copie
@@ -56,7 +56,7 @@ por conta própria. A chave privada **não** mora no mesmo host do backup.
 ### Ensaio — o que prova que o backup presta (rode toda semana)
 
 ```bash
-make restore-check      # = deploy/scripts/restore.sh --verificar
+bash scripts/restore.sh --verificar      # = scripts/restore.sh --verificar
 ```
 
 Sobe um Postgres **limpo e efêmero**, restaura o último par (dump + anexos), confere que
@@ -68,13 +68,13 @@ no tar** — e destrói o ambiente de teste. **Não encosta na produção**, ent
 ### Restore de verdade (destrutivo)
 
 ```bash
-deploy/scripts/restore.sh --producao
+scripts/restore.sh --producao
 ```
 
 Derruba a stack, **apaga** o banco e o volume de anexos atuais e recompõe a partir do último backup.
 Pede confirmação digitada. Depois, confira a UI antes de liberar o atendimento.
 
-Restaurando num host novo: leve junto o `deploy/.env` (o `SECRET_KEY_BASE` **tem** que ser o mesmo,
+Restaurando num host novo: leve junto o `.env` (o `SECRET_KEY_BASE` **tem** que ser o mesmo,
 senão as sessões e os tokens integrados quebram) e o par de backup.
 
 ## Retenção de conversa (LGPD)
@@ -83,8 +83,8 @@ O Chatwoot CE não expurga conversa por idade. Sem política, a central guarda C
 inadimplência para sempre — o oposto da minimização exigida pela LGPD.
 
 ```bash
-make retencao                                      # simula (não apaga nada)
-deploy/scripts/retencao-conversas.sh --executar    # apaga de verdade
+bash scripts/retencao-conversas.sh                                      # simula (não apaga nada)
+scripts/retencao-conversas.sh --executar    # apaga de verdade
 ```
 
 Apaga conversas **resolvidas** mais velhas que `RETENCAO_CONVERSAS_DIAS` (default **1825 dias = 5

@@ -51,7 +51,7 @@ O inverso nunca acontece.
 
 **1. As credenciais Twilio são as MESMAS do monorepo.** Não crie conta nova nem gere token novo —
 dois tokens para a mesma conta só multiplicam o que precisa ser rotacionado. Copie de lá para o
-`deploy/.env` da central:
+`.env` da central:
 
 ```
 TWILIO_ACCOUNT_SID=…            # = TWILIO_ACCOUNT_SID do monorepo
@@ -62,7 +62,7 @@ TWILIO_NUMERO_OFICIAL=+55…      # = TWILIO_OFFICIAL_PHONE_NUMBER, em E.164, SE
 **2. O token do fan-out** (`openssl rand -hex 32`), o **mesmo** nos dois repos:
 
 ```
-# central:  deploy/.env
+# central:  .env
 RELAY_TOKEN=…
 # monorepo: .env
 CHATWOOT_RELAY_TOKEN=…          # idêntico
@@ -74,9 +74,9 @@ vencidos, protesto, confirmação). A central **não cria template** — ela sin
 ## Conectar
 
 ```bash
-make twilio          # cria a inbox `WhatsApp Oficial` + sincroniza os Content Templates
-make twilio-status   # mostra o que está valendo (nunca imprime o auth_token)
-make oficial         # valida as invariantes do canal
+bash scripts/conectar-twilio.sh          # cria a inbox `WhatsApp Oficial` + sincroniza os Content Templates
+bash scripts/conectar-twilio.sh --status   # mostra o que está valendo (nunca imprime o auth_token)
+bash scripts/verificar-canal-oficial.sh         # valida as invariantes do canal
 ```
 
 O `conectar-twilio.sh` cria a inbox como `Channel::TwilioSms` com **`medium: whatsapp`**.
@@ -84,7 +84,7 @@ O `conectar-twilio.sh` cria a inbox como `Channel::TwilioSms` com **`medium: wha
 > **O `medium` é o detalhe que importa.** É ele que faz o Chatwoot aplicar a **janela de 24h**
 > (`Conversations::MessageWindowService`). Criado como `sms`, não haveria janela: a atendente
 > escreveria texto livre depois das 24h e a **Meta rejeitaria o envio** — falha silenciosa, no canal
-> de cobrança. O `make oficial` recusa qualquer medium que não seja `whatsapp`.
+> de cobrança. O `bash scripts/verificar-canal-oficial.sh` recusa qualquer medium que não seja `whatsapp`.
 >
 > Efeito colateral bem-vindo: o `TwilioChannelsController` do Chatwoot só reconfigura o webhook do
 > número quando o canal é `sms` (`setup_webhooks if @twilio_channel.sms?`). Com `whatsapp`, **ele não
@@ -99,8 +99,8 @@ Comportamento **nativo** do Chatwoot, nada foi construído:
 | última mensagem do cliente há **< 24h** | `can_reply? = true` → a atendente responde **texto livre** |
 | **> 24h** sem mensagem do cliente | `can_reply? = false` → o campo de texto fecha; a UI só oferece os **Content Templates** aprovados |
 
-Os templates vêm da Content API da Twilio via `make twilio` (job assíncrono no Sidekiq). Aprovou um
-template novo na Meta? Rode `deploy/scripts/conectar-twilio.sh --templates` para re-sincronizar.
+Os templates vêm da Content API da Twilio via `bash scripts/conectar-twilio.sh` (job assíncrono no Sidekiq). Aprovou um
+template novo na Meta? Rode `scripts/conectar-twilio.sh --templates` para re-sincronizar.
 
 ## ⚠️ O disparo não pode sair duas vezes (STORY-3.2)
 
@@ -129,7 +129,7 @@ no `From`/`To`. O monorepo cria a conversa com esse `source_id`; quando o client
 `Twilio::IncomingMessageService` resolve o mesmo `contact_inbox` e a resposta cai na **mesma
 conversa**. Verificado ao vivo: disparo espelhado + resposta simulada aterrissaram na mesma thread.
 
-Telefone fora de E.164 = thread partida. O `make oficial` recusa número que não case
+Telefone fora de E.164 = thread partida. O `bash scripts/verificar-canal-oficial.sh` recusa número que não case
 `^whatsapp:\+[0-9]{10,15}$`.
 
 ## Segurança do callback (AD-8)
@@ -177,7 +177,7 @@ curl -H "api_access_token: $TOKEN" https://inbox.<DOMAIN>/api/v1/accounts/1/inbo
 curl -H "api-access-token: $TOKEN" https://inbox.<DOMAIN>/api/v1/accounts/1/inboxes
 ```
 
-`make check` **prova isso ao vivo** (faz a chamada e exige 200), justamente para não voltar a falhar
+`bash scripts/verificar-invariantes.sh` **prova isso ao vivo** (faz a chamada e exige 200), justamente para não voltar a falhar
 em silêncio. Se um dia o monorepo e a central ficarem em **hosts separados**, o `CHATWOOT_URL` de lá
 vira `https://inbox.<DOMAIN>` — e aí o espelho depende dessa ponte.
 
@@ -233,7 +233,7 @@ Com o número oficial real e o fan-out do monorepo no ar:
 - [ ] disparo de cobrança pelo pipeline do monorepo → aparece como **outbound** na conversa certa,
       **uma vez só** (o cliente não recebe em dobro);
 - [ ] a resposta do cliente ao disparo cai na **mesma thread**;
-- [ ] `make oficial` verde.
+- [ ] `bash scripts/verificar-canal-oficial.sh` verde.
 
 ## ✅ Estado: gate verificado ao vivo (2026-07-13)
 
@@ -283,6 +283,6 @@ conversa duplicada para o mesmo cliente, é aqui que se olha.
 | Fora das 24h a atendente escreve e a mensagem falha | a inbox foi criada com `medium: sms` — sem janela. Recrie com `whatsapp` |
 | A UI não oferece template nenhum | templates não sincronizados: `conectar-twilio.sh --templates` |
 | Resposta do cliente abre conversa NOVA em vez de cair na thread | `contact_inbox.source_id` fora do formato `whatsapp:+E164` no push do monorepo |
-| `make twilio` falha com erro de credencial | o Chatwoot testa a credencial (`client.messages.list`) antes de criar a inbox — SID/token errados |
+| `bash scripts/conectar-twilio.sh` falha com erro de credencial | o Chatwoot testa a credencial (`client.messages.list`) antes de criar a inbox — SID/token errados |
 | Chamada à API da central pela URL pública dá **401** com token válido | o Caddy comeu o `api_access_token` (underscore). Use `api-access-token` — ver a seção acima |
 | Webhook do Twilio devolve **403** no monorepo | `PUBLIC_BOLETO_BASE_URL` diferente da URL pública real (ngrok): a assinatura é validada contra a URL reconstruída dela |

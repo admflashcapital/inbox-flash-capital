@@ -22,7 +22,7 @@ Responda, em PT-BR:
    - **Código** (Serviço de Sync, EPIC-5): TDD obrigatório → siga o item 4
    - **Configuração/infra** (subir container, conectar inbox, configurar label/papel/retenção):
      não force pytest. O "verde" é o **critério de aceite verificado ao vivo** + o artefato
-     versionado (`deploy/docker-compose.yml`, `Caddyfile`, `.env.example`, runbook em `docs/`)
+     versionado (`compose.yaml`, `Caddyfile`, `.env.example`, runbook em `docs/`)
 3. **Arquivos a criar/modificar** — e, se a story exige passo manual fora do repo (conectar QR da
    Evolution, criar app no Google, cadastrar template Meta na Twilio), **liste o passo manual** e
    diga em qual runbook de `docs/` ele será documentado

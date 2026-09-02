@@ -29,17 +29,17 @@ alcançá-los de fora do host (AD-8). A rede `internal` é `internal: true`: fec
 O compose oficial do Chatwoot manda rodar `rails db:chatwoot_prepare` **à mão** antes do `up`. Isso
 violaria o critério da STORY-1.1 ("um comando"). Aqui ele virou um serviço one-shot de que `web` e
 `sidekiq` dependem (`service_completed_successfully`). É idempotente: cria o schema num banco novo,
-aplica migrações num banco existente. É também o passo de migração do upgrade (`make migrate`).
+aplica migrações num banco existente. É também o passo de migração do upgrade (`docker compose run --rm chatwoot-init`).
 
 ---
 
 ## Subir em desenvolvimento (localhost)
 
 ```bash
-cp deploy/.env.example deploy/.env      # e preencha (ver abaixo)
-make up                                 # docker compose up -d --wait
-make smoke                              # prova: dados sobrevivem ao restart
-make check                              # prova: AD-7/8/9 não foram violados
+cp .env.example .env      # e preencha (ver abaixo)
+docker compose up -d --wait                                 # docker compose up -d --wait
+bash scripts/smoke-test.sh                              # prova: dados sobrevivem ao restart
+bash scripts/verificar-invariantes.sh                              # prova: AD-7/8/9 não foram violados
 ```
 
 A UI fica em **https://inbox.localhost** — cert da CA interna do Caddy (o navegador vai avisar que é
@@ -47,7 +47,7 @@ self-signed; é o esperado em dev).
 
 ## Passos manuais — o que o Claude Code **não** pode fazer por você
 
-### 1. Preencher `deploy/.env` (nunca versionado, nunca colado no chat)
+### 1. Preencher `.env` (nunca versionado, nunca colado no chat)
 
 ```bash
 openssl rand -hex 64                              # → SECRET_KEY_BASE
@@ -86,7 +86,7 @@ a inbox `E-mail` de atendimento (EPIC-4). Sem SMTP, o convite de agente não sai
 
 ## Produção
 
-### ⚠️ Antes do `make up`: quem fica com as portas 80/443?
+### ⚠️ Antes do `docker compose up -d --wait`: quem fica com as portas 80/443?
 
 **Só UM Caddy pode publicá-las.** O default do `.env.example` é `COMPOSE_PROFILES=edge`, que faz a
 central subir o **próprio** Caddy. No host as-built, porém, a central **divide o host com o CRM** — e
@@ -99,16 +99,16 @@ o CRM já tem um Caddy nas portas. Subir com `edge` ali levanta um **segundo** C
 
 ```bash
 # no host de produção, com DOMAIN=flashcapital.com.br e DNS já apontando
-# ⚠️ compartilhando host com o CRM? deixe COMPOSE_PROFILES= (vazio) no deploy/.env
-make up
-make check                       # invariantes de arquitetura
+# ⚠️ compartilhando host com o CRM? deixe COMPOSE_PROFILES= (vazio) no .env
+docker compose up -d --wait
+bash scripts/verificar-invariantes.sh                       # invariantes de arquitetura
 curl -sI https://inbox.flashcapital.com.br/app/login   # 200/302 + cert válido
 ```
 
 Depois: configure o cron de backup (`docs/runbook-backup.md`) — a central passa a acumular PII já no
 primeiro dia de atendimento.
 
-> ⚠️ **Não rode `make smoke` em produção.** Ele semeia dados de teste; o script aborta sozinho se
+> ⚠️ **Não rode `bash scripts/smoke-test.sh` em produção.** Ele semeia dados de teste; o script aborta sozinho se
 > `DOMAIN` não for `localhost`.
 
 ---
@@ -117,26 +117,26 @@ primeiro dia de atendimento.
 
 | Comando | O quê |
 |---|---|
-| `make up` | sobe tudo e espera ficar saudável |
-| `make ps` | estado e health dos containers |
-| `make logs s=chatwoot-web` | logs de um serviço |
-| `make down` | para a stack (**mantém** os volumes/dados) |
-| `make restart` | reinicia (os dados persistem — é o critério da 1.1) |
-| `make check` | AD-7/8/9 não violados |
-| `make backup` | banco + anexos (STORY-1.4) |
+| `docker compose up -d --wait` | sobe tudo e espera ficar saudável |
+| `docker compose ps` | estado e health dos containers |
+| `docker compose logs -f chatwoot-web` | logs de um serviço |
+| `docker compose down` | para a stack (**mantém** os volumes/dados) |
+| `docker compose restart` | reinicia (os dados persistem — é o critério da 1.1) |
+| `bash scripts/verificar-invariantes.sh` | AD-7/8/9 não violados |
+| `bash scripts/backup.sh` | banco + anexos (STORY-1.4) |
 
-`make down` **não** apaga dados. O que apaga é `docker compose down -v` — nunca rode isso em
+`docker compose down` **não** apaga dados. O que apaga é `docker compose down -v` — nunca rode isso em
 produção sem um backup verificado na mão.
 
 ---
 
 ## Diagnóstico
 
-**A UI não responde / 502 no Caddy.** `make logs s=chatwoot-web`. Se o `chatwoot-init` falhou, web e
-sidekiq nem sobem (dependem do sucesso dele): `docker compose -f deploy/docker-compose.yml logs chatwoot-init`.
+**A UI não responde / 502 no Caddy.** `docker compose logs -f chatwoot-web`. Se o `chatwoot-init` falhou, web e
+sidekiq nem sobem (dependem do sucesso dele): `docker compose -f compose.yaml logs chatwoot-init`.
 
 **Cert inválido em produção.** Quase sempre é DNS: o `inbox.<DOMAIN>` precisa resolver para o host
-**antes** do primeiro boot. Confira `make logs s=caddy` — o erro do ACME é explícito. Cuidado com o
+**antes** do primeiro boot. Confira `docker compose logs -f caddy` — o erro do ACME é explícito. Cuidado com o
 rate limit do Let's Encrypt (5 falhas/hora): corrija o DNS antes de ficar reiniciando.
 
 **Sidekiq não processa job.** Confira se `REDIS_PASSWORD` e a senha embutida em `REDIS_URL` são a

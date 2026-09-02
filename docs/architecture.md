@@ -4,7 +4,7 @@ type: architecture-spine
 purpose: build-substrate
 altitude: feature
 paradigm: hub-and-spoke com enriquecimento por eventos unidirecional (mirror hub + adapters + event-driven bridge)
-scope: Central de atendimento omnichannel — Chatwoot self-hosted, providers de canal e Serviço de Sync. Não governa a lógica interna do Twenty nem do monorepo.
+scope: Central de atendimento — Chatwoot self-hosted e os providers de canal (Twilio, Gmail). Não governa a lógica interna do Twenty nem do monorepo.
 status: draft
 created: 2026-07-13
 updated: 2026-07-13
@@ -24,12 +24,11 @@ companions: []
 
 ## Design Paradigm
 
-**Hub-and-spoke com enriquecimento por eventos unidirecional.** O Chatwoot é o **hub** (espelho + cockpit de conversas). Cada canal é um **spoke** conectado por um **provider-adapter** (Evolution, Twilio, Gmail). O contexto de negócio entra por um **bridge assíncrono e unidirecional** (o Serviço de Sync), que empurra estado a partir dos sistemas de domínio. Nenhuma dependência aponta do hub para os bancos de domínio.
+**Hub-and-spoke com enriquecimento unidirecional.** O Chatwoot é o **hub** (espelho + cockpit de conversas). Cada canal é um **spoke** conectado por um **provider-adapter** (Twilio, Gmail). O contexto de negócio entra **empurrado pelo domínio no instante do disparo** (AD-13), não por reconciliação posterior. Nenhuma dependência aponta do hub para os bancos de domínio.
 
 Mapa de camadas → responsabilidade:
 - **Hub** (Chatwoot): modelo de Conversa/Contato, UI de atendimento, labels, atribuição, relatórios.
 - **Adapters** (providers): tradução canal ↔ hub. Plugáveis; trocar provider não muda o modelo de conversa.
-- **Bridge** (Serviço de Sync): resolução de identidade + push de labels/atributos. Único componente construído do zero e o único dono da lógica de reconciliação.
 - **Domínio** (Twenty, Supabase/monorepo): fontes da verdade de dados de negócio. Emitem eventos; nunca são consultados em runtime pelo hub.
 
 ## Invariants & Rules
@@ -42,17 +41,17 @@ Mapa de camadas → responsabilidade:
 ### AD-2 — Enriquecimento é unidirecional e assíncrono (domínio → central) `[REVISADO 2026-09-02 — ver AD-13]`
 - **Binds:** FR-11, FR-12, FR-13, FR-14
 - **Prevents:** a central entrar no caminho crítico do domínio.
-- **Rule:** o Serviço de Sync só empurra para o Chatwoot. O Chatwoot nunca faz chamada síncrona aos bancos de domínio no caminho de atendimento. Indisponibilidade do domínio degrada o enriquecimento, não o atendimento.
+- **Rule:** o domínio só empurra para o Chatwoot — hoje pelo `chatwoot_mirror.py` do monorepo, no instante do disparo (AD-13). O Chatwoot nunca faz chamada síncrona aos bancos de domínio no caminho de atendimento. Indisponibilidade do domínio degrada o enriquecimento, não o atendimento. **Mas o inverso não vale:** central indisponível perde o evento para sempre (AD-12).
 
 ### AD-3 — Identidade de contato por chave dupla E.164 + documento `[REVISADO 2026-09-02 — a regra passa a viver no `chatwoot_mirror.py`; ver AD-13]`
 - **Binds:** FR-10, FR-11
 - **Prevents:** contatos duplicados e merges errados.
-- **Rule:** telefone sempre normalizado para E.164 e documento para dígitos antes de casar. **Merge automático só quando telefone E documento casam.** Casando só uma chave → cria **sugestão de merge** para revisão humana. O Serviço de Sync é o único lugar onde essa regra vive.
+- **Rule:** telefone sempre normalizado para E.164 e documento para dígitos antes de casar. A regra vive no `chatwoot_mirror.py` do monorepo (`_garantir_contato`/`_garantir_conversa`), não num serviço próprio. A **sugestão de merge** para revisão humana era função do Sync e **não existe**: sem ele, o contato é resolvido pelo E.164 do disparo, que é o dado que a Twilio devolve.
 
 ### AD-4 — Um número = uma Inbox; provider é adapter plugável
 - **Binds:** FR-4, FR-7, FR-9
 - **Prevents:** lógica de canal vazando para o hub ou para o domínio.
-- **Rule:** cada canal conectado por seu provider (Evolution/Twilio/Gmail) como uma Inbox distinta. O modelo Conversa/Contato do hub é agnóstico de provider.
+- **Rule:** cada canal conectado por seu provider (Twilio/Gmail) como uma Inbox distinta. O modelo Conversa/Contato do hub é agnóstico de provider. As inboxes nascem do `chatwoot-seed`, pelos nomes fixos de `INBOX_OFICIAL_NOME` e `INBOX_EMAIL_NOME`.
 
 ### AD-5 — Convivência multi-consumidor no número de prospecção sem perda `[SUPERSEDED 2026-09-02 — Evolution removida dos dois repos; ver AD-11]`
 - **Binds:** FR-5
@@ -72,21 +71,30 @@ Mapa de camadas → responsabilidade:
 ### AD-8 — Segredos fora do repo; webhooks autenticados; TLS sempre
 - **Binds:** all
 - **Prevents:** vazamento de credencial e ingestão forjada.
-- **Rule:** tokens (Evolution/Twilio/Chatwoot/Gmail) em `.env`/secret store, nunca versionados. Todo webhook valida origem (assinatura `X-Twilio-Signature` no inbound Twilio; token compartilhado nos webhooks Evolution/Chatwoot). Tráfego externo só via TLS.
+- **Rule:** tokens (Twilio/Chatwoot/Gmail) em `.env`, nunca versionados; lidos por `env_get` sem `source`, para não entrarem no ambiente do processo. Todo webhook valida origem: a assinatura `X-Twilio-Signature` é conferida **no monorepo**, dono do webhook, e o relay para a central leva o `X-Relay-Token`. Enquanto não houver ingresso, o TLS é dispensado porque **não há tráfego externo** — a central só escuta em loopback (AD-10).
 
 ### AD-9 — Banco da central isolado dos bancos de domínio
 - **Binds:** FR-1
 - **Prevents:** acoplamento de dados e risco de blast-radius.
-- **Rule:** Postgres próprio do Chatwoot; o Serviço de Sync tem seu próprio store de mapeamento de identidade. Sem cross-DB com Twenty/Supabase.
+- **Rule:** Postgres próprio do Chatwoot, sem cross-DB com Twenty/Supabase — verificado por `verificar-invariantes.sh` (sem `dblink`/`postgres_fdw`, usuário não-superusuário, nenhuma credencial de banco de domínio no `.env`). O store de identidade próprio do Sync não existe (AD-13).
 
 ### AD-10 — Infra é só `docker compose`; nada publica além de loopback `[ACCEPTED 2026-09-02]`
 - **Binds:** all
 - **Prevents:** camada de indireção (Makefile, Caddyfile) e um porteiro compartilhado entre dois repos.
 - **Rule:** um `compose.yaml` na raiz, `.env` na raiz, `scripts/` na raiz. Seed idempotente por
   `rails runner`, encadeado por `service_completed_successfully`; `docker compose up -d --wait` é o
-  comando único. **Nenhum serviço publica em `0.0.0.0`** — só `chatwoot-web`, em `127.0.0.1:3001`. Sem
-  Makefile, sem Caddy, sem `/etc/hosts`, sem a rede `flash-canais`. Quando houver ingresso remoto, ele é
-  um `cloudflared` dentro do compose **deste** repo — nunca um proxy compartilhado com o CRM.
+  comando único. **Nenhum serviço publica em `0.0.0.0`** — só `chatwoot-web`, em
+  `127.0.0.1:${CHATWOOT_HOST_PORT}` (3001). Sem Makefile, sem Caddy, sem `/etc/hosts`. Quando houver
+  ingresso remoto, ele é um `cloudflared` dentro do compose **deste** repo — nunca um proxy
+  compartilhado com o CRM.
+- **A porta publicada é do NAVEGADOR; a via máquina-a-máquina é rede privada.** O barramento
+  `flash-canais` (5 containers, 3 repos) morreu; no lugar fica a **`flash-espelho`**, com exatamente
+  dois membros — `fastapi_api` (monorepo) e `chatwoot-web` — e nada publicado nela. O CRM não entra:
+  é isso que torna inbox e crm independentes.
+  **Não substituir por `host.docker.internal`:** medido em 2026-09-02, um bind em `127.0.0.1` recusa
+  pacote vindo da bridge do Docker (`172.17.0.1`). E o espelho falha em silêncio (AD-12), então essa
+  troca não daria erro — daria um painel com buracos. É também o mesmo formato na VPS e no Railway
+  (`chatwoot.railway.internal`).
 
 ### AD-11 — A central nunca é site público `[ACCEPTED 2026-09-02]`
 - **Binds:** FR-4, FR-6, AD-8
@@ -122,31 +130,29 @@ Mapa de camadas → responsabilidade:
 ```mermaid
 graph LR
   subgraph Canais
-    EVO[Evolution API<br/>instância A - CRM]
     TW[Twilio / Meta API]
     GM[Gmail IMAP/SMTP]
   end
-  subgraph Central
+  subgraph Central["Central (127.0.0.1:3001)"]
     CW[Chatwoot Hub]
-    SYNC[Serviço de Sync<br/>+ identity map]
   end
   subgraph Domínio
-    TWENTY[Twenty CRM]
     MONO[Monorepo API/Worker<br/>+ Supabase]
-    N8N[Agente N8N]
   end
 
-  EVO -->|webhook fan-out| CW
-  EVO -->|webhook fan-out| N8N
-  TW -->|inbound| CW
-  GM -->|imap| CW
-  MONO -->|push outbound + eventos| SYNC
-  TWENTY -->|eventos via N8N/poll| SYNC
-  SYNC -->|labels + atributos + msgs| CW
-  MONO -->|espelho outbound| CW
-  CW -. NUNCA .-> TWENTY
-  CW -. NUNCA .-> MONO
+  TW -->|inbound + delivery status| MONO
+  MONO -->|espelho: mensagem + custom_attributes<br/>rede flash-espelho| CW
+  CW -->|polling IMAP DE SAÍDA| GM
+  TW -. NUNCA fala com a central .-> CW
+  CW -. NUNCA consulta o domínio .-> MONO
 ```
+
+Duas coisas que o desenho torna óbvias e que decidem o resto:
+
+1. **Nenhum terceiro alcança a central.** A Twilio entrega ao monorepo (que valida
+   `X-Twilio-Signature` e faz o relay); o e-mail entra por polling **de saída**. Sobram dois
+   consumidores: o navegador do colaborador e o monorepo (AD-11).
+2. **A seta do espelho não tem volta nem retry.** Falhou, o evento se perde (AD-12).
 
 ## Consistency Conventions
 
@@ -162,13 +168,16 @@ graph LR
 
 | Name | Version |
 | --- | --- |
-| Chatwoot (Community Edition) | **`v4.15.1-ce`** — fixada em `deploy/.env` (`CHATWOOT_TAG`); upgrade em `docs/runbook-upgrade.md` |
+| Chatwoot (Community Edition) | **`v4.15.1-ce`** — fixada em `.env` (`CHATWOOT_TAG`); upgrade em `docs/runbook-upgrade.md` |
 | PostgreSQL (com pgvector) | **`pgvector/pgvector:0.8.5-pg16`** |
 | Redis | **`7.4.9-alpine`** |
-| Caddy (reverse proxy / TLS) | **`2.11.4`** |
-| Evolution API (existente no CRM) | v2.3.7 |
 | Twilio WhatsApp (Meta API, existente no monorepo) | provider atual |
-| Serviço de Sync | Python 3.12 + FastAPI + httpx (alinhado ao monorepo) |
+| Gmail | IMAP/SMTP com OAuth (XOAUTH2) |
+| Docker Compose | v2 — sem Makefile, sem proxy, sem serviço próprio (AD-10, AD-13) |
+
+> Saíram em 2026-09-02: **Caddy 2.11.4** (AD-10 — nada de proxy; a central publica em loopback),
+> **Evolution API v2.3.7** (AD-11 — EPIC-2 cancelado) e o **Serviço de Sync** em Python/FastAPI
+> (AD-13 — EPIC-5 cancelado, nunca chegou a existir).
 
 ## Structural Seed
 
@@ -176,42 +185,51 @@ graph LR
 
 ```mermaid
 graph TB
-  subgraph HostCentral[Host da Central - infra Flash]
-    CADDY[Caddy :443]
-    CWWEB[chatwoot-web]
+  NAV[Navegador do colaborador]
+  subgraph Central["compose deste repo"]
+    direction TB
+    INIT[chatwoot-init<br/>one-shot: migrações]
+    SEED[chatwoot-seed<br/>one-shot: canais + configs]
+    CWWEB["chatwoot-web<br/>publica 127.0.0.1:3001"]
     CWWORKER[chatwoot-sidekiq]
     PG[(postgres+pgvector)]
     RD[(redis)]
-    SYNC[sync-service :FastAPI]
-    CADDY --> CWWEB
+    INIT ==>|completed| SEED
+    SEED ==>|completed| CWWEB
+    SEED ==>|completed| CWWORKER
     CWWEB --> PG
     CWWEB --> RD
     CWWORKER --> PG
     CWWORKER --> RD
-    SYNC --> PG
   end
-  subgraph HostCRM[Host do CRM - existente]
-    EVO[evolution-api]
-    N8NBOX[n8n]
-  end
-  subgraph HostMono[Infra do Monorepo - existente]
-    APIMONO[fastapi + rq worker]
+  subgraph HostMono["compose do monorepo"]
+    APIMONO[fastapi_api]
     SUPA[(supabase)]
+    APIMONO --> SUPA
   end
-  EVO --> CWWEB
-  EVO --> N8NBOX
-  APIMONO --> CWWEB
-  APIMONO --> SYNC
-  N8NBOX --> SYNC
-  CWWEB -->|webhook conversas| SYNC
+  NAV -->|loopback| CWWEB
+  APIMONO ==>|rede flash-espelho<br/>chatwoot-web:3000| CWWEB
 ```
+
+**As setas grossas são as duas que quebram calado.** A cadeia
+`init → seed → web/sidekiq` é `service_completed_successfully`: se o seed falhar, a stack não sobe —
+e é assim que se quer, porque um Chatwoot sem as inboxes aceitaria o espelho e o jogaria fora. A
+`flash-espelho` tem **dois** membros e nada publicado; a porta em `127.0.0.1` é do navegador e
+**não** é alcançável de dentro de container.
 
 ### Ambientes
 - **staging** e **produção** com a mesma composição; upgrades de versão do Chatwoot validados em staging antes de produção (FR-2).
 - Segredos por ambiente em `.env` fora do repo (AD-8).
 
-### Modelo de entidade da central (lado Sync)
-O Chatwoot já possui Contact/Conversation/Message. O Serviço de Sync mantém um **mapa de identidade** próprio (AD-9):
+### Modelo de entidade da central `[SUPERSEDED 2026-09-02 — ver AD-13]`
+
+> 📦 **Histórico.** O ERD abaixo descrevia o store de identidade do **Serviço de Sync**, que foi
+> **cancelado**. Não existe `identity_map` nem `merge_suggestion` — nada disto foi construído.
+>
+> No lugar: o monorepo já conhece `titulo_id`, CNPJ, valor e dias de atraso **no instante do
+> disparo**, e carimba tudo nos `custom_attributes` da conversa dentro de
+> `chatwoot_mirror.py::_garantir_conversa`. A identidade é resolvida ali, com o dado na mão, em vez
+> de reconciliada depois. Fica só o Contact/Conversation/Message do próprio Chatwoot.
 
 ```mermaid
 erDiagram
@@ -235,39 +253,42 @@ erDiagram
 
 ### Árvore de fonte (repo `inbox-flash-capital`)
 
-Estado as-built (a marca diz o que **existe hoje**, não o que foi planejado):
+Estado as-built em 2026-09-02, depois da Fase 1 (a marca diz o que **existe hoje**):
 
 ```text
 inbox-flash-capital/
-  Makefile                   # [✔] atalhos de operação — `make help` lista todos
-  docs/                      # esta documentação (product-brief, prd, architecture, epics) + runbooks
-  deploy/                    # [EPIC-1 ✔] a stack da central
-    docker-compose.yml       # caddy, chatwoot-web, chatwoot-sidekiq, chatwoot-init, postgres, redis
-    Caddyfile                # TLS + único ponto de entrada (só ele publica porta); perfil `edge`
-    .env.example             # todas as chaves; o .env real nunca é versionado
-    scripts/
-      init-db/                    # [1.2] cria usuário, banco e extensões da central (AD-9)
-      backup.sh  restore.sh       # [1.4] backup do par banco+anexos; restore em ambiente limpo
-      smoke-test.sh               # [1.1] semeia, reinicia e prova a persistência (dev/staging)
-      verificar-invariantes.sh    # [1.x] falha se AD-7/AD-8/AD-9 forem violados (`make check`)
-      retencao-conversas.sh       # [6.3] expurgo LGPD de conversa resolvida antiga
-      conectar-evolution.sh       # [2.1] cria/liga a inbox WhatsApp Prospecção (Evolution)
-      verificar-fanout.sh         # [2.2] prova os DOIS consumidores vivos (AD-5)
-      dedup-mensagens.sh          # [2.2] faxineiro de duplicata do espelho (replay do Baileys)
-      verificar-aquecimento.sh    # [2.3] só-inbound + rampa + zero campanha (AD-6)
-      conectar-twilio.sh          # [3.1] cria a inbox WhatsApp Oficial (medium=whatsapp) + templates
-      verificar-canal-oficial.sh  # [3.1] janela 24h, templates, AD-6, RELAY_TOKEN
-  sync-service/              # [EPIC-5] AINDA NÃO EXISTE — único componente construído do zero (TDD)
-    app/
-      main.py                # FastAPI: webhooks de domínio + Chatwoot
-      identity.py            # AD-3: resolução E.164 + documento, merge/sugestão
-      chatwoot_client.py     # httpx: contatos, labels, atributos, mensagens
-      handlers/              # eventos: twenty, monorepo, chatwoot
-      models.py              # identity_map, merge_suggestion
-    tests/
+  compose.yaml               # [✔] a stack inteira: postgres, redis, chatwoot-{init,seed,web,sidekiq}
+  .env                       # segredos — NUNCA versionado (AD-8)
+  .env.example               # [✔] todas as chaves, valores vazios; simetria verificada nos 2 sentidos
+  scripts/
+    lib/env.sh               # [✔] env_get — lê UMA chave do .env sem dar `source` (segredo fora do ambiente)
+    seed/chatwoot_seed.rb    # [✔] rails runner idempotente: as 2 inboxes + installation_configs
+    init-db/                 # [1.2] cria usuário, banco e extensões da central (AD-9)
+    backup.sh  restore.sh    # [1.4] backup do par banco+anexos; restore em ambiente limpo
+    smoke-test.sh            # [1.1] semeia, reinicia e prova a persistência (dev; exige opt-in)
+    verificar-invariantes.sh # [1.x] falha se AD-7/8/9/10 forem violados
+    retencao-conversas.sh    # [6.3] expurgo LGPD de conversa resolvida antiga
+    conectar-twilio.sh       # [3.1] --status e --templates (a inbox já nasce do seed)
+    conectar-gmail.sh        # [4.1] --status e --url (o consent do Google é clique humano)
+    verificar-canal-oficial.sh  # [3.1] janela 24h, templates, AD-6, RELAY_TOKEN, nada fora da loopback
+    verificar-canal-email.sh    # [4.1] provider, IMAP, refresh_token, job do Sidekiq, installation_configs
+    backfill-email.sh        # [4.1] recupera e-mail perdido em janela de queda do poller
+  docs/                      # product-brief, prd, architecture, epics + runbooks
   .claude/                   # scaffold de dev: hooks, comandos, memories, skills
   CLAUDE.md  PROGRESS.md  README.md
 ```
+
+**O que saiu na Fase 1** — e por quê, para ninguém recriar:
+
+| Saiu | Motivo |
+|---|---|
+| `Makefile` (28 alvos) | com tudo na raiz, `docker compose` acha sozinho: era indireção pura (AD-10) |
+| `deploy/` | o nível extra só existia para justificar o `-f` e o `--env-file` |
+| `deploy/Caddyfile` + serviço `caddy` | a central publica em loopback; nada de proxy (AD-10) |
+| 5 scripts da Evolution + 2 runbooks | EPIC-2 cancelado (AD-11) |
+| `sync-service/` | nunca chegou a existir — EPIC-5 cancelado (AD-13) |
+| 14 cópias de `env_get()` | viraram `scripts/lib/env.sh` |
+| `curlimages/curl` em rede compartilhada | os scripts falam com a central pela porta em loopback |
 
 > O espelho do canal oficial (STORY-3.2) **não mora aqui** — é código do `monorepo-flash-capital`
 > (`api/integrations/chatwoot/chatwoot_mirror.py`), porque quem é dono do webhook do Twilio e do
@@ -278,11 +299,10 @@ inbox-flash-capital/
 
 | Capability / Área | Lives in | Governed by |
 | --- | --- | --- |
-| Deploy/backup/versão (FR-1..3) | `deploy/` + Chatwoot | AD-7, AD-8, AD-9 |
-| WhatsApp Prospecção (FR-4..6) | Evolution (CRM) → Chatwoot | AD-4, AD-5 |
+| Deploy/backup/versão (FR-1..3) | a raiz do repo + Chatwoot | AD-7, AD-8, AD-9 |
 | WhatsApp Oficial (FR-7, FR-8) | Twilio → Chatwoot; monorepo push | AD-4, AD-6 |
 | E-mail (FR-9, FR-10) | Gmail → Chatwoot | AD-4, AD-3 |
-| Enriquecimento (FR-11..14) | `sync-service/` | AD-2, AD-3, AD-9 |
+| ~~Enriquecimento (FR-11..14)~~ | **anulado** — `chatwoot_mirror.py` do monorepo carimba no disparo | **AD-13** |
 | Operação (FR-15, FR-16) | Chatwoot nativo | AD-7 |
 
 ## Deferred

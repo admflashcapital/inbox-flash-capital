@@ -8,7 +8,7 @@ Para encerrar a STORY-$ARGUMENTS:
    - Story de **código** (Serviço de Sync): `pytest -q --tb=short` — se falhar, PARE e corrija.
    - Story de **configuração/infra**: confirme o critério de aceite **ao vivo** (a UI responde, a
      mensagem chegou na inbox, o restore recompôs os dados) e que o artefato foi versionado
-     (`deploy/`, `docs/`, `.env.example` sincronizado). Sem evidência, não encerre.
+     (a raiz do repo, `docs/`, `.env.example` sincronizado). Sem evidência, não encerre.
    - Segredo novo? Ele entra no `.env` (local) e no `.env.example` (placeholder + comentário) —
      **nunca** o valor no repo, no chat ou no runbook.
 

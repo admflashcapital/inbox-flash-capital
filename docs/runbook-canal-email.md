@@ -8,7 +8,7 @@
 
 
 **Épico:** EPIC-4 · **Stories:** 4.1 (inbox espelhada) e 4.2 (unificação de contato)
-**FRs:** FR-9, FR-10 · **Comandos:** `make gmail` · `make gmail-status` · `make gmail-url` · `make email`
+**FRs:** FR-9, FR-10 · **Comandos:** `bash scripts/conectar-gmail.sh` · `bash scripts/conectar-gmail.sh --status` · `bash scripts/conectar-gmail.sh --url` · `bash scripts/verificar-canal-email.sh`
 
 A caixa Gmail de atendimento entra na central como a inbox `E-mail`. O Chatwoot **recebe** por IMAP
 (`imap.gmail.com`) e **responde** por SMTP (`smtp.gmail.com:587`), os dois autenticando com **XOAUTH2**
@@ -68,7 +68,7 @@ Pode ser no **mesmo projeto** onde a service account já vive.
 
 ## Passo 2 — Preencher o `.env` (manual)
 
-No `deploy/.env` (nunca commitado, nunca ecoado):
+No `.env` (nunca commitado, nunca ecoado):
 
 | Chave | Valor |
 |---|---|
@@ -82,7 +82,7 @@ As três chaves `ACTIVE_RECORD_ENCRYPTION_*` já foram geradas. **Guarde-as junt
 Depois de editar, recarregue o ambiente dos containers:
 
 ```bash
-make up      # o compose lê o .env via env_file; sem restart, as chaves novas não chegam
+docker compose up -d --wait      # o compose lê o .env via env_file; sem restart, as chaves novas não chegam
 ```
 
 ---
@@ -90,7 +90,7 @@ make up      # o compose lê o .env via env_file; sem restart, as chaves novas n
 ## Passo 3 — Criar a inbox
 
 ```bash
-make gmail
+bash scripts/conectar-gmail.sh
 ```
 
 Cria a inbox `E-mail` (`Channel::Email`) com o endereço da caixa e devolve a **URL de autorização**.
@@ -141,11 +141,11 @@ consent falha com `redirect_uri_mismatch`.
 ## Passo 5 — Verificar
 
 ```bash
-make email          # invariantes do canal
-make gmail-status   # o que está valendo (nunca imprime token)
+bash scripts/verificar-canal-email.sh          # invariantes do canal
+bash scripts/conectar-gmail.sh --status   # o que está valendo (nunca imprime token)
 ```
 
-O `make email` recusa as três formas de o canal falhar **calado**:
+O `bash scripts/verificar-canal-email.sh` recusa as três formas de o canal falhar **calado**:
 
 | Invariante | Por que existe |
 |---|---|
@@ -172,7 +172,7 @@ grava o token novo de volta no canal. Consequência não óbvia: **se o Sidekiq/
 1 hora o envio quebra junto com o recebimento**, com falha de autenticação SMTP dentro de um job.
 
 Sintoma: a atendente responde, a mensagem fica na conversa, e o cliente nunca recebe.
-Diagnóstico: `make email` (item do agendador) e `make logs s=chatwoot-sidekiq`.
+Diagnóstico: `bash scripts/verificar-canal-email.sh` (item do agendador) e `docker compose logs -f chatwoot-sidekiq`.
 
 ### 2. Re-autorizar sem revogar não devolve `refresh_token`
 
@@ -189,7 +189,7 @@ vive no `provider_config` — **jsonb, e o Chatwoot não o criptografa**, mesmo 
 `ACTIVE_RECORD_ENCRYPTION_*` ligadas.
 
 Esse token dá **leitura e envio na caixa inteira** e **não expira**. Ele está no Postgres e dentro de
-**todo backup** que o `make backup` gera. Corrigir exigiria forkar o Chatwoot (proibido, AD-7).
+**todo backup** que o `bash scripts/backup.sh` gera. Corrigir exigiria forkar o Chatwoot (proibido, AD-7).
 
 **Mitigação:** tratar o `BACKUP_DIR` como segredo (já é a política) e **revogar** o token em
 <https://myaccount.google.com/permissions> ao menor sinal de vazamento. Registrado na dívida técnica.
@@ -220,8 +220,8 @@ no deploy. Logo o `first_or_create` **encontra** a linha, não cria nada, não a
 **Sintoma:** a URL de consentimento sai com `client_id` **em branco** (`...&client_id&prompt=consent`)
 e o Google responde um erro genérico. Nada no `.env` está errado, e você caça fantasma por horas.
 
-**Solução (já automatizada):** o `make gmail` grava os dois valores no `installation_configs` e limpa
-o cache do `GlobalConfig`. O `make email` **reprova** se eles estiverem vazios lá.
+**Solução (já automatizada):** o `bash scripts/conectar-gmail.sh` grava os dois valores no `installation_configs` e limpa
+o cache do `GlobalConfig`. O `bash scripts/verificar-canal-email.sh` **reprova** se eles estiverem vazios lá.
 
 ### 5. A busca IMAP tolera queda, mas só por ~24h
 
@@ -264,10 +264,10 @@ desde o planejamento ("depende de Epic 5"), não é desvio.
 
 | Sintoma | Causa provável |
 |---|---|
-| a URL de consentimento sai com **`client_id` vazio** (`...&client_id&prompt=`) | a env var não chegou ao `installation_configs` (armadilha 4) → `make gmail` grava e limpa o cache |
-| `redirect_uri_mismatch` no Google | a `FRONTEND_URL` do `.env` não bate com o Authorized redirect URI registrado. Lembre do `/google/callback` no fim, e de `make up` depois de mudar |
-| `Invalid or expired state` | o sgid expirou (15 min). `make gmail-url` |
-| inbox existe mas nunca chega e-mail | OAuth pela metade (`provider` vazio) ou agendador morto → `make email` diz qual |
-| chegou e-mail, mas a resposta não sai | token vencido porque o agendador parou (armadilha 1) → `make logs s=chatwoot-sidekiq` |
+| a URL de consentimento sai com **`client_id` vazio** (`...&client_id&prompt=`) | a env var não chegou ao `installation_configs` (armadilha 4) → `bash scripts/conectar-gmail.sh` grava e limpa o cache |
+| `redirect_uri_mismatch` no Google | a `FRONTEND_URL` do `.env` não bate com o Authorized redirect URI registrado. Lembre do `/google/callback` no fim, e de `docker compose up -d --wait` depois de mudar |
+| `Invalid or expired state` | o sgid expirou (15 min). `bash scripts/conectar-gmail.sh --url` |
+| inbox existe mas nunca chega e-mail | OAuth pela metade (`provider` vazio) ou agendador morto → `bash scripts/verificar-canal-email.sh` diz qual |
+| chegou e-mail, mas a resposta não sai | token vencido porque o agendador parou (armadilha 1) → `docker compose logs -f chatwoot-sidekiq` |
 | canal funcionou 1h e parou | nasceu **sem `refresh_token`** (armadilha 2) → revogue em myaccount.google.com/permissions e re-autorize |
 | resposta cria thread nova no cliente | o `In-Reply-To` não foi montado — a conversa não tem mensagem inbound com `message_id` (ex.: conversa criada à mão) |
