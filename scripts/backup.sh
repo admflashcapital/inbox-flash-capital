@@ -9,7 +9,7 @@
 # dois artefatos são gerados no mesmo par, com o mesmo timestamp.
 #
 # Uso (cron do host, ex.: 3h da manhã):
-#   cd /caminho/inbox-flash-capital && deploy/scripts/backup.sh
+#   cd /caminho/inbox-flash-capital && scripts/backup.sh
 #
 # Retenção: 7 diários + 4 semanais (domingo → sufixo _weekly), por artefato.
 # ⚠️ Os arquivos contêm PII (CPF/CNPJ, conteúdo de conversa): diretório fora
@@ -18,14 +18,14 @@
 # ═══════════════════════════════════════════════════════════════════
 set -euo pipefail
 
-RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-ENV_FILE="${RAIZ}/deploy/.env"
-COMPOSE="docker compose -f ${RAIZ}/deploy/docker-compose.yml --env-file ${ENV_FILE}"
+RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${RAIZ}/.env"
+COMPOSE="docker compose -f ${RAIZ}/compose.yaml --env-file ${ENV_FILE}"
 PROJETO="inbox-flash-capital"   # = `name:` do compose (prefixo dos volumes)
 
 # Lê UMA chave do .env. Não damos `source`: nenhum segredo precisa entrar no
 # ambiente deste script — o pg_dump roda dentro do container, pelo socket local.
-env_get() { sed -n "s/^$1=//p" "$ENV_FILE" | head -1 | sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
+. "${RAIZ}/scripts/lib/env.sh"
 
 BACKUP_DIR="${BACKUP_DIR:-$(env_get BACKUP_DIR)}"
 BACKUP_DIR="${BACKUP_DIR:-${RAIZ}/backups}"
@@ -78,4 +78,4 @@ podar 'db_????-??-??_weekly.sql.gz'       4   # semanais (domingo)
 podar 'storage_????-??-??_weekly.tar.gz'  4
 
 echo "[backup] OK — ${DATA}${SUFIXO:+ (semanal)}"
-echo "[backup] valide o par com: deploy/scripts/restore.sh --verificar"
+echo "[backup] valide o par com: scripts/restore.sh --verificar"

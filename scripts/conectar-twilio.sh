@@ -25,15 +25,15 @@
 # motivo para o medium estar certo.
 #
 # Uso:
-#   deploy/scripts/conectar-twilio.sh            # cria a inbox + sincroniza templates
-#   deploy/scripts/conectar-twilio.sh --status   # mostra o que está valendo
-#   deploy/scripts/conectar-twilio.sh --templates # só re-sincroniza os templates
+#   scripts/conectar-twilio.sh            # cria a inbox + sincroniza templates
+#   scripts/conectar-twilio.sh --status   # mostra o que está valendo
+#   scripts/conectar-twilio.sh --templates # só re-sincroniza os templates
 # ═══════════════════════════════════════════════════════════════════
 set -euo pipefail
 
-RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-ENV_FILE="${RAIZ}/deploy/.env"
-env_get() { sed -n "s/^$1=//p" "$ENV_FILE" | head -1 | sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
+RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${RAIZ}/.env"
+. "${RAIZ}/scripts/lib/env.sh"
 
 # Não-secretos.
 CENTRAL_URL="$(env_get CENTRAL_URL_INTERNA)"; CENTRAL_URL="${CENTRAL_URL:-http://chatwoot-web:3000}"
@@ -53,7 +53,7 @@ for chave in CENTRAL_ACCOUNT_ID CENTRAL_ACCESS_TOKEN TWILIO_ACCOUNT_SID TWILIO_A
   [ -n "$(env_get "$chave")" ] || faltando="${faltando} ${chave}"
 done
 if [ -n "$faltando" ]; then
-  echo "[twilio] ERRO: chaves ausentes no deploy/.env:${faltando}"
+  echo "[twilio] ERRO: chaves ausentes no .env:${faltando}"
   echo "[twilio] as credenciais Twilio são as MESMAS do monorepo — ver docs/runbook-canal-oficial.md"
   exit 1
 fi
@@ -103,7 +103,7 @@ import sys, json
 d = json.load(sys.stdin)
 alvo = [i for i in d.get('payload', []) if i.get('name') == '''${NOME_INBOX}''']
 if not alvo:
-    print('  (inbox ainda não existe — rode: make twilio)'); raise SystemExit(0)
+    print('  (inbox ainda não existe — rode: bash scripts/conectar-twilio.sh)'); raise SystemExit(0)
 i = alvo[0]
 # O auth_token da Twilio volta no corpo — NUNCA imprima. Só o que é seguro.
 for k in ['id', 'name', 'channel_type', 'medium', 'phone_number', 'messaging_service_sid']:
@@ -159,7 +159,7 @@ try:
     motivo = d.get('message') or d.get('error') or d.get('attributes') or '(sem mensagem)'
     print('  motivo:', redigir(str(motivo)))
 except Exception:
-    print('  (resposta não-JSON — veja: make logs s=chatwoot-web)')
+    print('  (resposta não-JSON — veja: docker compose logs -f chatwoot-web)')
 " 2>/dev/null || true
     echo
     echo "  Causas comuns:"
@@ -182,12 +182,12 @@ RESPOSTA="$(cw_curl POST "/api/v1/accounts/${CONTA}/inboxes/${INBOX_ID}/sync_tem
 CODIGO="$(echo "$RESPOSTA" | tail -1)"
 if [ "$CODIGO" != "200" ]; then
   echo "[twilio] sync de templates FALHOU (HTTP ${CODIGO}) — a inbox existe, mas fora da janela"
-  echo "         de 24h a atendente ficaria sem template. Veja: make logs s=chatwoot-sidekiq"
+  echo "         de 24h a atendente ficaria sem template. Veja: docker compose logs -f chatwoot-sidekiq"
   exit 1
 fi
 echo "[twilio] sync disparado (job assíncrono no Sidekiq)."
 echo
-echo "  Confira: make oficial   (valida as invariantes do canal, incl. a contagem de templates)"
+echo "  Confira: bash scripts/verificar-canal-oficial.sh   (valida as invariantes do canal, incl. a contagem de templates)"
 echo
 echo "  Falta o passo manual do lado do MONOREPO: o fan-out do webhook Twilio"
 echo "  (o inbound entra lá, é validado, e é relayado para cá). Ver STORY-3.2 e"

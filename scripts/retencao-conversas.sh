@@ -19,15 +19,15 @@
 #    Flash antes de pôr no cron. O agendamento definitivo é da STORY-6.3.
 #
 # Uso:
-#   deploy/scripts/retencao-conversas.sh --simular
-#   deploy/scripts/retencao-conversas.sh --executar
+#   scripts/retencao-conversas.sh --simular
+#   scripts/retencao-conversas.sh --executar
 # ═══════════════════════════════════════════════════════════════════
 set -euo pipefail
 
-RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-ENV_FILE="${RAIZ}/deploy/.env"
-COMPOSE="docker compose -f ${RAIZ}/deploy/docker-compose.yml --env-file ${ENV_FILE}"
-env_get() { sed -n "s/^$1=//p" "$ENV_FILE" | head -1 | sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
+RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${RAIZ}/.env"
+COMPOSE="docker compose -f ${RAIZ}/compose.yaml --env-file ${ENV_FILE}"
+. "${RAIZ}/scripts/lib/env.sh"
 
 DIAS="$(env_get RETENCAO_CONVERSAS_DIAS)"
 DIAS="${DIAS:-1825}"

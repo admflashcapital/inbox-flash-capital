@@ -2,7 +2,7 @@
 
 > ### ⚠️ DOC EM TRANSIÇÃO — Fase 1.3
 >
-> **Procedimento vigente e correto.** Só os invólucros mudam: os alvos `make …` viram `bash scripts/…`, e os caminhos `deploy/…` passam para a raiz do repo (AD-10).
+> **Vigente e as-built desde 2026-09-02 (AD-10).** Sem Makefile e sem `deploy/`: o compose, o `.env` e os `scripts/` moram na raiz, e `docker compose` acha tudo sozinho — sem `-f` e sem `--env-file`.
 >
 > Ver **AD-10..AD-13** em `inbox/docs/architecture.md`, **ADR-010** em `crm/docs/07_Decisoes.md`, e o `HANDOFF-espelho-chatwoot.md`.
 
@@ -11,12 +11,12 @@
 
 ## A regra
 
-A versão do Chatwoot é **fixada por tag** em `deploy/.env` (`CHATWOOT_TAG`). Nunca `latest`:
+A versão do Chatwoot é **fixada por tag** em `.env` (`CHATWOOT_TAG`). Nunca `latest`:
 `latest` significa que um `docker compose pull` num dia qualquer troca a versão da central sem
 ninguém pedir — e migração de banco não tem botão de desfazer.
 
 **Tag atual: `v4.15.1-ce`.** O sufixo `-ce` é obrigatório: é a Community Edition. As tags sem sufixo
-carregam a pasta `enterprise/`, cujas features exigem licença comercial (AD-7). O `make check` falha
+carregam a pasta `enterprise/`, cujas features exigem licença comercial (AD-7). O `bash scripts/verificar-invariantes.sh` falha
 se alguém trocar por uma tag não-`-ce` ou por `latest`.
 
 ## Antes de subir de versão
@@ -26,8 +26,8 @@ se alguém trocar por uma tag não-`-ce` ou por `latest`.
    migração pesada.
 2. **Backup verificado** (não basta ter backup — tem que ter restaurado):
    ```bash
-   make backup
-   make restore-check     # restaura num ambiente limpo e confere conversas + anexos
+   bash scripts/backup.sh
+   bash scripts/restore.sh --verificar     # restaura num ambiente limpo e confere conversas + anexos
    ```
 3. Confira se a nova versão mexe em algo de que a central depende: **integração Evolution**
    (EPIC-2), **canal Twilio/WhatsApp** (EPIC-3), **canal IMAP/e-mail** (EPIC-4) ou a **API de
@@ -40,18 +40,23 @@ Sempre em **staging primeiro** (FR-2). Staging é a mesma composição, com `.en
 
 ```bash
 # 1. staging: bumpe a tag no .env de staging (só o nome da chave, sem tocar em segredo)
-sed -i 's|^CHATWOOT_TAG=.*|CHATWOOT_TAG=vX.Y.Z-ce|' deploy/.env
+sed -i 's|^CHATWOOT_TAG=.*|CHATWOOT_TAG=vX.Y.Z-ce|' .env
 
-# 2. puxe a imagem nova e aplique as migrações (o chatwoot-init é one-shot e idempotente)
-docker compose -f deploy/docker-compose.yml --env-file deploy/.env pull
-make migrate
+# 2. puxe a imagem nova
+docker compose pull
 
-# 3. suba
-make up
+# 3. aplique as migrações ANTES de subir web e sidekiq.
+#    `chatwoot-init` roda `rails db:chatwoot_prepare` — one-shot e idempotente:
+#    cria o schema se for novo, migra se já existe. Era o antigo `make migrate`,
+#    o único alvo do Makefile que não era alias óbvio de docker compose.
+docker compose run --rm chatwoot-init
 
-# 4. valide
-make check                       # tag fixa, -ce, isolamento, portas
-make ps                          # todos healthy
+# 4. suba
+docker compose up -d --wait
+
+# 5. valide
+bash scripts/verificar-invariantes.sh   # tag fixa, -ce, isolamento, portas
+docker compose ps                       # todos healthy
 ```
 
 **Fumaça funcional em staging** — o que realmente prova que o upgrade não quebrou a central:
@@ -70,8 +75,8 @@ Migração de banco **não volta sozinha**. Voltar a tag da imagem sem voltar o 
 pior do que o upgrade. O rollback real é:
 
 ```bash
-sed -i 's|^CHATWOOT_TAG=.*|CHATWOOT_TAG=<tag-anterior>|' deploy/.env
-deploy/scripts/restore.sh --producao      # restaura o backup PRÉ-upgrade (destrutivo, pede confirmação)
+sed -i 's|^CHATWOOT_TAG=.*|CHATWOOT_TAG=<tag-anterior>|' .env
+scripts/restore.sh --producao      # restaura o backup PRÉ-upgrade (destrutivo, pede confirmação)
 ```
 
 Por isso o passo 2 da seção anterior (backup **verificado**) não é burocracia: é o rollback.

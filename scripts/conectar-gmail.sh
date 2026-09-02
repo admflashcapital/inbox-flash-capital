@@ -29,16 +29,16 @@
 # (ConversationReplyMailerHelper#oauth_smtp_settings).
 #
 # Uso:
-#   deploy/scripts/conectar-gmail.sh          # cria a inbox + imprime a URL
-#   deploy/scripts/conectar-gmail.sh --status # mostra o que está valendo
-#   deploy/scripts/conectar-gmail.sh --url    # só re-imprime a URL (expira em 15min)
+#   scripts/conectar-gmail.sh          # cria a inbox + imprime a URL
+#   scripts/conectar-gmail.sh --status # mostra o que está valendo
+#   scripts/conectar-gmail.sh --url    # só re-imprime a URL (expira em 15min)
 # ═══════════════════════════════════════════════════════════════════
 set -euo pipefail
 
-RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-ENV_FILE="${RAIZ}/deploy/.env"
-COMPOSE="docker compose -f ${RAIZ}/deploy/docker-compose.yml --env-file ${ENV_FILE}"
-env_get() { sed -n "s/^$1=//p" "$ENV_FILE" | head -1 | sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
+RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${RAIZ}/.env"
+COMPOSE="docker compose -f ${RAIZ}/compose.yaml --env-file ${ENV_FILE}"
+. "${RAIZ}/scripts/lib/env.sh"
 
 # Não-secretos.
 CENTRAL_URL="$(env_get CENTRAL_URL_INTERNA)"; CENTRAL_URL="${CENTRAL_URL:-http://chatwoot-web:3000}"
@@ -57,7 +57,7 @@ for chave in CENTRAL_ACCOUNT_ID CENTRAL_ACCESS_TOKEN GMAIL_CAIXA_ATENDIMENTO \
   [ -n "$(env_get "$chave")" ] || faltando="${faltando} ${chave}"
 done
 if [ -n "$faltando" ]; then
-  echo "[gmail] ERRO: chaves ausentes no deploy/.env:${faltando}"
+  echo "[gmail] ERRO: chaves ausentes no .env:${faltando}"
   echo "[gmail] o OAuth Client é criado no Google Cloud — ver docs/runbook-canal-email.md"
   exit 1
 fi
@@ -102,7 +102,7 @@ if [ "${1:-}" = "--status" ]; then
   echo "[gmail] inbox '${NOME_INBOX}' na conta ${CONTA} (${CENTRAL_URL})"
   ID="$(consultar "SELECT id FROM inboxes WHERE name = '${NOME_INBOX}' LIMIT 1;")"
   if [ -z "$ID" ]; then
-    echo "  (inbox ainda não existe — rode: make gmail)"
+    echo "  (inbox ainda não existe — rode: bash scripts/conectar-gmail.sh)"
     exit 0
   fi
   CH="$(consultar "SELECT channel_id FROM inboxes WHERE id = ${ID};")"
@@ -143,7 +143,7 @@ try:
     d = json.load(sys.stdin)
     print('  motivo:', d.get('message') or d.get('error') or d.get('attributes') or '(sem mensagem)')
 except Exception:
-    print('  (resposta não-JSON — veja: make logs s=chatwoot-web)')
+    print('  (resposta não-JSON — veja: docker compose logs -f chatwoot-web)')
 " 2>/dev/null || true
     echo
     echo "  Causas comuns:"
@@ -240,7 +240,7 @@ RESPOSTA="$(cw_curl POST "/api/v1/accounts/${CONTA}/google/authorization" </dev/
 CODIGO="$(echo "$RESPOSTA" | tail -1)"
 if [ "$CODIGO" != "200" ]; then
   echo "[gmail] FALHOU ao gerar a URL (HTTP ${CODIGO})."
-  echo "        Confira GOOGLE_OAUTH_CLIENT_ID/SECRET no .env e reinicie: make up"
+  echo "        Confira GOOGLE_OAUTH_CLIENT_ID/SECRET no .env e reinicie: docker compose up -d --wait"
   exit 1
 fi
 
@@ -258,4 +258,4 @@ echo
 echo "  ⏱️  O 'state' é um sgid assinado e EXPIRA EM 15 MINUTOS. Se demorar,"
 echo "      rode de novo com --url para gerar outro."
 echo
-echo "  Depois de autorizar, confira:  make email"
+echo "  Depois de autorizar, confira:  bash scripts/verificar-canal-email.sh"

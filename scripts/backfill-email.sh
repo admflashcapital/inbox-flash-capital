@@ -16,19 +16,19 @@
 #    E-mail ARQUIVADO no Gmail sai da INBOX e NUNCA será importado por aqui.
 #
 # ⚠️ Isto traz PII de cliente para a central. Ver a dívida de retenção (LGPD) no
-#    PROGRESS.md — o expurgo existe (`make retencao`) mas não está no cron.
+#    PROGRESS.md — o expurgo existe (`bash scripts/retencao-conversas.sh`) mas não está no cron.
 #
 # Uso:
-#   deploy/scripts/backfill-email.sh          # 30 dias (default)
-#   deploy/scripts/backfill-email.sh 90       # 90 dias
-#   deploy/scripts/backfill-email.sh --contar # só CONTA o que existe, não importa
+#   scripts/backfill-email.sh          # 30 dias (default)
+#   scripts/backfill-email.sh 90       # 90 dias
+#   scripts/backfill-email.sh --contar # só CONTA o que existe, não importa
 # ═══════════════════════════════════════════════════════════════════
 set -euo pipefail
 
-RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-ENV_FILE="${RAIZ}/deploy/.env"
-COMPOSE="docker compose -f ${RAIZ}/deploy/docker-compose.yml --env-file ${ENV_FILE}"
-env_get() { sed -n "s/^$1=//p" "$ENV_FILE" | head -1 | sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'; }
+RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${RAIZ}/.env"
+COMPOSE="docker compose -f ${RAIZ}/compose.yaml --env-file ${ENV_FILE}"
+. "${RAIZ}/scripts/lib/env.sh"
 
 INBOX="$(env_get INBOX_EMAIL_NOME)"; INBOX="${INBOX:-E-mail}"
 
@@ -65,7 +65,7 @@ DIAS="$DIAS" $COMPOSE exec -T -e BACKFILL_DIAS="$DIAS" chatwoot-web bundle exec 
 dias = ENV.fetch("BACKFILL_DIAS").to_i
 ch   = Inbox.find_by(name: ENV.fetch("INBOX_EMAIL_NOME", "E-mail")).channel
 raise "inbox de e-mail não encontrada" if ch.nil?
-raise "OAuth não concluído — rode: make gmail" unless ch.provider == "google" && ch.imap_enabled
+raise "OAuth não concluído — rode: bash scripts/conectar-gmail.sh" unless ch.provider == "google" && ch.imap_enabled
 
 antes_c = ch.inbox.conversations.count
 antes_m = ch.inbox.messages.count
@@ -83,4 +83,4 @@ puts "BF ⚠️ e-mail ARQUIVADO no Gmail não vem: o Chatwoot lê só a pasta I
 ' 2>/dev/null | sed -n 's/^BF //p'
 
 echo
-echo "  Confira: make email"
+echo "  Confira: bash scripts/verificar-canal-email.sh"

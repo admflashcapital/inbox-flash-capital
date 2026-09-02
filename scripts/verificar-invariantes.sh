@@ -3,7 +3,7 @@
 # verificar-invariantes.sh — o gate do EPIC-1, executável
 # ═══════════════════════════════════════════════════════════════════
 # Falha se alguma decisão de arquitetura tiver sido violada. Rode antes de
-# todo commit de infra e no gate do épico (`make check`).
+# todo commit de infra e no gate do épico (`bash scripts/verificar-invariantes.sh`).
 #
 #   AD-7 / FR-2 — imagem com tag FIXA (nunca `latest`)          [STORY-1.3]
 #   AD-9        — banco da central ISOLADO do Twenty/Supabase   [STORY-1.2]
@@ -13,10 +13,10 @@
 # ═══════════════════════════════════════════════════════════════════
 set -uo pipefail
 
-RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-ENV_FILE="${RAIZ}/deploy/.env"
-COMPOSE="docker compose -f ${RAIZ}/deploy/docker-compose.yml --env-file ${ENV_FILE}"
-env_get() { sed -n "s/^$1=//p" "$ENV_FILE" | head -1 | sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
+RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${RAIZ}/.env"
+COMPOSE="docker compose -f ${RAIZ}/compose.yaml --env-file ${ENV_FILE}"
+. "${RAIZ}/scripts/lib/env.sh"
 
 FALHAS=0
 ok()    { echo "  ✓ $1"; }
@@ -90,7 +90,7 @@ if $COMPOSE ps --status running --services 2>/dev/null | grep -q '^postgres$'; t
     falha "o usuário da aplicação é superusuário (rolsuper=${SUPER})"
   fi
 else
-  echo "  … stack parada: pulei as checagens que precisam do banco no ar (make up)"
+  echo "  … stack parada: pulei as checagens que precisam do banco no ar (docker compose up -d --wait)"
 fi
 
 echo
@@ -122,7 +122,7 @@ else
 fi
 
 # O .env não pode estar versionado.
-if git -C "$RAIZ" ls-files --error-unmatch deploy/.env .env >/dev/null 2>&1; then
+if git -C "$RAIZ" ls-files --error-unmatch .env .env >/dev/null 2>&1; then
   falha ".env está VERSIONADO no git — revogue os segredos e remova do índice"
 else
   ok ".env não está versionado"
@@ -137,7 +137,7 @@ fi
 #
 # Só nomes de chave são lidos e impressos aqui. Nenhum valor, nunca.
 CHAVES_ENV="$(grep -oE '^[A-Z_0-9]+=' "$ENV_FILE" 2>/dev/null | tr -d '=' | sort -u)"
-CHAVES_EX="$(grep -oE '^[A-Z_0-9]+=' "${RAIZ}/deploy/.env.example" 2>/dev/null | tr -d '=' | sort -u)"
+CHAVES_EX="$(grep -oE '^[A-Z_0-9]+=' "${RAIZ}/.env.example" 2>/dev/null | tr -d '=' | sort -u)"
 
 NAO_DOCUMENTADAS="$(comm -23 <(echo "$CHAVES_ENV") <(echo "$CHAVES_EX") | tr '\n' ' ')"
 NAO_PREENCHIDAS="$(comm -13 <(echo "$CHAVES_ENV") <(echo "$CHAVES_EX") | tr '\n' ' ')"
@@ -167,7 +167,7 @@ CRLF="$(grep -cE $'\r$' "$ENV_FILE" 2>/dev/null || true)"; CRLF="${CRLF:-0}"
 if [ -n "${SUJAS// /}" ]; then
   falha "chaves cujo VALOR tem espaço/tab nas pontas (o Compose não apara — falha calada): ${SUJAS}"
 elif [ "${CRLF:-0}" -gt 0 ]; then
-  falha "o .env tem ${CRLF} linha(s) com CR (fim de linha Windows) — o \\r entra no valor. Rode: dos2unix deploy/.env"
+  falha "o .env tem ${CRLF} linha(s) com CR (fim de linha Windows) — o \\r entra no valor. Rode: dos2unix .env"
 else
   ok "nenhum valor do .env tem espaço ou CR nas pontas"
 fi

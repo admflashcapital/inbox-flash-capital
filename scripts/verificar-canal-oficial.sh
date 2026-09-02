@@ -19,14 +19,14 @@
 #      valida é o monorepo, que é o dono do webhook e faz o fan-out para cá.
 #      Logo, este path só pode entrar pela rede interna / com o token do relay.
 #
-# Uso:  deploy/scripts/verificar-canal-oficial.sh
+# Uso:  scripts/verificar-canal-oficial.sh
 # ═══════════════════════════════════════════════════════════════════
 set -uo pipefail
 
-RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-ENV_FILE="${RAIZ}/deploy/.env"
-COMPOSE="docker compose -f ${RAIZ}/deploy/docker-compose.yml --env-file ${ENV_FILE}"
-env_get() { sed -n "s/^$1=//p" "$ENV_FILE" | head -1 | sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
+RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${RAIZ}/.env"
+COMPOSE="docker compose -f ${RAIZ}/compose.yaml --env-file ${ENV_FILE}"
+. "${RAIZ}/scripts/lib/env.sh"
 
 DB="$(env_get POSTGRES_DATABASE)"
 INBOX="$(env_get INBOX_OFICIAL_NOME)"; INBOX="${INBOX:-WhatsApp Oficial}"
@@ -43,7 +43,7 @@ echo "── Canal WhatsApp Oficial (Twilio) — inbox '${INBOX}' ────�
 # ── 1. A inbox existe e é do canal certo ──────────────────────────
 INBOX_ID="$(consultar "SELECT id FROM inboxes WHERE name = '${INBOX}' LIMIT 1;")"
 if [ -z "$INBOX_ID" ]; then
-  falha "a inbox '${INBOX}' não existe. Rode: make twilio (ver docs/runbook-canal-oficial.md)"
+  falha "a inbox '${INBOX}' não existe. Rode: bash scripts/conectar-twilio.sh (ver docs/runbook-canal-oficial.md)"
   echo
   echo "❌ ${FALHAS} violação(ões) — o canal oficial ainda não está ligado."
   exit 1
@@ -86,7 +86,7 @@ QTD_TEMPLATES="$(consultar "
 if [ "${QTD_TEMPLATES:-0}" -gt 0 ] 2>/dev/null; then
   ok "${QTD_TEMPLATES} Content Template(s) sincronizado(s) da Twilio (envio fora da janela de 24h)"
 else
-  falha "nenhum Content Template sincronizado — fora da janela de 24h a atendente fica sem o que enviar. Rode: make twilio"
+  falha "nenhum Content Template sincronizado — fora da janela de 24h a atendente fica sem o que enviar. Rode: bash scripts/conectar-twilio.sh"
 fi
 
 # ── 5. AD-6: a central NÃO origina disparo em massa ───────────────

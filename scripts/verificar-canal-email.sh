@@ -21,14 +21,14 @@
 #      Logo: agendador parado ⇒ em 1h a atendente também PARA DE CONSEGUIR
 #      RESPONDER, e o erro morre dentro de um job.
 #
-# Uso:  deploy/scripts/verificar-canal-email.sh
+# Uso:  scripts/verificar-canal-email.sh
 # ═══════════════════════════════════════════════════════════════════
 set -uo pipefail
 
-RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-ENV_FILE="${RAIZ}/deploy/.env"
-COMPOSE="docker compose -f ${RAIZ}/deploy/docker-compose.yml --env-file ${ENV_FILE}"
-env_get() { sed -n "s/^$1=//p" "$ENV_FILE" | head -1 | sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
+RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${RAIZ}/.env"
+COMPOSE="docker compose -f ${RAIZ}/compose.yaml --env-file ${ENV_FILE}"
+. "${RAIZ}/scripts/lib/env.sh"
 
 DB="$(env_get POSTGRES_DATABASE)"
 INBOX="$(env_get INBOX_EMAIL_NOME)"; INBOX="${INBOX:-E-mail}"
@@ -48,7 +48,7 @@ echo "── Canal E-mail (Gmail/OAuth) — inbox '${INBOX}' ──────�
 # ── 1. A inbox existe e é do canal certo ──────────────────────────
 INBOX_ID="$(consultar "SELECT id FROM inboxes WHERE name = '${INBOX}' LIMIT 1;")"
 if [ -z "$INBOX_ID" ]; then
-  falha "a inbox '${INBOX}' não existe. Rode: make gmail"
+  falha "a inbox '${INBOX}' não existe. Rode: bash scripts/conectar-gmail.sh"
   echo
   echo "  ${FALHAS} falha(s)."
   exit 1
@@ -74,7 +74,7 @@ PROVIDER="$(consultar "SELECT coalesce(provider,'') FROM channel_email WHERE id 
 if [ "$PROVIDER" = "google" ]; then
   ok "provider = google (fluxo OAuth concluído)"
 else
-  falha "provider = '${PROVIDER}' — o OAuth NÃO foi concluído. A inbox existe mas nunca vai buscar e-mail. Rode: make gmail-url"
+  falha "provider = '${PROVIDER}' — o OAuth NÃO foi concluído. A inbox existe mas nunca vai buscar e-mail. Rode: bash scripts/conectar-gmail.sh --url"
 fi
 
 # ── 4. IMAP ligado e apontando para o Gmail ───────────────────────
@@ -101,7 +101,7 @@ CRON_EXISTE="$($COMPOSE exec -T redis sh -c "redis-cli -a '${REDIS_PW}' --no-aut
 if [ "$CRON_EXISTE" = "1" ]; then
   ok "agendador do Sidekiq vivo e o job IMAP registrado (roda a cada minuto)"
 else
-  falha "o job '${CRON_KEY}' NÃO está registrado no Redis. Sem ele a caixa não sincroniza — e, em 1h, o token vence e a atendente também PARA DE RESPONDER. Veja: make logs s=chatwoot-sidekiq"
+  falha "o job '${CRON_KEY}' NÃO está registrado no Redis. Sem ele a caixa não sincroniza — e, em 1h, o token vence e a atendente também PARA DE RESPONDER. Veja: docker compose logs -f chatwoot-sidekiq"
 fi
 
 # ── 7. As credenciais OAuth chegaram ao BANCO (não só ao .env) ────
@@ -127,7 +127,7 @@ puts "CREDS_RESULT=#{faltando.empty? ? "ok" : faltando.join(",")}"
 if [ "$CREDS_OK" = "ok" ]; then
   ok "credenciais OAuth gravadas no installation_configs (é de lá que o controller lê, não do ENV)"
 else
-  falha "vazio no installation_configs: ${CREDS_OK:-erro ao consultar}. A env var sozinha NÃO basta — o Chatwoot semeia essa linha vazia e o fallback do GlobalConfigService devolve o vazio dela. A URL de consentimento sairia sem client_id. Rode: make gmail"
+  falha "vazio no installation_configs: ${CREDS_OK:-erro ao consultar}. A env var sozinha NÃO basta — o Chatwoot semeia essa linha vazia e o fallback do GlobalConfigService devolve o vazio dela. A URL de consentimento sairia sem client_id. Rode: bash scripts/conectar-gmail.sh"
 fi
 
 # ── 8. AD-6: a central NÃO origina disparo em massa ───────────────

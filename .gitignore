@@ -13,7 +13,7 @@ backups/
 *.sql
 *.sql.gz
 
-# Python (Serviço de Sync)
+# Python
 .venv/
 __pycache__/
 *.py[cod]
@@ -31,6 +31,3 @@ storage/
 .DS_Store
 *.swp
 
-# QR de pareamento do WhatsApp (credencial de vinculação de dispositivo)
-.qr-*
-deploy/.qr-*

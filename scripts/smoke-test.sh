@@ -18,14 +18,14 @@
 # ═══════════════════════════════════════════════════════════════════
 set -euo pipefail
 
-RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-ENV_FILE="${RAIZ}/deploy/.env"
-COMPOSE="docker compose -f ${RAIZ}/deploy/docker-compose.yml --env-file ${ENV_FILE}"
+RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${RAIZ}/.env"
+COMPOSE="docker compose -f ${RAIZ}/compose.yaml --env-file ${ENV_FILE}"
 
 # Lê UMA chave do .env. Deliberadamente não damos `source` no arquivo: isso
 # jogaria todos os segredos no ambiente do script (e um valor com `<`, `$` ou
 # aspas seria interpretado pelo shell). Aqui só entram chaves NÃO-secretas.
-env_get() { sed -n "s/^$1=//p" "$ENV_FILE" | head -1 | sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
+. "${RAIZ}/scripts/lib/env.sh"
 
 # Este script SEMEIA e APAGA uma conta de teste: nunca pode rodar em produção.
 # O guard antigo era `DOMAIN != localhost`, e a chave DOMAIN morreu com o Caddy.
