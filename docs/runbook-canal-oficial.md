@@ -145,6 +145,42 @@ O **`/twilio/delivery_status`** tem o mesmo desenho: é a própria Twilio que o 
 mensagens que a *central* envia. Forjá-lo só altera o status de entrega de uma mensagem existente
 (baixo impacto), e hoje ninguém o alcança.
 
+## 🚨 Responder PELA central não funciona em localhost (erro 21609)
+
+**Medido em 2026-09-02, respondendo pela UI:**
+
+```
+[HTTP 400] 21609 : The StatusCallback URL http://localhost:3001/twilio/delivery_status
+                   is not a valid URL
+```
+
+**Por que, e por que não tem contorno de configuração.** `Channel::TwilioSms#send_message`
+(`app/models/channel/twilio_sms.rb:66`) faz, **sem condição nenhuma**:
+
+```ruby
+params[:status_callback] = twilio_delivery_status_index_url
+```
+
+Esse helper de rota monta a URL a partir de `Rails.application.routes.default_url_options`,
+que o Chatwoot preenche com **`FRONTEND_URL`**. Como a central publica em loopback (AD-10),
+`FRONTEND_URL` é `http://localhost:3001` — e a Twilio recusa o `messages.create` inteiro,
+porque ela precisa conseguir chamar esse callback de fora. Não é o callback que falha depois:
+**a mensagem nem chega a sair**.
+
+Não há env var nem toggle para omitir o callback, e mexer no model exigiria fork (proibido,
+AD-7).
+
+**O que isso significa hoje:** a central é **painel, não superfície de resposta** no canal
+WhatsApp. O espelho entra, o inbound do cliente entra, o operador lê tudo — mas responder
+sai pelo monorepo. O e-mail (EPIC-4) **não** é afetado: SMTP não tem status callback.
+
+**O que destrava:** um `FRONTEND_URL` público e estável, ou seja, o ingresso da Fase 4. Ao
+ligá-lo, lembre que a mesma variável governa o redirect do OAuth do Gmail — trocar exige
+recadastrar o redirect URI no Google Cloud e refazer o consent.
+
+> Túnel ngrok **não** resolve de forma utilizável: a URL muda a cada sessão, e cada troca
+> quebraria o OAuth do Gmail junto. Serve para um teste pontual, não para operar.
+
 ## ⚠️ O webhook do Twilio é a peça que mais apodrece
 
 **Sintoma:** a mensagem chega na Twilio (`status=received`) mas **nada acontece** — nem no monorepo,

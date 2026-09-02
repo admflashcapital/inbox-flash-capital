@@ -108,4 +108,35 @@ end
 end
 GlobalConfig.clear_cache if defined?(GlobalConfig) && GlobalConfig.respond_to?(:clear_cache)
 
+# ── Atributos de conversa que o espelho carimba (AD-13) ────────────
+# SEM ESTA DEFINIÇÃO O DADO FICA INVISÍVEL. O monorepo grava os valores no jsonb
+# `conversations.custom_attributes` e a API os devolve, mas a barra lateral do
+# Chatwoot só renderiza atributo que tem uma linha em
+# `custom_attribute_definitions` — o front itera sobre as DEFINIÇÕES, não sobre
+# as chaves gravadas. Medido em 2026-09-02: os quatro valores estavam no banco e
+# a tela não mostrava nenhum.
+#
+# `attribute_key` casa exatamente o que `api/integrations/chatwoot/atributos.py`
+# monta no monorepo. Divergiu = atributo órfão, gravado e nunca exibido.
+ATRIBUTOS_DA_CONVERSA = [
+  { chave: "titulo_id",       nome: "Título",         tipo: :text,     desc: "Id do boleto em internal.boletos" },
+  { chave: "cnpj",            nome: "CNPJ/CPF",       tipo: :text,     desc: "Documento do sacado (CPF quando pessoa física)" },
+  { chave: "valor_em_aberto", nome: "Valor em aberto", tipo: :currency, desc: "Soma do lote disparado, com multa e mora quando já calculados" },
+  { chave: "dias_atraso",     nome: "Dias de atraso",  tipo: :number,   desc: "Dias úteis; 0 significa vence hoje" }
+]
+
+ATRIBUTOS_DA_CONVERSA.each do |a|
+  d = CustomAttributeDefinition.find_or_initialize_by(
+    attribute_key: a[:chave],
+    attribute_model: :conversation_attribute,
+    account_id: conta.id
+  )
+  novo_registro = d.new_record?
+  d.attribute_display_name = a[:nome]
+  d.attribute_display_type = a[:tipo]
+  d.attribute_description = a[:desc]
+  d.save!
+  log("atributo de conversa '#{a[:chave]}' #{novo_registro ? 'criado' : 'já existia'} (#{a[:tipo]})")
+end
+
 log("pronto.")

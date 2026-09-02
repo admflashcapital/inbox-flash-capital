@@ -100,6 +100,18 @@ Mapa de camadas → responsabilidade:
   (sempre autenticado) e o monorepo (máquina-a-máquina). O `Twilio::CallbackController` **não valida
   assinatura da Twilio**, então o gate do relay é obrigatório em qualquer exposição.
 
+### AD-11.1 — Em loopback, a central LÊ o canal WhatsApp mas não RESPONDE por ele `[MEDIDO 2026-09-02]`
+- **Binds:** AD-10, AD-11, STORY-3.2
+- **Consequência não prevista do AD-10.** `Channel::TwilioSms#send_message` anexa
+  `status_callback` **sem condição**, montado a partir de `FRONTEND_URL`. Com a central em
+  `http://localhost:3001`, a Twilio recusa o `messages.create` com **21609** — a mensagem não
+  sai. Não há toggle; omitir exigiria fork (proibido, AD-7).
+- **Rule:** enquanto não houver ingresso público estável, a central é **painel de leitura** no
+  WhatsApp: espelho entra, inbound entra, resposta sai pelo monorepo. O e-mail não é afetado
+  (SMTP não tem status callback).
+- **Destrava com:** Fase 4. E `FRONTEND_URL` também governa o redirect do OAuth do Gmail —
+  trocar exige recadastrar no Google Cloud e refazer o consent.
+
 ### AD-12 — O painel é tão completo quanto o uptime de quem o alimenta `[ACCEPTED 2026-09-02]`
 - **Binds:** FR-8, AD-6
 - **Prevents:** a equipe de cobrança confiar num painel com buracos silenciosos.
