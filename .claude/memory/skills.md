@@ -1,20 +1,18 @@
 # Skills — roteador de acionamento por estágio — Inbox Flash Capital
 
-> **Escopo: 16 stories** (EPIC-2 e EPIC-5 estão fora). `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-13).
+> **Escopo: 16 stories**, nos épicos 1, 3, 4 e 6. `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-13).
 >
-> as skills ligadas à Evolution/prospecção perderam uso — a Evolution saiu do repo.
-
 
 > Carregado pelo `/story`. Ao iniciar uma story, acione as skills da linha do épico dela **+** as
 > transversais aplicáveis.
-> Stack: Docker (infra) · Chatwoot (config, sem código) · Serviço de Sync).
+> Stack: Docker (infra) · Chatwoot (configuração, **sem código de aplicação**).
 > **Sem frontend próprio** — a UI é a do Chatwoot.
 
 ## Sempre
 
 | Quando | Skill |
 |---|---|
-| Escrever código no Serviço de Sync (ciclo RED→GREEN→REFACTOR) | `test-driven-development` |
+| Escrever script de operação ou verificador (ciclo RED→GREEN→REFACTOR) | `test-driven-development` |
 | Travou num bug de integração entre serviços (fan-out, webhook, merge) | `systematic-debugging` |
 | Antes de commitar | `/code-review` (built-in) |
 
@@ -23,10 +21,8 @@
 | Épico | Skills a acionar |
 |---|---|
 | **EPIC-1** Fundação (Docker/Postgres/backup) | `chatwoot-cli` (conhecer a API/CLI oficial antes de modelar o deploy) · `secrets-management` (`.env`, AD-8) |
-| **EPIC-2** WhatsApp Prospecção (Evolution) | `api-design-principles` (contrato do webhook de fan-out) · `systematic-debugging` (**o fan-out é o ponto de falha mais provável do MVP** — dois consumidores no mesmo evento) |
 | **EPIC-3** WhatsApp Oficial (Twilio/Meta) | `twilio-messaging-overview` (janela de 24h, qualidade do número) · `twilio-content-template-builder` (**templates Meta aprovados** — obrigatório fora da janela de 24h) · `api-design-principles` (push do outbound do monorepo) |
-| **EPIC-4** E-mail (Gmail) | `chatwoot-cli` (config de inbox de e-mail) · `api-design-principles` (unificação de contato) |
-| **EPIC-5** Serviço de Sync (**único código do zero**) | `fastapi-templates` (estrutura do serviço) · `python-testing-patterns` (testes de identidade/merge/idempotência) · `test-driven-development` (obrigatório) · `api-design-principles` (contrato dos eventos de domínio) · `chatwoot-cli` (API de contatos/labels/atributos) |
+| **EPIC-4** E-mail (Gmail) | `chatwoot-cli` (config de inbox de e-mail) · `api-design-principles` (contexto carimbado na conversa, AD-13) |
 | **EPIC-6** Operação & Governança | `gdpr-data-handling` (LGPD ≈ GDPR — retenção, acesso, exclusão) · `chatwoot-cli` (papéis, labels, respostas rápidas) · `secrets-management` |
 
 ## Transversal (acione conforme a tarefa, não o épico)
@@ -34,7 +30,7 @@
 | Tarefa | Skill |
 |---|---|
 | Escrever/ajustar testes Python (pytest, fixtures, mocks de API externa) | `python-testing-patterns` |
-| Desenhar endpoint/webhook do Serviço de Sync | `api-design-principles` |
+| Desenhar contrato de webhook ou de chamada à API da central | `api-design-principles` |
 | Mexer em `.env`, token, credencial de webhook | `secrets-management` |
 | Retenção, PII em log, direito de exclusão | `gdpr-data-handling` |
 | Operar/inspecionar o Chatwoot pelo terminal (smoke test, gate de épico) | `chatwoot-cli` |

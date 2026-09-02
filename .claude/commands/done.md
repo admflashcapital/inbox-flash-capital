@@ -5,7 +5,7 @@ description: Encerra a story, atualiza PROGRESS.md + docs e commita. Uso: /done 
 Para encerrar a STORY-$ARGUMENTS:
 
 1. **Verde antes de commitar:**
-   - Story de **código** (Serviço de Sync): `pytest -q --tb=short` — se falhar, PARE e corrija.
+   - Story de **código** (scripts, seed, verificadores): rode o verificador correspondente — se falhar, PARE e corrija.
    - Story de **configuração/infra**: confirme o critério de aceite **ao vivo** (a UI responde, a
      mensagem chegou na inbox, o restore recompôs os dados) e que o artefato foi versionado
      (a raiz do repo, `docs/`, `.env.example` sincronizado). Sem evidência, não encerre.

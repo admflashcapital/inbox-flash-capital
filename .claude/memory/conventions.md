@@ -1,6 +1,6 @@
 # Convenções — Inbox Flash Capital
 
-> **Escopo: 16 stories** (EPIC-2 e EPIC-5 estão fora). `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-13).
+> **Escopo: 16 stories**, nos épicos 1, 3, 4 e 6. `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-13).
 >
 > Não há Python neste repo. Bash em `scripts/` (com `scripts/lib/env.sh` para ler o `.env` sem `source`) e um seed Ruby em `scripts/seed/`, idempotente por contrato.
 
@@ -20,12 +20,12 @@
 
 - **Telefone:** sempre **E.164** (`+5531999998888`). Normalize na borda, antes de casar.
   ⚠️ O Twenty guarda `primaryPhoneNumber` **nacional** + `primaryPhoneCallingCode` (`+55`) —
-  a conversão E.164 ↔ shape do Twenty é do Serviço de Sync, não do hub.
+  a conversão E.164 ↔ shape do Twenty não é responsabilidade da central.
 - **Documento:** **só dígitos** para casar (CPF/CNPJ sem máscara).
 - **Timestamps:** UTC.
 - **Link reverso:** ids de origem guardados como atributos `source_*_id`.
 
-## Python (Serviço de Sync)
+## Python (scripts de operação)
 
 - `ruff format` + `ruff check --fix` (hook automático em Write/Edit de `.py`)
 - Type hints e docstrings Google em toda função pública

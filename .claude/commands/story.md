@@ -1,7 +1,6 @@
 
-> **Escopo: 16 stories** (EPIC-2 e EPIC-5 estão fora). `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-13).
->
-> **Não abrir gate nem story do EPIC-2 ou do EPIC-5** — estão fora do escopo. Use `bash scripts/…` e `docker compose …`.
+> **Escopo: 16 stories**, nos épicos 1, 3, 4 e 6. `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-13).
+
 
 ---
 description: Carrega o contexto de uma story para implementar. Uso: /story 2.1

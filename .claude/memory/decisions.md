@@ -78,6 +78,9 @@ fica pela via mais simples: **a central só tem o número oficial**.
   declarado **amostral** por escrito.
 
 - **AD-13 — Sem Serviço de Sync: contexto carimbado no instante do disparo.** `[2026-09-02]`
-  **EPIC-5 cancelado.** `titulo_id`/CNPJ/valor/atraso vão nos `custom_attributes` da conversa em
-  `chatwoot_mirror.py::_garantir_conversa`. Supersede a premissa do AD-2/AD-3 de que a regra vive no
+  **EPIC-5 cancelado.** `titulo_id`/CNPJ/valor/atraso vão nos `custom_attributes` da conversa, por
+  `chatwoot_mirror.py::_carimbar_atributos` — etapa **separada**, depois que `conversa_id` foi
+  resolvido. **Não** dentro de `_garantir_conversa`: ele tem duas saídas (reuso e criação) e o reuso
+  é o caminho comum, então carimbar na criação passa no teste e não entrega nada. O endpoint
+  **substitui** o hash inteiro, não mescla. Supersede a premissa do AD-2/AD-3 de que a regra vive no
   Sync.
