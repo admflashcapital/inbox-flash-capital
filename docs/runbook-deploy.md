@@ -135,18 +135,41 @@ sem um backup verificado na mão (`bash scripts/restore.sh --verificar`).
 
 ## Antes de expor (Fase 4 — ainda não decidida)
 
-Não abra porta sem estes três, que hoje são cobertos pela topologia e deixariam de ser:
+**Nada disto vira código.** O Chatwoot é imagem oficial sem fork (AD-7), e as três primeiras
+lacunas abaixo são de coisas que ele não faz — não que ele faça errado. Quem as cobre é o
+**ingresso**, seja ele qual for. Esta seção é a especificação que o ingresso escolhido tem de
+satisfazer.
 
-1. **Gate no `/twilio/callback`.** O `Twilio::CallbackController` do Chatwoot **não valida
-   `X-Twilio-Signature`**. Hoje ninguém o alcança; exposto sem gate, qualquer um forja inbound. O
-   `RELAY_TOKEN` já está no `.env` e é conferido por `verificar-canal-oficial.sh` — falta o ponto que
-   o exige na borda.
-2. **Headers de segurança.** O Chatwoot não emite `nosniff` nem `Referrer-Policy` sozinho — o
-   ingresso precisa adicioná-los.
-3. **Limite de corpo.** Não há teto para o tamanho do anexo — o Puma não impõe limite próprio, então o ingresso precisa impor.
+O `deploy/ngrok-policy.yml` é a implementação de dev dessa especificação. A sintaxe é do ngrok e
+não vai para produção; **as regras vão**.
 
-E a armadilha registrada: **um Cloudflare Access mal configurado devolve a página de login em HTML
-com status 200** — o `raise_for_status()` do espelho passa, e ele acha que deu certo.
+| # | Requisito | Por que o Chatwoot não resolve | Verificado |
+|---|---|---|---|
+| 1 | **Negar `/twilio/callback` de fora** | O `Twilio::CallbackController` **não valida assinatura nenhuma**. Exposto sem gate, qualquer um forja um inbound na conversa de um cliente | ngrok policy → **403** (2026-09-02) |
+| 2 | **Deixar `/twilio/delivery_status` aberto** | É a própria Twilio que o chama, sem identidade. E o **21609** exige que ele seja alcançável, senão a central não consegue responder | ngrok → 404 (rota existe só em POST) |
+| 3 | **Headers de segurança** | O Chatwoot não emite `nosniff`, `Referrer-Policy` nem `X-Frame-Options` | ngrok `add-headers` |
+| 4 | **Teto de tamanho de corpo** | O Puma não impõe limite próprio | ⬜ não coberto hoje |
+| 5 | Autenticação e anti-força-bruta | **Isto o Chatwoot JÁ FAZ**: login obrigatório, signup fechado, e o Rack::Attack bloqueia na 6ª tentativa (medido através do túnel: `401 ×5` → `429`) | ✅ nativo |
+
+**O que cada candidato cobre:**
+
+- **Railway sozinho: não basta.** Ele entrega TLS e hostname — é plataforma de execução, não borda.
+  Não faz bloqueio por path, não injeta header, não autentica. Os itens 1–4 continuariam abertos.
+- **Cloudflare na frente: cobre 1–4.** Access resolve identidade (e é o único jeito de o time de
+  atendimento entrar sem expor o login do Chatwoot ao mundo); Custom Rules negam o path; Transform
+  Rules injetam os headers. **Confirmar os limites do plano gratuito na hora de decidir** — número
+  de regras e de usuários do Access mudam com o tempo, e não vale planejar em cima de memória.
+- **Código: nunca.** Fork é proibido (AD-7), e mesmo que não fosse, gate de borda em código de
+  aplicação é a duplicação que o AD-10 existe para evitar.
+
+**Duas armadilhas já registradas:**
+
+1. **Access mal configurado devolve a página de login em HTML com status 200** — o
+   `raise_for_status()` do espelho passa e ele acha que deu certo. Se a central for para trás do
+   Access, o espelho precisa de asserção de `content-type` ou de header `cf-access-*`.
+2. **A máquina precisa de uma política própria.** `/twilio/delivery_status` não tem identidade
+   humana; no Cloudflare isso é `Bypass` ou **Service Auth** com service token, avaliado ANTES das
+   políticas de `Allow`/`Block`.
 
 ---
 
