@@ -128,58 +128,71 @@ Telefone fora de E.164 = thread partida. O `bash scripts/verificar-canal-oficial
 ## Segurança do callback (AD-8)
 
 **O `/twilio/callback` do Chatwoot NÃO valida a assinatura da Twilio.** O `Twilio::CallbackController`
-só filtra os params e enfileira o job. Exposto na internet, qualquer um forja uma mensagem inbound na
-central.
+só filtra os params e enfileira o job. Alcançável sem gate, qualquer um forja uma mensagem inbound na
+conversa de um cliente real — e a central tem PII de verdade.
 
-O inbound legítimo chega pelo **relay do monorepo**, que já validou a assinatura. O que impede um
-terceiro de postar direto no `/twilio/callback` é **topológico**: a central publica em
-`127.0.0.1:${CHATWOOT_HOST_PORT}` e só o `fastapi_api` a alcança, pela rede `flash-espelho`. Ninguém
-mais consegue abrir a conexão.
+O inbound legítimo **não passa por esse caminho de fora**: ele chega ao monorepo (que valida
+`X-Twilio-Signature`) e é relayado container-a-container pela rede `flash-espelho`, sem tocar em
+porta publicada nem em túnel. Negar o path na borda, portanto, não custa funcionalidade nenhuma.
+
+**Quem barra hoje:** o `deploy/ngrok-policy.yml`, na borda do túnel — `/twilio/callback` responde
+**403** para qualquer origem externa. Verificado no plano free em 2026-09-02. Enquanto a central só
+publicava em loopback a proteção era topológica (ninguém alcançava a porta); com o túnel da
+`CENTRAL_URL_PUBLICA` ligado, ela passou a ser explícita, e é assim que fica.
 
 O `RELAY_TOKEN` viaja no header `X-Relay-Token` a cada relay e é conferido por
-`verificar-canal-oficial.sh` — mas **hoje nada o exige na entrada**. Enquanto a central não publica
-nada além de loopback isso é suficiente; **no dia em que houver ingresso, exigir esse header é
-pré-condição bloqueante**, porque o controller do Chatwoot não vai barrar nada sozinho.
+`verificar-canal-oficial.sh` — mas **nada o exige na entrada**. Isso é aceitável só porque o path
+está negado na borda. Um ingresso que abra o `/twilio/callback` sem exigir o header reabre o buraco:
+o controller do Chatwoot não barra nada sozinho. Ver a especificação do ingresso em
+`docs/runbook-deploy.md`.
 
-O **`/twilio/delivery_status`** tem o mesmo desenho: é a própria Twilio que o chama, para as
-mensagens que a *central* envia. Forjá-lo só altera o status de entrega de uma mensagem existente
-(baixo impacto), e hoje ninguém o alcança.
+O **`/twilio/delivery_status`** é o oposto e **precisa** ficar aberto — ver a seção seguinte. É a
+própria Twilio que o chama, sem identidade, para as mensagens que a *central* envia. Forjá-lo só
+altera o status de entrega de uma mensagem existente: sem leitura de dado, sem PII no corpo.
 
-## 🚨 Responder PELA central não funciona em localhost (erro 21609)
+## Responder PELA central: o 21609 e o que o destravou
 
-**Medido em 2026-09-02, respondendo pela UI:**
+**O sintoma, medido em 2026-09-02 respondendo pela UI com a central em loopback:**
 
 ```
 [HTTP 400] 21609 : The StatusCallback URL http://localhost:3001/twilio/delivery_status
                    is not a valid URL
 ```
 
-**Por que, e por que não tem contorno de configuração.** `Channel::TwilioSms#send_message`
-(`app/models/channel/twilio_sms.rb:66`) faz, **sem condição nenhuma**:
+**Por que acontece.** `Channel::TwilioSms#send_message` (`app/models/channel/twilio_sms.rb:66`) faz,
+**sem condição nenhuma**:
 
 ```ruby
 params[:status_callback] = twilio_delivery_status_index_url
 ```
 
-Esse helper de rota monta a URL a partir de `Rails.application.routes.default_url_options`,
-que o Chatwoot preenche com **`FRONTEND_URL`**. Como a central publica em loopback (AD-10),
-`FRONTEND_URL` é `http://localhost:3001` — e a Twilio recusa o `messages.create` inteiro,
-porque ela precisa conseguir chamar esse callback de fora. Não é o callback que falha depois:
-**a mensagem nem chega a sair**.
+Esse helper monta a URL a partir de `Rails.application.routes.default_url_options`, que o Chatwoot
+preenche com **`FRONTEND_URL`**. A Twilio valida o callback **na criação da mensagem**: URL que ela
+não alcança derruba o `messages.create` inteiro. Não é o callback que falha depois — **a mensagem nem
+chega a sair**. Não há env var nem toggle para omitir o callback, e mexer no model exigiria fork
+(proibido, AD-7).
 
-Não há env var nem toggle para omitir o callback, e mexer no model exigiria fork (proibido,
-AD-7).
+**Como está resolvido.** O `FRONTEND_URL` do container é alimentado pela chave `CENTRAL_URL_PUBLICA`
+do `.env`, que o `tuneis-manha.sh` do monorepo preenche com um túnel para a porta 3001 — o terceiro,
+ao lado do da API e do Supabase. Com uma URL pública o `messages.create` passa e **a atendente
+responde pela tela**. Verificado ao vivo em 2026-09-02, com o número oficial real.
 
-**O que isso significa hoje:** a central é **painel, não superfície de resposta** no canal
-WhatsApp. O espelho entra, o inbound do cliente entra, o operador lê tudo — mas responder
-sai pelo monorepo. O e-mail (EPIC-4) **não** é afetado: SMTP não tem status callback.
+Dois fatos que essa montagem depende, e que foram **medidos**, não supostos:
 
-**O que destrava:** um `FRONTEND_URL` público e estável, ou seja, o ingresso da Fase 4. Ao
-ligá-lo, lembre que a mesma variável governa o redirect do OAuth do Gmail — trocar exige
-recadastrar o redirect URI no Google Cloud e refazer o consent.
+1. **A Twilio aceita um StatusCallback que devolve 404.** Ela valida se o host é publicamente
+   alcançável, não se o path existe. Por isso o `ngrok-policy.yml` pode negar `/twilio/callback` sem
+   tocar no `/twilio/delivery_status` — e por isso o item 2 da especificação do ingresso
+   (`docs/runbook-deploy.md`) manda deixar esse path aberto.
+2. **Rotacionar a `CENTRAL_URL_PUBLICA` NÃO quebra o canal de e-mail já autorizado.** O refresh do
+   Gmail usa `grant_type=refresh_token`, que não passa `redirect_uri`. Trocamos a URL e os 9 checks
+   do `verificar-canal-email.sh` seguiram verdes. O Google Cloud só precisa ser tocado de novo num
+   **consent novo** — ver `docs/runbook-canal-email.md`, que traz a receita de localhost para isso.
 
-> Túnel ngrok **não** resolve de forma utilizável: a URL muda a cada sessão, e cada troca
-> quebraria o OAuth do Gmail junto. Serve para um teste pontual, não para operar.
+**O que a URL de túnel ainda não é.** Ela muda a cada rodada do `tuneis-manha.sh`, então o custo é
+reconfigurar o `.env` todo dia — automatizado pelo script, mas real. E o subdomínio fixo do plano
+free **não existe**: `--url` com subdomínio próprio devolve `ERR_NGROK_313` ("Only paid plans may
+create endpoints with custom subdomains"), medido em 2026-09-02. A troca por um domínio estável é o
+ingresso da Fase 4; até lá isto opera.
 
 ## ⚠️ O webhook do Twilio é a peça que mais apodrece
 
@@ -200,9 +213,17 @@ Foi assim que descobrimos, em 13/07, que o webhook apontava para um túnel ngrok
 E depois, que uma correção no console tinha **duplicado o caminho**
 (`/webhooks/twilio/inbound/webhooks/twilio/inbound`).
 
-**A URL do ngrok free muda a cada reinício do túnel.** Enquanto o webhook do Twilio e o
-`PUBLIC_BOLETO_BASE_URL` (que valida a assinatura) apontarem para um subdomínio aleatório, isso vai
-quebrar de novo, em silêncio. Reserve o **domínio estático** que o ngrok dá de graça.
+**A URL do ngrok free muda a cada reinício do túnel** — e o subdomínio fixo **não é uma saída**:
+`--url` com subdomínio próprio devolve `ERR_NGROK_313` ("Only paid plans may create endpoints with
+custom subdomains"), medido em 2026-09-02.
+
+O que fecha o laço hoje é o **`tuneis-manha.sh` do monorepo**: ele sobe os três túneis, grava a URL
+nos `.env` dos repos que a consomem, recria os containers que precisam reler o ambiente e **escreve
+o `SmsUrl` e o `StatusCallback` no console da Twilio** (`scripts/tuneis_twilio.py`). O modo de falha
+que custou 10 dias em silêncio deixou de depender de alguém lembrar.
+
+Isso não elimina a causa, só a automatiza. O conserto de verdade é um **domínio estável** — o
+ingresso da Fase 4.
 
 ## Testar o canal sem depender de um celular
 

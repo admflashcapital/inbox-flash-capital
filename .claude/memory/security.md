@@ -2,7 +2,7 @@
 
 > **Escopo: 16 stories**, nos épicos 1, 3, 4 e 6. `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-13).
 >
-> A proteção do `/twilio/callback` é **topológica**: a central só escuta em `127.0.0.1`. Qualquer ingresso futuro **precisa** de um gate no `X-Relay-Token` (AD-11) — o `Twilio::CallbackController` não valida assinatura. O `RELAY_TOKEN` está no `.env` e é conferido por `verificar-canal-oficial.sh`. `/twilio/delivery_status` está registrado como "a Twilio chama direto" — **suposição herdada**, não fato medido: confirmar no console antes de expor.
+> A proteção do `/twilio/callback` vive na **borda**: `deploy/ngrok-policy.yml` devolve **403** na URL pública, e `verificar-canal-oficial.sh` bate nela ao vivo. Deixou de ser topológica quando a central passou a ter `CENTRAL_URL_PUBLICA` (AD-11.1). Todo ingresso novo tem de trazer esse gate — o `Twilio::CallbackController` não valida assinatura — e exigir o `X-Relay-Token` (que hoje viaja mas nada cobra na entrada). `/twilio/delivery_status` fica **aberto de propósito**: é a Twilio que o chama, e sem ele o envio pela tela morre com 21609. Medido: ela aceita que ele devolva 404.
 
 
 > A central concentra conversa de cliente com **CPF/CNPJ, valor em aberto e situação de
@@ -15,7 +15,7 @@
 - ❌ `git add .env` — conferir `git status` antes de todo commit
 - ❌ Logar valor de env var, ou logar **PII** (CPF/CNPJ, telefone, conteúdo de mensagem) em log de serviço
 - ❌ Commitar `.env`, `secrets/`, `*.key`, `*.pem`, JSON de service account
-- ❌ Publicar QUALQUER porta fora de `127.0.0.1` (AD-10). Só `chatwoot-web`, e só em loopback; Postgres e Redis não publicam nada
+- ❌ Publicar QUALQUER porta fora de `127.0.0.1` **no compose** (AD-10). Só `chatwoot-web`, e só em loopback; Postgres e Redis não publicam nada. A exposição pública vem de fora do compose (túnel/ingresso) e **sempre** com o gate da borda junto
 - ❌ Aceitar webhook sem validar a origem (ver abaixo)
 
 ## SEMPRE
@@ -23,7 +23,7 @@
 - ✅ Fluxo de nova env var: 1) `.env` (valor real) → 2) `.env.example` (placeholder + comentário) →
   3) `compose.yaml` → 4) commitar **apenas** o `.env.example` e a config
 - ✅ Manter o `.env.example` sincronizado com todas as chaves
-- ✅ TLS em todo tráfego externo — hoje não há nenhum: a central só escuta em loopback
+- ✅ TLS em todo tráfego externo, terminado pela **borda** (túnel da `CENTRAL_URL_PUBLICA` hoje, ingresso da Fase 4 amanhã) — nunca pelo Chatwoot, por isso `FORCE_SSL=false`
 - ✅ Revogar credencial imediatamente ao suspeitar de vazamento
 
 ## Autenticação de webhook (AD-8) — cada canal tem o seu

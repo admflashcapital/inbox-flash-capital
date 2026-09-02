@@ -39,8 +39,9 @@
   Tokens (Twilio/Chatwoot/Gmail) no `.env`, nunca versionados; lidos por `env_get` de
   `scripts/lib/env.sh` — **nunca `source`**, para segredo não entrar no ambiente do processo.
   A assinatura `X-Twilio-Signature` é validada **no monorepo**, dono do webhook; o relay para a
-  central leva `X-Relay-Token`. Sem ingresso, não há tráfego externo a proteger com TLS — a central
-  só escuta em loopback (AD-10).
+  central leva `X-Relay-Token`. O TLS do tráfego externo é terminado pela **borda** (hoje o túnel da
+  `CENTRAL_URL_PUBLICA`, amanhã o ingresso da Fase 4), nunca pelo Chatwoot — por isso `FORCE_SSL`
+  segue `false`.
 
 - **AD-9 — Banco da central isolado dos bancos de domínio.**
   Postgres próprio do Chatwoot. Proibido: cross-DB com Twenty/Supabase — verificado por
@@ -66,11 +67,22 @@ fica pela via mais simples: **a central só tem o número oficial**.
   Proibido: Makefile, Caddy, `/etc/hosts`, rede `flash-canais`, proxy compartilhado com o CRM.
   Ingresso remoto = um `cloudflared` no compose **deste** repo.
 
+- **AD-11.1 — Responder pelo WhatsApp exige `FRONTEND_URL` pública.** `[MEDIDO 2026-09-02]`
+  `Channel::TwilioSms#send_message` anexa `status_callback` **sem condição**, e a Twilio valida a
+  URL na CRIAÇÃO: em loopback o envio morre com **21609** e a mensagem nem sai. Sem toggle; omitir
+  exigiria fork (AD-7). Por isso o `FRONTEND_URL` do container vem de `CENTRAL_URL_PUBLICA`
+  (o `compose.yaml` falha o boot sem ela). **Toda exposição tem de negar `/twilio/callback` e deixar
+  `/twilio/delivery_status` aberto** — `verificar-canal-oficial.sh` cobra os dois ao vivo.
+  Medido: a Twilio aceita callback que devolve **404** (valida o host, não o path); e rotacionar a
+  URL **não** quebra o e-mail já autorizado (o refresh usa `grant_type=refresh_token`, sem
+  `redirect_uri`).
+
 - **AD-11 — A central nunca é site público.** `[2026-09-02]`
   A Twilio fala com o **monorepo**, não com a central; o e-mail é **polling IMAP de saída**.
   Só dois consumidores: navegador do colaborador (autenticado) e monorepo (máquina-a-máquina).
   O `Twilio::CallbackController` não valida assinatura → o gate do relay é obrigatório em qualquer
-  exposição.
+  exposição. "Nunca público" = **nenhuma superfície anônima de conversa**; não "nenhum pacote entra"
+  (ver AD-11.1).
 
 - **AD-12 — O painel é tão completo quanto o uptime de quem o alimenta.** `[2026-09-02]`
   O espelho **não tem retry, fila nem backfill**. Central inalcançável = **buraco permanente**, não
@@ -78,7 +90,11 @@ fica pela via mais simples: **a central só tem o número oficial**.
   declarado **amostral** por escrito.
 
 - **AD-13 — Sem Serviço de Sync: contexto carimbado no instante do disparo.** `[2026-09-02]`
-  **EPIC-5 cancelado.** `titulo_id`/CNPJ/valor/atraso vão nos `custom_attributes` da conversa, por
+  **EPIC-5 cancelado.** O conjunto fechado de 8 — `titulo_id`, `cnpj`, `cedente`, `numero_nf`,
+  `data_vencimento`, `valor_em_aberto`, `dias_atraso`, `link_boleto` — vive em
+  `atributos.py::CHAVES` (monorepo) e precisa das 8 `CustomAttributeDefinition` do
+  `chatwoot_seed.rb`, senão o valor é gravado e fica **invisível**. Só atributo do TÍTULO entra:
+  estado da régua seria apagado pelo disparo seguinte. Vai nos `custom_attributes` da conversa, por
   `chatwoot_mirror.py::_carimbar_atributos` — etapa **separada**, depois que `conversa_id` foi
   resolvido. **Não** dentro de `_garantir_conversa`: ele tem duas saídas (reuso e criação) e o reuso
   é o caminho comum, então carimbar na criação passa no teste e não entrega nada. O endpoint

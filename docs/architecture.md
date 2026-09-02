@@ -64,7 +64,7 @@ Mapa de camadas → responsabilidade:
 ### AD-8 — Segredos fora do repo; webhooks autenticados; TLS sempre
 - **Binds:** all
 - **Prevents:** vazamento de credencial e ingestão forjada.
-- **Rule:** tokens (Twilio/Chatwoot/Gmail) em `.env`, nunca versionados; lidos por `env_get` sem `source`, para não entrarem no ambiente do processo. Todo webhook valida origem: a assinatura `X-Twilio-Signature` é conferida **no monorepo**, dono do webhook, e o relay para a central leva o `X-Relay-Token`. Enquanto não houver ingresso, o TLS é dispensado porque **não há tráfego externo** — a central só escuta em loopback (AD-10).
+- **Rule:** tokens (Twilio/Chatwoot/Gmail) em `.env`, nunca versionados; lidos por `env_get` sem `source`, para não entrarem no ambiente do processo. Todo webhook valida origem: a assinatura `X-Twilio-Signature` é conferida **no monorepo**, dono do webhook, e o relay para a central leva o `X-Relay-Token`. O TLS do tráfego externo é terminado pela **borda**, nunca pelo Chatwoot: hoje pelo túnel da `CENTRAL_URL_PUBLICA` (AD-11.1), amanhã pelo ingresso da Fase 4. `FORCE_SSL=false` continua correto porque a borda entrega em HTTP na loopback — não porque o tráfego seja interno.
 
 ### AD-9 — Banco da central isolado dos bancos de domínio
 - **Binds:** FR-1
@@ -80,6 +80,11 @@ Mapa de camadas → responsabilidade:
   `127.0.0.1:${CHATWOOT_HOST_PORT}` (3001). Sem Makefile, sem Caddy, sem `/etc/hosts`. Quando houver
   ingresso remoto, ele é um `cloudflared` dentro do compose **deste** repo — nunca um proxy
   compartilhado com o CRM.
+- **A regra é sobre o compose, e continua valendo: a exposição vem de fora dele.** O túnel da
+  `CENTRAL_URL_PUBLICA` (AD-11.1) é um processo do host que fala com a mesma porta de loopback — o
+  compose não muda, e derrubar o túnel devolve a central ao isolamento sem tocar em arquivo nenhum.
+  É por isso que a proteção do `/twilio/callback` **não pode** ser topológica: ela vive na borda
+  (`deploy/ngrok-policy.yml`), que sobe e desce junto com a exposição.
 - **A porta publicada é do NAVEGADOR; a via máquina-a-máquina é rede privada.** A rede
   **`flash-espelho`** tem exatamente dois membros — `fastapi_api` (monorepo) e `chatwoot-web` — e
   nada publicado nela. O CRM não entra: é isso que torna inbox e crm independentes, e é a asserção
@@ -91,26 +96,40 @@ Mapa de camadas → responsabilidade:
 
 ### AD-11 — A central nunca é site público `[ACCEPTED 2026-09-02]`
 - **Binds:** FR-4, FR-6, AD-8
-- **Prevents:** expor uma ferramenta interna e herdar a premissa falsa de que a Twilio precisa alcançar
-  a central.
-- **Rule:** nenhum terceiro alcança o Chatwoot. A Twilio entrega o inbound ao **monorepo**, que valida
+- **Prevents:** expor uma ferramenta interna, e tratar a central como se ela precisasse receber o
+  inbound da Twilio — não precisa, e apontar o webhook para ela quebraria a confirmação de sacado.
+- **Rule:** nenhum terceiro **entrega dado** no Chatwoot. A Twilio entrega o inbound ao **monorepo**, que valida
   `X-Twilio-Signature` e relaya para `/twilio/callback` com token compartilhado
   (`conectar-twilio.sh:19`, `chatwoot_mirror.py::relay_inbound`); o e-mail entra por **polling IMAP de
   saída** (`trigger_imap_email_inboxes_job`). Sobram dois consumidores: o navegador do colaborador
   (sempre autenticado) e o monorepo (máquina-a-máquina). O `Twilio::CallbackController` **não valida
   assinatura da Twilio**, então o gate do relay é obrigatório em qualquer exposição.
+- **A ressalva que o AD-11.1 abriu:** a Twilio *chama* a central num ponto só —
+  `/twilio/delivery_status`, das mensagens que a própria central envia. Isso não a torna site
+  público: é um path aberto de propósito, ao lado de um `/twilio/callback` negado e de um login
+  obrigatório em todo o resto. "Nunca público" continua significando **nenhuma superfície anônima de
+  leitura ou escrita de conversa** — nunca "nenhum pacote entra".
 
-### AD-11.1 — Em loopback, a central LÊ o canal WhatsApp mas não RESPONDE por ele `[MEDIDO 2026-09-02]`
+### AD-11.1 — A central responde pelo WhatsApp porque tem URL pública; o 21609 é o motivo `[MEDIDO 2026-09-02]`
 - **Binds:** AD-10, AD-11, STORY-3.2
-- **Consequência não prevista do AD-10.** `Channel::TwilioSms#send_message` anexa
-  `status_callback` **sem condição**, montado a partir de `FRONTEND_URL`. Com a central em
-  `http://localhost:3001`, a Twilio recusa o `messages.create` com **21609** — a mensagem não
-  sai. Não há toggle; omitir exigiria fork (proibido, AD-7).
-- **Rule:** enquanto não houver ingresso público estável, a central é **painel de leitura** no
-  WhatsApp: espelho entra, inbound entra, resposta sai pelo monorepo. O e-mail não é afetado
-  (SMTP não tem status callback).
-- **Destrava com:** Fase 4. E `FRONTEND_URL` também governa o redirect do OAuth do Gmail —
-  trocar exige recadastrar no Google Cloud e refazer o consent.
+- **O fato forçado.** `Channel::TwilioSms#send_message` anexa `status_callback` **sem condição**,
+  montado a partir de `FRONTEND_URL`. A Twilio valida esse callback na **criação** da mensagem: com a
+  central em `http://localhost:3001` o `messages.create` é recusado com **21609** e a mensagem nem
+  chega a sair. Não há toggle; omitir exigiria fork (proibido, AD-7). Logo **`FRONTEND_URL` pública
+  não é preferência de UX — é pré-condição para responder pelo canal oficial.**
+- **Rule:** o `FRONTEND_URL` do container vem da chave `CENTRAL_URL_PUBLICA` do `.env`
+  (`compose.yaml` falha o boot se ela faltar), preenchida em dev pelo terceiro túnel do
+  `tuneis-manha.sh` do monorepo. Toda exposição da central — túnel de dev ou ingresso de produção —
+  **tem de** manter `/twilio/delivery_status` alcançável e `/twilio/callback` negado. A
+  especificação está em `docs/runbook-deploy.md`; a implementação de dev, em `deploy/ngrok-policy.yml`.
+- **Medido, não suposto:** (1) a Twilio aceita um StatusCallback que devolve **404** — ela valida o
+  host, não o path, e é o que permite negar o `/twilio/callback` sem quebrar o envio; (2) rotacionar
+  a `CENTRAL_URL_PUBLICA` **não** quebra o canal de e-mail já autorizado, porque o refresh do Gmail
+  usa `grant_type=refresh_token`, que não passa `redirect_uri` (9 checks verdes depois da troca). O
+  Google Cloud só é tocado num **consent novo**.
+- **O que ainda falta:** a URL do túnel muda a cada rodada e o subdomínio fixo não existe no plano
+  free (`ERR_NGROK_313`, medido). O custo diário é reconfigurar o `.env` — automatizado, mas real. O
+  ingresso da Fase 4 substitui isso por um domínio estável.
 
 ### AD-12 — O painel é tão completo quanto o uptime de quem o alimenta `[ACCEPTED 2026-09-02]`
 - **Binds:** FR-8, AD-6
@@ -137,6 +156,17 @@ Mapa de camadas → responsabilidade:
   `conversation.custom_attributes = params[...]`. Cada carimbo manda o conjunto completo, e um
   disparo que não conhece um campo o apaga. É deliberado: num painel de cobrança, dado ausente é
   melhor que `dias_atraso` de três meses atrás.
+- **O conjunto é fechado e vive num lugar só:** `api/integrations/chatwoot/atributos.py::CHAVES` no
+  monorepo — `titulo_id`, `cnpj`, `cedente`, `numero_nf`, `data_vencimento`, `valor_em_aberto`,
+  `dias_atraso`, `link_boleto`. Como a semântica é substituição, dois produtores com conjuntos
+  diferentes se sobrescreveriam em silêncio; por isso **só entram atributos do TÍTULO**, que todo
+  caminho de disparo consegue preencher. Estado da régua (fase, recompra, protesto) fica de fora de
+  propósito: só o `dispatch_gateway` o conhece, e o disparo por catálogo o apagaria no envio seguinte.
+- **Os mesmos 8 nomes têm de existir como `CustomAttributeDefinition`** neste repo
+  (`scripts/seed/chatwoot_seed.rb`). A barra lateral do Chatwoot **itera as definições**, não as
+  chaves gravadas: sem definição o valor é salvo e fica invisível. São duas listas em repos
+  diferentes que precisam bater — `verificar-canal-oficial.sh` cobra as 8 definições ao vivo, mas
+  nada cobra o lado Python. Mexeu em `CHAVES`, mexa no seed no mesmo dia.
 
 ### Diagrama de direção de dependência (quem pode depender de quem)
 

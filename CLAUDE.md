@@ -50,8 +50,14 @@ O compose, o `.env` e os `scripts/` estão na raiz, então `docker compose` acha
 | `docker compose run --rm chatwoot-seed` | re-semeia canais e configs (idempotente) |
 | `bash scripts/retencao-conversas.sh --simular` | expurgo LGPD (simulado) |
 
-A central escuta em **`http://127.0.0.1:${CHATWOOT_HOST_PORT}`** (hoje 3001). Só o navegador entra
-por aí; o monorepo fala com ela pela rede `flash-espelho`, por nome de container.
+A central escuta em **`http://127.0.0.1:${CHATWOOT_HOST_PORT}`** (hoje 3001). O navegador entra por
+aí; o monorepo fala com ela pela rede `flash-espelho`, por nome de container.
+
+**E há uma terceira porta de entrada, em dev:** a chave `CENTRAL_URL_PUBLICA` do `.env` recebe um
+túnel para a 3001, subido pelo `tuneis-manha.sh` do monorepo. Ela vira o `FRONTEND_URL` do Chatwoot,
+e **sem ela a atendente não consegue responder pelo WhatsApp** — a Twilio recusa o envio com 21609
+(AD-11.1). O túnel sobe com `deploy/ngrok-policy.yml`, que nega `/twilio/callback` na borda.
+`bash scripts/verificar-canal-oficial.sh` cobra as duas coisas ao vivo.
 
 ### As-built que vai te morder (aprendido em produção, não re-descubra)
 
@@ -62,8 +68,10 @@ Todas as falhas caras deste projeto foram **silenciosas**. Nenhuma deu erro. Gua
    pacote de container chega pela bridge (`172.17.0.1`), não pela loopback. É por isso que existe a
    rede `flash-espelho` — e é o tipo de erro que o espelho **não** reporta (AD-12).
 2. **O `/twilio/callback` não valida assinatura.** O `Twilio::CallbackController` do Chatwoot não
-   confere `X-Twilio-Signature`. Hoje a proteção é TOPOLÓGICA (só loopback). Qualquer ingresso
-   futuro **precisa** do gate do `X-Relay-Token` de volta antes de abrir a porta.
+   confere `X-Twilio-Signature`. Com a central atrás de um túnel a proteção deixou de ser
+   topológica: quem barra é a borda (`deploy/ngrok-policy.yml` → 403). **Toda exposição nova tem de
+   trazer esse gate junto** — e o `/twilio/delivery_status` tem de ficar aberto, senão volta o 21609.
+   A especificação está em `docs/runbook-deploy.md`.
 3. **O seed não cria conta nem admin, e isso é deliberado.** No Chatwoot os dois nascem juntos no
    `AccountBuilder` do onboarding; pré-criar a conta faria o onboarding criar uma SEGUNDA — e
    "existe exatamente uma conta" é invariante verificada.
@@ -72,6 +80,10 @@ Todas as falhas caras deste projeto foram **silenciosas**. Nenhuma deu erro. Gua
    duas vezes. Nunca empurre outbound espelhado sem `source_id`.
 5. **O `.env` não é aparado pelo Docker Compose.** Espaço ou `\r` sobrando num valor vira erro sem
    pista. Os scripts usam `env_get`, que apara; `bash scripts/verificar-invariantes.sh` detecta a sujeira.
+6. **Atributo sem definição é invisível.** A barra lateral do Chatwoot **itera as
+   `custom_attribute_definitions`**, não as chaves gravadas. O espelho carimba, o Postgres guarda, e
+   a tela não mostra nada — sem erro. As 8 definições nascem no `chatwoot_seed.rb` e os mesmos 8
+   nomes vivem em `atributos.py::CHAVES` no monorepo (AD-13).
 
 ---
 

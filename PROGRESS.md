@@ -10,21 +10,20 @@
 O EPIC-1 bloqueia tudo. Os EPICs 2/3/4 podem correr em paralelo depois dele.
 Cada épico tem um gate de saída — use `/gate EPIC-N`.
 
-**Progresso total:** 8 / 19 stories `[x]`, +2 em `[~]` e 1 em `[!]`.
-**M1 (EPIC-1) concluído** — a central está no ar. **EPIC-3 concluído e verificado ao vivo** — o número
-oficial recebe, responde e espelha os disparos, com o número real de produção. **STORY-4.1 concluída e
-verificada ao vivo** — a caixa `operacional@` recebe e responde pela central, na mesma thread.
+**Progresso total:** 9 / 19 stories `[x]`. Do que sobra: 5 foram **canceladas** (EPIC-2 e EPIC-5) e
+5 são o EPIC-6, que no Chatwoot é majoritariamente **configuração**, não código.
 
-As 3 stories abertas estão travadas em coisas que **não são código**:
+**O escopo de código do MVP está fechado.** A central recebe, responde e espelha nos dois canais, com
+número e caixa reais:
 
-| Story | Espera |
+| Canal | Estado ao vivo |
 |---|---|
-| 2.1 · 2.2 ~~`[~]`~~ | **CANCELADAS** (2026-09-02) — o EPIC-2 sai junto com a Evolution |
-| 4.2 ~~`[!]`~~ | **DESTRAVADA** (2026-09-02) — o AD-13 substitui o Sync: o contexto (`titulo_id`, CNPJ, valor, atraso) é carimbado nos `custom_attributes` da conversa por `chatwoot_mirror.py::_carimbar_atributos`, no instante do disparo. Etapa separada de propósito: `_garantir_conversa` tem duas saídas e o reuso é o caminho comum |
+| WhatsApp Oficial (Twilio) | recebe · espelha o disparo · **responde pela tela** · carimba o contexto do título |
+| E-mail (Gmail) | recebe · responde na mesma thread · renova o token sozinho |
 
-**Próximo trabalho real: Fase 2 (CRM) → Fase 3 (espelho ponta a ponta).** As Fases 0 e 1 estão
-fechadas (ver o quadro acima). Não é o EPIC-5 — ele foi cancelado. O roteiro está no
-`HANDOFF-espelho-chatwoot.md` e no plano da sessão.
+**Próximo passo: Fase 3.5 — o benchmark de 24h** com as duas stacks limpas rodando juntas (RAM idle,
+RAM em pico de disparo, CPU, crescimento do volume). É o gate da Fase 4, que decide onde a central
+roda — e, por AD-12, a completude do painel. Não é o EPIC-5: ele foi cancelado.
 
 ---
 
@@ -39,19 +38,24 @@ Chatwoot self-hosted na infra da Flash: deploy reproduzível, banco isolado, ver
 | 1.3 | Versão fixada e procedimento de upgrade (FR-2) | [x] | |
 | 1.4 | Backup e restore validados (FR-3) | [x] | |
 
-**Gate EPIC-1:** `docker compose up -d` sobe web + Sidekiq + Postgres/pgvector + Redis + Caddy; UI do Chatwoot responde em HTTPS com cert válido; dados persistem após restart; imagem com **tag fixa** (nunca `latest`); Postgres próprio, sem credencial cruzada com Twenty/Supabase; restore de backup recompõe conversas e anexos num ambiente limpo.
+**Gate EPIC-1** (reescrito em 2026-09-02 pelo AD-10 — o enunciado original exigia Caddy e HTTPS local, que saíram): `docker compose up -d --wait` sobe web + Sidekiq + Postgres/pgvector + Redis, **com os canais já semeados**; a UI responde em `127.0.0.1:${CHATWOOT_HOST_PORT}`; o TLS externo é da borda, não do Chatwoot; dados persistem após restart; imagem com **tag fixa** (nunca `latest`); Postgres próprio, sem credencial cruzada com Twenty/Supabase; restore de backup recompõe conversas e anexos num ambiente limpo.
 
-**Gate verificado ao vivo em 2026-07-13 (dev):** `docker compose up -d --wait` sobe os 6 containers healthy com um
-comando · `https://inbox.localhost` responde (HTTP→HTTPS 308; cert da CA interna em dev — o cert
-público do Let's Encrypt depende do **DNS de produção**, ver abaixo) · `bash scripts/smoke-test.sh` prova que
+**Gate verificado ao vivo em 2026-07-13 (dev) — evidência da stack COM Caddy, que não existe mais:**
+`docker compose up -d --wait` sobe os 6 containers healthy com um
+comando · `https://inbox.localhost` responde (HTTP→HTTPS 308; cert da CA interna em dev) ·
+`bash scripts/smoke-test.sh` prova que
 conversa, mensagem e anexo sobrevivem ao restart · `bash scripts/verificar-invariantes.sh` valida tag fixa `-ce`, banco próprio
 sem credencial cruzada, usuário não-superusuário, sem dblink/fdw, só o Caddy publicando porta ·
 `bash scripts/backup.sh` + `bash scripts/restore.sh --verificar` recompõem banco **e** anexos num ambiente limpo.
 
-**Pendências de produção (passo manual do operador — `docs/runbook-deploy.md`):** apontar o DNS de
-`inbox.<DOMAIN>` para o host antes do 1º boot (sem isso o Let's Encrypt não emite cert), preencher o
-`.env` de produção com segredos próprios, criar o admin em `/installation/onboarding`, configurar o
-SMTP transacional e agendar o cron de backup + cópia offsite criptografada.
+**Reverificado em 2026-09-02, com o banco zerado e a stack nova:** `docker compose up -d --wait`
+sobe tudo e o `chatwoot-seed` recria conta, inbox oficial e inbox de e-mail sem intervenção — foi a
+prova do seed automático que o AD-10 prometia.
+
+**Pendências de produção (passo manual do operador — `docs/runbook-deploy.md`):** preencher o `.env`
+de produção com segredos próprios, criar o admin em `/installation/onboarding`, configurar o SMTP
+transacional, agendar a cópia offsite criptografada do backup, e satisfazer a **especificação do
+ingresso** (as 5 linhas em `runbook-deploy.md`) antes de expor.
 
 ---
 
@@ -119,9 +123,11 @@ resposta simulada do cliente caiu na **mesma thread** do disparo espelhado (via 
 = `whatsapp:+E164`), e o `can_reply?` fecha sem inbound e reabre com ele.
 
 **Segurança do callback:** o `Twilio::CallbackController` do Chatwoot **não valida** o
-`X-Twilio-Signature`. Como o inbound legítimo chega pelo relay do monorepo (que já validou), o Caddy
-barra `/twilio/callback` para a internet com um token compartilhado (`RELAY_TOKEN`). Verificado: sem
-token → 403 · token errado → 403 · token certo → 204. Falha fechada se o token não estiver no `.env`.
+`X-Twilio-Signature`. O inbound legítimo chega pelo relay do monorepo (que já validou) pela rede
+`flash-espelho`, sem tocar em porta publicada. Quem barra o path para a internet é a **borda**:
+`deploy/ngrok-policy.yml` devolve **403**, verificado ao vivo por `verificar-canal-oficial.sh`.
+O `RELAY_TOKEN` continua viajando no `X-Relay-Token` — mas nada o exige na entrada, e é por isso que
+o gate da borda é obrigatório em toda exposição (ver a especificação em `docs/runbook-deploy.md`).
 
 **STORY-3.2 — o espelho, no monorepo** (branch `feat/espelho-chatwoot`, commit `c3d5438`; `main` de lá
 intocada). É **código**, então TDD: 16 testes novos, suíte da API em **895 passed**, pyright limpo.
@@ -172,7 +178,7 @@ Caixa Gmail de atendimento como inbox, com as threads unificadas ao mesmo contat
 | # | Story | Status | Commit |
 |---|---|---|---|
 | 4.1 | Inbox de e-mail espelhada (FR-9) | [x] | 28b6766 |
-| 4.2 | Contexto de domínio carimbado na conversa (FR-10, AD-13) | [ ] | |
+| 4.2 | Contexto de domínio carimbado na conversa (FR-10, AD-13) | [x] | `d9b680f` + `564e634` (monorepo) |
 
 ## ✅ Gate da STORY-4.1 verificado AO VIVO (2026-07-14, caixa real de produção)
 
@@ -189,15 +195,27 @@ Com a caixa `operacional@flashcapital.com.br` (Google Workspace, OAuth):
 **Ainda não exercitado:** a janela de ~24h do IMAP (`SINCE hoje−1`) — o canal tolera o Sidekiq fora do ar
 por horas, mas acima de ~24h o que chegou no buraco não é mais buscado. Não dá para provar sem esperar.
 
-**Gate EPIC-4:** e-mail que chega na caixa vira conversa na inbox `E-mail`; resposta pela central volta ao remetente na mesma thread; e a conversa de cobrança carrega `titulo_id`, `cnpj`, `valor_em_aberto` e `dias_atraso` nos `custom_attributes` — **inclusive quando a conversa foi reusada**, que é o caminho comum.
+**Gate EPIC-4:** e-mail que chega na caixa vira conversa na inbox `E-mail`; resposta pela central volta ao remetente na mesma thread; e a conversa de cobrança carrega o contexto do título nos `custom_attributes` — **inclusive quando a conversa foi reusada**, que é o caminho comum.
 
-> **O EPIC-4 está pronto até onde é automatizável.** A 4.1 vira `[x]` depois do **passo manual do
-> operador**: criar o OAuth Client no Google Cloud, preencher 3 chaves no `.env` e concluir a dança
-> do OAuth. Checklist completo em `docs/runbook-canal-email.md`.
-> A 4.2 mudou de conteúdo com o AD-13: em vez de reconciliar identidade depois do fato, o monorepo
-> carimba o contexto que já tem em mãos no instante do disparo. É trabalho **no monorepo**
-> (`chatwoot_mirror.py`), não neste repo — e a armadilha está registrada: `_garantir_conversa` tem
-> duas saídas, e o carimbo precisa valer para as duas.
+> **Gate EPIC-4: PASS** (2026-09-02). As duas metades verificadas ao vivo: o canal de e-mail refeito
+> do zero depois do banco zerado (9 checks verdes) e o carimbo provado em conversa **reusada**, com
+> número e título reais.
+
+> **EPIC-4 fechado.** A 4.1 exigiu o passo manual do operador (OAuth Client no Google Cloud, 3
+> chaves no `.env`, a dança do OAuth) — refeito do zero em 2026-09-02 depois do banco zerado, com o
+> checklist de `docs/runbook-canal-email.md`.
+>
+> **A 4.2 mudou de conteúdo com o AD-13** e foi entregue no monorepo: em vez de reconciliar
+> identidade depois do fato, o disparo carimba o contexto que já tem em mãos. São **8 atributos**
+> (`titulo_id`, `cnpj`, `cedente`, `numero_nf`, `data_vencimento`, `valor_em_aberto`, `dias_atraso`,
+> `link_boleto`), definidos em `atributos.py::CHAVES` e espelhados como
+> `CustomAttributeDefinition` pelo `chatwoot_seed.rb` deste repo — **as duas listas têm de bater**,
+> senão o valor é gravado e fica invisível. A armadilha que o desenho evita: `_garantir_conversa`
+> tem duas saídas, e o carimbo é etapa separada para valer nas duas.
+>
+> **Provado ao vivo (2026-09-02):** três disparos reais (títulos 15722, 15724, 15726) reusaram a
+> **mesma** conversa e ela terminou com 7 dos 8 atributos carimbados — `dias_atraso` ausente porque
+> o título não estava vencido, que é o comportamento correto (campo vazio é omitido, `0` não é vazio).
 
 **A descoberta que definiu o épico: a service account do Gmail NÃO pluga no Chatwoot.** Não é
 preferência — é ausência de caminho de código. O `Imap::GoogleFetchEmailService` autentica XOAUTH2
@@ -229,13 +247,19 @@ genérico — sem nada de errado no `.env`. Resolvido: `bash scripts/conectar-gm
 (De quebra: a coluna é `serialized_value` **jsonb com YAML dentro** — o próprio Chatwoot marca isso
 com um `FIX ME` —, então a checagem **não pode** ser SQL; passa pelo model.)
 
-**O ngrok foi descartado — e a razão importa.** O host já roda **dois túneis ngrok que são carga viva
-do monorepo**: o do `fastapi_api` (webhook do **Twilio** + `PUBLIC_BOLETO_BASE_URL`) e o do Supabase.
-Um terceiro agente esbarraria no limite de sessões do plano free, e o candidato a cair era justamente
-o do Twilio — **a mesma falha que deixou a confirmação de sacado quebrada por 10 dias**. Em vez disso:
-**ponte de loopback** (`socat`, só em `127.0.0.1:3000`, fora do compose) + redirect URI
-`http://localhost:3000/google/callback`, que o Google **aceita** (a exigência de HTTPS isenta o
-`localhost` **puro** — `inbox.localhost` é subdomínio e é recusado). Derrubada depois da dança.
+**O consent do Gmail sai por `localhost`, nunca por túnel** — e a razão importa. O Google **aceita**
+`http://localhost:3001/google/callback` (a exigência de HTTPS isenta o `localhost` **puro**;
+`inbox.localhost` é subdomínio e é recusado), e a central publica exatamente ali. Cadastrar a URL do
+túnel seria pior de duas formas: ela muda todo dia, e cada troca exigiria voltar ao Google Cloud.
+Por isso o `conectar-gmail.sh` **recusa** rodar apontando para um túnel efêmero e imprime a receita
+de localhost.
+
+*(A ponte `socat` que existia para expor a 3000 morreu na Fase 1: com a central publicando direto em
+`127.0.0.1:3001`, o `localhost` puro passou a ser o endereço real dela.)*
+
+E o que o refresh **não** exige: `grant_type=refresh_token` não passa `redirect_uri`, então rotacionar
+a `CENTRAL_URL_PUBLICA` **não** derruba um canal já autorizado — medido em 2026-09-02, 9 checks verdes
+depois da troca. O Google Cloud só volta a ser tocado num **consent novo**.
 
 **Três armadilhas as-built, todas silenciosas (detalhe em `docs/runbook-canal-email.md`):**
 1. **Agendador parado ⇒ a atendente para de RESPONDER.** O SMTP de saída autentica com
@@ -248,11 +272,9 @@ o do Twilio — **a mesma falha que deixou a confirmação de sacado quebrada po
    `myaccount.google.com/permissions`.
 3. **O `refresh_token` fica em texto puro** — ver dívida técnica.
 
-**O ngrok aqui é seguro (≠ a dívida do Twilio).** O Google recusa `.localhost` como redirect URI, então
-a dança do OAuth em dev sai por um túnel. Mas a URL do túnel só precisa existir **no momento do
-clique**: o refresh usa `grant_type=refresh_token`, que **não usa `redirect_uri`**. Autorizou, pode
-derrubar o túnel e devolver a `FRONTEND_URL`. É o oposto do webhook do Twilio, que é **permanente**
-numa URL efêmera — e por isso apodreceu por 10 dias.
+**Por que o e-mail não apodrece como o webhook do Twilio.** O redirect URI só precisa existir **no
+momento do clique**; o webhook do Twilio precisa existir **para sempre**. É essa diferença — não a
+ferramenta — que fez um apodrecer por 10 dias em silêncio e o outro não.
 
 ---
 
@@ -287,7 +309,7 @@ Cockpit, papéis, atribuição, labels manuais, respostas rápidas, LGPD e obser
 | 6.2 | Atribuição, labels manuais e respostas rápidas (FR-16) | [ ] | |
 | 6.3 | Observabilidade e conformidade LGPD | [ ] | |
 
-**Gate EPIC-6:** as 3 inboxes visíveis numa interface única; papéis (admin/agente) negam acesso indevido; atribuição manual e automática por inbox funcionando; respostas rápidas inseridas; labels manuais aplicáveis além das empurradas pelo Sync; log estruturado + alerta de saúde da conexão Evolution; retenção de conversas configurada e acesso a CPF/CNPJ restrito por papel.
+**Gate EPIC-6** (reescrito em 2026-09-02: eram 3 inboxes, são **2**; o Sync e a Evolution saíram): as 2 inboxes visíveis numa interface única; papéis (admin/agente) negam acesso indevido; atribuição manual e automática por inbox funcionando; respostas rápidas inseridas; labels manuais aplicáveis; log estruturado + alerta de saúde dos canais (IMAP parado ⇒ a atendente para de responder); retenção de conversas **agendada** e acesso a CPF/CNPJ restrito por papel.
 
 ---
 
@@ -303,15 +325,16 @@ Itens levantados em code-review e desvios as-built. **Nenhum bloqueia o MVP** �
 | ~~**Handoff Agente ↔ humano não existe.**~~ **SEM OBJETO desde 2026-09-02**: o Agente N8N atendia no número de prospecção, que saiu junto com a Evolution (EPIC-2 cancelado). Não há mais conversa de lead na central para assumir. | — | ✅ sem objeto |
 | **O espelho PERDE, e não tem como recuperar.** A metade "duplicar" desta dívida morreu com a Evolution (era replay do Baileys). Sobra a metade cara, hoje elevada a **AD-12**: `chatwoot_mirror.py` não tem retry, fila nem backfill, e nenhum job reconcilia depois — a falha é logada e descartada. Central fora do ar = **buraco permanente** no painel, não atraso. Decidir onde a central roda **é** decidir a completude do painel. | painel amostral, sem aviso na UI | **Fase 3.5 (benchmark) → Fase 4**; até lá, declarar "amostral" por escrito |
 | ~~**Anti-SSRF do Chatwoot desligado para rede privada**~~ (`SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true`). **FECHADA em 2026-09-02** (`eebbbb7`): o flag só existia para o Chatwoot alcançar a Evolution na rede privada; com a Evolution fora (AD-11), voltou a `false` e a proteção está ligada. | — | ✅ fechada |
-| **Retenção de conversa sem aval jurídico — e agora ela está ACUMULANDO.** `RETENCAO_CONVERSAS_DIAS=1825` (5 anos) é um default técnico, não uma decisão. O expurgo existe (`retencao-conversas.sh`) mas **não está no cron**. Desde 2026-07-14 isto deixou de ser hipotético: com o canal de e-mail ligado à caixa **real** (`operacional@`), a central passou a ingerir **PII de cliente de verdade** a cada minuto (CNPJ, valores, NF, boletos, dados de lead do Jotform) — e todo `bash scripts/backup.sh` a carrega junto. Decisão do operador (2026-07-14): **seguir, porque este host vira produção**. | LGPD / prova em disputa de dívida | **cron da retenção: antes do go-live** · aval jurídico: STORY-6.3 |
+| ~~**Retenção de conversa sem aval jurídico**~~ **DECIDIDA E AGENDADA em 2026-09-02.** `RETENCAO_CONVERSAS_DIAS=1825` deixou de ser default técnico: o operador aprovou os **5 anos** por escrito. O expurgo (`retencao-conversas.sh`) entrou no cron do host (domingo 04:10, com `flock`, log em `backups/retencao.log`) e o dry-run foi validado. **Resíduo:** esta máquina não fica ligada às 4h de domingo — é o mesmo modo de falha do `WF-06-001` do CRM, então tratar como **passo que pode nunca disparar** até a central sair para um host que fica de pé. | LGPD / prova em disputa de dívida | ✅ decidida · horário a revisar na Fase 4 |
 | **Identidade dupla no canal Twilio: telefone e BSUID.** O inbound real criou **dois** `contact_inbox` para o mesmo contato: `whatsapp:+553182210297` (telefone) e `whatsapp:BR.4456758834604506` (o **BSUID**, identificador novo da Meta que a Twilio manda em `ExternalUserId`). Hoje o Chatwoot prefere o do telefone (`twilio_whatsapp_primary_source_id`) e é ele que o espelho do monorepo usa — então disparo e resposta casam. Mas a Meta está migrando para payloads **só com BSUID** (o próprio código do Chatwoot já trata esse caso). No dia em que o `From` vier sem telefone, o inbound resolveria o `contact_inbox` do BSUID e o espelho continuaria criando o do telefone: **mesmo contato, threads separadas**. | disparo e resposta em conversas diferentes (dado não se perde; a thread racha) | monitorar; revisar quando a Meta forçar BSUID |
-| **Webhook do Twilio depende de URL de ngrok efêmera — E JÁ QUEBROU DE NOVO.** Em 2026-07-14 o webhook do número oficial estava apontando para **`https://demo.twilio.com/welcome/sms/reply`** (a URL de exemplo da própria Twilio), não para o monorepo. O número não recebia nada e não alimentava a confirmação de sacado. Reapontado para o túnel atual (`https://7c2d-…ngrok-free.app/webhooks/twilio/inbound`) — **que vai apodrecer de novo no próximo restart do ngrok**. É a segunda ocorrência do mesmo modo de falha (a primeira custou 10 dias em silêncio). O conserto real é reservar o **domínio estático** que o ngrok dá de graça (o plano free inclui 1) ou publicar a API. Decisão do operador (2026-07-14): seguir com a URL efêmera por ora. | webhook apodrece em silêncio a cada restart — e ninguém percebe, porque a Twilio entrega em 200 no demo | **antes do go-live — é reincidente** |
-| **Sem monitoramento do webhook do Twilio.** As duas quebras (ngrok morto, depois demo.twilio.com) só foram descobertas por acaso, dias depois. Não há nada que reclame quando o número oficial para de entregar inbound. Um check simples (comparar o `sms_url` do número com a URL esperada) fecharia esse buraco. | a cobrança quebra e ninguém sabe | antes do go-live |
-| **Rota de disparo em massa do monorepo sem autenticação.** O router `/whatsapp-dispatch` (`api/api_main.py:256`) não declara nenhuma dependência de auth — nem no `include_router`, nem nas rotas. A única guarda é o limite de 50 boletos por lote. São os endpoints que **disparam cobrança em massa** pela Twilio. Achado de passagem no EPIC-3; **fora do escopo desta central** (é código do monorepo), mas registrado porque o risco é alto e o dono é o mesmo time. Confirmar se há middleware global de auth antes de concluir que está aberto. | disparo de cobrança em massa por terceiro; custo Twilio; reputação do número oficial | monorepo — avaliar assim que possível |
-| **`/twilio/delivery_status` da central aceita chamada não assinada.** O Chatwoot não valida o `X-Twilio-Signature` em nenhum dos dois callbacks. O `/twilio/callback` nós fechamos com o `RELAY_TOKEN` (o inbound vem do monorepo), mas o `delivery_status` **precisa** ficar público — é a Twilio que o chama direto, para as mensagens que a central envia. Forjá-lo só altera o status de entrega de uma mensagem existente. Mitigação possível: allowlist dos IPs da Twilio no Caddy. | status de entrega forjado (sem leitura nem envio de dados) | revisar no EPIC-6 (governança) |
+| ~~**Webhook do Twilio depende de URL de ngrok efêmera**~~ · ~~**Sem monitoramento do webhook**~~ **MITIGADOS em 2026-09-02.** O `tuneis-manha.sh` do monorepo fechou o laço: sobe os três túneis, grava as URLs nos `.env` dos repos que as consomem, recria os containers que precisam reler o ambiente e **escreve o `SmsUrl` e o `StatusCallback` no console da Twilio** (`scripts/tuneis_twilio.py`), provando a vida na URL pública ao final. O modo de falha que custou 10 dias em silêncio deixou de depender de alguém lembrar. **Não é conserto:** a causa (URL efêmera) continua, e o subdomínio fixo **não existe** no plano free (`ERR_NGROK_313`, medido). O conserto é o domínio estável da Fase 4. | apodrecimento automatizado, não eliminado | ✅ mitigado · conserto na Fase 4 |
+| ~~**Rota de disparo em massa do monorepo sem autenticação.**~~ **JÁ ESTAVA FECHADA — verificado em 2026-09-02.** O achado era de 2026-07-13 e o monorepo consertou em 16/07, sem que este repo soubesse: `api/routers/whatsapp_dispatch.py:26` declara `APIRouter(dependencies=[Depends(require_operational)])`, e `api/tests/test_rotas_protegidas.py` cobre as rotas. A dívida sobreviveu 7 semanas só porque ninguém releu. | — | ✅ fechada no monorepo |
+| **O `link_boleto` carimbado é uma URL de túnel — e ela morre amanhã.** O atributo guarda a URL pública **do dia do disparo** (`https://<aleatório>.ngrok-free.app/b/…`). Na rodada seguinte do `tuneis-manha.sh` o subdomínio muda e o link da barra lateral vira 404, em silêncio, para sempre. O histórico da mensagem não sofre (o cliente já recebeu o PDF pelo WhatsApp); quem perde é o atendente que abrir uma conversa antiga. É a mesma causa raiz do webhook que apodrece, num lugar novo — e o mesmo conserto: domínio estável. | link morto na conferência de conversa antiga | **Fase 4** (domínio estável) |
+| **As 8 chaves de atributo vivem em dois repos e só um lado é cobrado.** `atributos.py::CHAVES` (monorepo) e as `CustomAttributeDefinition` do `chatwoot_seed.rb` (aqui) precisam bater: sem definição, o valor é gravado e **não aparece** na barra lateral, sem erro nenhum. `verificar-canal-oficial.sh` passou a cobrar as 8 definições ao vivo, o que pega o lado de cá — mas **nada** avisa se alguém acrescentar uma chave só no Python. | atributo novo nasce invisível | monitorar; fechar se o conjunto crescer |
+| **`/twilio/delivery_status` da central aceita chamada não assinada.** O Chatwoot não valida o `X-Twilio-Signature` em nenhum dos dois callbacks. O `/twilio/callback` nós fechamos com o `RELAY_TOKEN` (o inbound vem do monorepo), mas o `delivery_status` **precisa** ficar público — é a Twilio que o chama direto, para as mensagens que a central envia. Forjá-lo só altera o status de entrega de uma mensagem existente. E ele **tem de** ficar alcançável: sem isso a Twilio recusa o envio da central com **21609** e a atendente não responde (AD-11.1). Mitigação possível no ingresso: allowlist dos IPs da Twilio — nunca autenticação humana, que quebraria a chamada de máquina. | status de entrega forjado (sem leitura nem envio de dados) | revisar no ingresso da Fase 4 |
 | **O `refresh_token` do Gmail fica em TEXTO PURO no banco.** O `Channel::Email` criptografa só `imap_password`/`smtp_password`. Com OAuth, a credencial real vive no `provider_config` — **jsonb, que o Chatwoot não criptografa**, mesmo com `ACTIVE_RECORD_ENCRYPTION_*` ligado (ligamos: protege o `Hook#access_token` e habilita MFA, mas **não** cobre este caso). O token dá **leitura e envio na caixa inteira** (`https://mail.google.com/`) e **não expira**. Está no Postgres e dentro de **todo backup**. Corrigir exigiria forkar o Chatwoot — proibido (AD-7). Mitigação: `BACKUP_DIR` tratado como segredo; revogar em `myaccount.google.com/permissions` ao menor sinal. | quem tiver o backup tem a caixa de atendimento inteira | aceito no MVP; revisar no EPIC-6 (governança) |
 | **Envio de e-mail acoplado ao poller de recebimento.** O SMTP de saída usa o `provider_config['access_token']` **cru**; quem o mantém fresco é o job IMAP que roda a cada minuto. Agendador do Sidekiq parado ⇒ em até 1h a atendente **para de conseguir responder**, com falha de auth SMTP **dentro de um job** (sem erro na tela). `bash scripts/verificar-canal-email.sh` checa o registro do cron. | resposta ao cliente some em silêncio | monitorar (alerta de saúde entra na STORY-6.3) |
-| **O espelho do canal oficial não está na `main` do monorepo.** `mirror_outbound`/`relay_inbound` vivem na branch `feat/espelho-chatwoot` (`c3d5438`). O gate do EPIC-3 foi provado ao vivo **rodando essa branch** — mas até **merge + deploy** no monorepo, a central **não recebe** o inbound relayado nem o espelho em produção. | o EPIC-3 parece fechado e não está, em produção | monorepo — antes do go-live |
+| **O espelho do canal oficial não está na `main` do monorepo.** `mirror_outbound`/`relay_inbound`/`_carimbar_atributos` vivem na linhagem `feat/espelho-chatwoot`, hoje dentro de `feat/regua-comunicacao-v2` — entra na `main` junto com a régua. O gate do EPIC-3 foi provado ao vivo **rodando essa branch** — mas até **merge + deploy** no monorepo, a central **não recebe** o inbound relayado nem o espelho em produção. | o EPIC-3 parece fechado e não está, em produção | monorepo — antes do go-live |
 | **Cópia offsite do backup é manual.** O `backup.sh` grava só local; host morre = backup morre junto. A cópia criptografada para fora do host está documentada, não automatizada. | perda total em falha de host | antes do go-live |
 | **Staging não existe ainda.** O runbook de upgrade exige validar em staging antes de produção (FR-2); hoje só há o ambiente dev local. | upgrade sem rede de proteção | antes do 1º upgrade em prod |
 
@@ -331,6 +354,8 @@ Itens levantados em code-review e desvios as-built. **Nenhum bloqueia o MVP** �
 
 | Data | Épico | Stories | Notas |
 |---|---|---|---|
+| 2026-09-02 | — | Fases 0→3 | **A simplificação inteira, e o marco que a estrutura antiga nunca alcançou: a atendente responde pelo WhatsApp, pela tela.** Fases 0 a 3 executadas nos três repos. **Saíram:** Evolution (+`lid_service`, `evolution_db`, 5 scripts, 2 runbooks), Caddy (nos dois repos), Makefile, a rede `flash-canais`, a ponte socat, o EPIC-2 e o EPIC-5. **Ficou:** um `compose.yaml` na raiz, `docker compose up -d --wait` como comando único, e a rede `flash-espelho` com exatamente 2 membros. **Bancos zerados a pedido do operador** — Chatwoot (697 conversas, 196 anexos, 84 MB) e CRM (Twenty + n8n: 15 workflows, 4 credenciais, 37 execuções) —, mais 5 volumes órfãos e o `evolution_db`, que não pode voltar porque o script de init dele foi apagado. As duas stacks subiram com **um comando cada**, o que foi a prova do seed automático (AD-10). Reconfiguração do zero: conta 1, inbox 1 (WhatsApp Oficial, `medium=whatsapp`, 48 Content Templates), inbox 2 (E-mail, OAuth completo). **STORY-4.2 entregue** (AD-13): 8 atributos carimbados em etapa separada, provados em conversa **reusada** com 3 disparos reais. **E o 21609 caiu:** `Channel::TwilioSms` anexa `status_callback` sem condição, então `FRONTEND_URL` público não é UX — é pré-condição de envio; a chave `CENTRAL_URL_PUBLICA` virou o 3º túnel, com `deploy/ngrok-policy.yml` negando `/twilio/callback` na borda. Medições que mudaram decisões: a Twilio **aceita** um StatusCallback que devolve 404; a traffic policy do ngrok **funciona** no plano free, mas subdomínio próprio **não** (`ERR_NGROK_313`); rotacionar a URL **não** quebra o Gmail já autorizado; o Rack::Attack já bloqueia na 6ª tentativa. Cron da retenção LGPD agendado (5 anos, aprovados). Commits: `1cf69fb`→`b038921` (inbox, 21) · `a9256b7`→`adca1f2` (crm, 9) · `91b2d13`→`c1f013f` (monorepo, 7). |
+| 2026-09-02 | — | code-review | **Pente fino nos 37 commits, nos docs e no `.claude/` dos três repos.** O padrão achado não foi código errado — foi **doc que envelheceu contando o contrário do que passou a valer**. Os piores: o `runbook-canal-oficial.md` afirmava que "túnel ngrok não resolve de forma utilizável" e que trocar a URL "quebraria o OAuth do Gmail junto" — as duas coisas medidas como **falsas** no mesmo dia, e é exatamente a solução que entregamos; o AD-11.1 dizia que a central "não RESPONDE" pelo WhatsApp; o `PLAYBOOK-ECOSSISTEMA.md` do monorepo apontava para **conta 3 / inbox 6** (que o wipe apagou) e jurava que a 3001 "nunca" teria túnel. Reescritos como as-built. Fechadas 3 dívidas que já não existiam (rota de disparo protegida desde 16/07, webhook sem monitoramento, retenção sem cron) e abertas 2 novas achadas na varredura: o `link_boleto` guarda uma URL de túnel que morre no dia seguinte, e as 8 chaves de atributo vivem em dois repos com só um lado cobrado. Virou verificação executável: `verificar-canal-oficial.sh` passou a provar **ao vivo** as 8 definições de atributo, o 403 no `/twilio/callback` e a alcançabilidade do `/twilio/delivery_status`. |
 | 2026-07-13 | — | planejamento | Documentação BMAD gerada em `docs/`: `product-brief.md` (fase 1), `prd.md` (16 FRs, glossário fechado, jornadas), `architecture.md` (spine hub-and-spoke, AD-1..AD-9, diagramas, árvore-alvo), `epics-and-stories.md` (6 epics · 19 stories com CA Given/When/Then). Decisões travadas: Evolution fica no CRM com fan-out; merge só com telefone **E** documento; disparo em massa origina no monorepo. |
 | 2026-07-13 | — | setup | Scaffold do repo: `.claude/` (hooks, 5 comandos, 4 memories), `PROGRESS.md`, `CLAUDE.md`, `README.md`, `.gitignore`. 11 skills instaladas em `.claude/skills/` (incl. as oficiais `chatwoot-cli` e `twilio/ai`). Nenhum código de runtime. |
 | 2026-07-13 | EPIC-1 | 1.1 · 1.2 · 1.3 · 1.4 | **A central subiu.** a raiz do repo criado: compose (Caddy 2.11.4 · Chatwoot `v4.15.1-ce` web+sidekiq+init · pgvector 0.8.5-pg16 · Redis 7.4.9), `Caddyfile`, `.env.example`, init-db e 5 scripts de operação; `Makefile` com `up/check/smoke/backup/restore-check/retencao`; runbooks de deploy, upgrade e backup. Decisões as-built: **`chatwoot-init` one-shot** (`db:chatwoot_prepare` via `service_completed_successfully`) para o `up` ser mesmo **um** comando — o compose oficial exige migração à mão; **extensões pré-criadas pelo superusuário** no init-db (o `pg_stat_statements` não é *trusted*, e o usuário da app é não-superusuário por AD-9); **`APP_DB_*`** no init para desfazer a colisão de `POSTGRES_PASSWORD` (superusuário na imagem do Postgres vs. usuário da app no Chatwoot). Gate do épico verificado ao vivo em dev. |

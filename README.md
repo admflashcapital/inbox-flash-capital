@@ -43,16 +43,21 @@ o canal de cobrança junto — por isso **a central só tem o número oficial**.
                          e faz o fan-out
 
               A central NUNCA consulta o domínio. O domínio empurra. ✗───▶
-              A Twilio NUNCA fala com a central. Fala com o monorepo. ✗───▶
+        A Twilio não ENTREGA inbound na central. Entrega no monorepo. ✗───▶
 ```
 
 - **Hub** — Chatwoot: conversa, contato, labels, atribuição, relatório.
 - **Adapters** — Twilio e Gmail. Trocar provider não muda o modelo de conversa.
 - **Domínio** — Supabase/monorepo: fonte da verdade. Empurra; nunca é consultado em runtime.
 
-Só existem **dois consumidores** da central: o navegador do colaborador (autenticado, em loopback)
-e o monorepo (máquina-a-máquina, pela rede `flash-espelho`). Consequência prática: **domínio fora
-do ar não derruba o atendimento** — só deixa o enriquecimento desatualizado.
+Quem escreve conversa na central são **dois**: o navegador do colaborador (autenticado) e o
+monorepo (máquina-a-máquina, pela rede `flash-espelho`). Consequência prática: **domínio fora do ar
+não derruba o atendimento** — só deixa o enriquecimento desatualizado.
+
+Há um terceiro toque, e ele é obrigatório: a Twilio chama `/twilio/delivery_status` das mensagens
+que a **própria central** envia. Sem alcançá-lo ela recusa o envio com **21609** e a atendente não
+consegue responder (AD-11.1). Por isso a central tem uma URL pública (`CENTRAL_URL_PUBLICA`) com o
+`/twilio/callback` **negado na borda** — o inbound legítimo nunca passa por ali.
 
 E a recíproca, que é a decisão cara (AD-12): **o espelho não tem retry, fila nem backfill**. Cada
 minuto com a central inalcançável é um **buraco permanente** no painel, não um atraso.

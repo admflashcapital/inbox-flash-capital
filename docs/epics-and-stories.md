@@ -199,8 +199,16 @@ junto. A central continua sem consultar banco de domínio em runtime (AD-2).
 
 **Given** um disparo de cobrança originado no monorepo
 **When** o espelho grava a mensagem na central
-**Then** a conversa carrega `titulo_id`, `cnpj`, `valor_em_aberto` e `dias_atraso` em
-`custom_attributes`, visíveis na barra lateral.
+**Then** a conversa carrega o contexto do título em `custom_attributes`, visível na barra lateral —
+o conjunto fechado de `atributos.py::CHAVES` no monorepo (`titulo_id`, `cnpj`, `cedente`,
+`numero_nf`, `data_vencimento`, `valor_em_aberto`, `dias_atraso`, `link_boleto`), com os campos
+que o disparo não conhece **omitidos**, não gravados vazios.
+
+**Given** os atributos gravados na conversa
+**When** a atendente abre a barra lateral
+**Then** cada um aparece com rótulo e tipo — o que exige uma `CustomAttributeDefinition` por chave
+neste repo (`scripts/seed/chatwoot_seed.rb`). Sem a definição o valor é gravado e **não aparece**,
+sem erro nenhum: a barra lateral itera as definições, não as chaves.
 
 **Given** um cliente que **já tinha** conversa aberta nesta inbox
 **When** um novo disparo reusa essa conversa em vez de abrir outra

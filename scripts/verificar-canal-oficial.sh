@@ -18,6 +18,11 @@
 #      valida a assinatura da Twilio (só filtra params e enfileira). Quem
 #      valida é o monorepo, que é o dono do webhook e faz o fan-out para cá.
 #      Logo, este path só pode entrar pela rede interna / com o token do relay.
+#      Com a central atrás de um túnel (AD-11.1), isso deixou de ser topológico:
+#      o gate vive na borda e este script bate nele AO VIVO.
+#   5. Guardar contexto invisível. A barra lateral do Chatwoot ITERA as
+#      `custom_attribute_definitions` — sem definição, o valor que o espelho
+#      carimba é gravado e nunca aparece. Falha 100% silenciosa (AD-13).
 #
 # Uso:  scripts/verificar-canal-oficial.sh
 # ═══════════════════════════════════════════════════════════════════
@@ -112,10 +117,50 @@ print(' '.join(
     if (p.get('host_ip') if isinstance(p, dict) else None) != '127.0.0.1'
 ))" 2>/dev/null)"
 if [ -z "$FORA" ]; then
-  ok "/twilio/callback inalcançável de fora: nada publica além de 127.0.0.1 (AD-10/AD-11)"
+  ok "nada publica além de 127.0.0.1 no compose (AD-10)"
 else
   falha "publicando fora da loopback (${FORA}) e o /twilio/callback ficou exposto — o Chatwoot não valida a assinatura da Twilio. Qualquer ingresso PRECISA do gate do X-Relay-Token antes."
 fi
+
+# ── 6. Os 8 atributos de conversa estão DEFINIDOS (AD-13) ─────────
+# A barra lateral itera as definições, não as chaves gravadas: sem definição o
+# carimbo do espelho some da tela sem erro nenhum. Os nomes são contrato com
+# `monorepo-flash-capital/api/integrations/chatwoot/atributos.py::CHAVES`.
+ESPERADOS="cedente cnpj data_vencimento dias_atraso link_boleto numero_nf titulo_id valor_em_aberto"
+DEFINIDOS="$(consultar "SELECT string_agg(attribute_key, ' ' ORDER BY attribute_key) FROM custom_attribute_definitions WHERE attribute_model = 0;" | tr ',' ' ')"
+FALTANDO=""
+for chave in $ESPERADOS; do
+  case " $DEFINIDOS " in *"$chave"*) ;; *) FALTANDO="${FALTANDO} ${chave}";; esac
+done
+if [ -z "$FALTANDO" ]; then
+  ok "8 atributos de conversa definidos — o carimbo do espelho aparece na barra lateral (AD-13)"
+else
+  falha "sem CustomAttributeDefinition para:${FALTANDO} — o espelho carimba e o valor fica INVISÍVEL. Rode: docker compose run --rm chatwoot-seed"
+fi
+
+# ── 7. Se a central está exposta por túnel, o gate da borda está de pé ──
+# O `/twilio/delivery_status` PRECISA responder (o 21609 exige alcançabilidade)
+# e o `/twilio/callback` PRECISA ser negado. É a especificação de
+# docs/runbook-deploy.md, cobrada na URL que está no .env agora.
+PUB="$(env_get CENTRAL_URL_PUBLICA)"
+case "$PUB" in
+  http://localhost*|http://127.0.0.1*|"")
+    ok "central em loopback: a proteção do /twilio/callback é topológica (sem borda para cobrar)"
+    ;;
+  *)
+    COD_CB="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${PUB}/twilio/callback" 2>/dev/null)"
+    if [ "$COD_CB" = "403" ]; then
+      ok "borda nega /twilio/callback na URL pública (HTTP 403)"
+    else
+      falha "/twilio/callback devolveu ${COD_CB:-sem resposta} em ${PUB} — deveria ser 403. Suba o túnel com --traffic-policy-file deploy/ngrok-policy.yml"
+    fi
+    COD_DS="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${PUB}/twilio/delivery_status" 2>/dev/null)"
+    case "$COD_DS" in
+      403|000|"") falha "/twilio/delivery_status devolveu ${COD_DS:-sem resposta} — a Twilio precisa alcançá-lo, senão volta o 21609 e a atendente não responde" ;;
+      *)          ok "/twilio/delivery_status alcançável (HTTP ${COD_DS}) — sem 21609 no envio pela tela" ;;
+    esac
+    ;;
+esac
 
 if [ -n "$(env_get RELAY_TOKEN)" ]; then
   ok "RELAY_TOKEN presente no .env"
