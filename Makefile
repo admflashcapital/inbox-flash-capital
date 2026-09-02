@@ -8,9 +8,8 @@
 
 COMPOSE := docker compose -f deploy/docker-compose.yml --env-file deploy/.env
 
-.PHONY: help up down restart logs ps config check smoke migrate backup restore-check retencao \
-        evolution evolution-status fanout dedup aquecimento twilio twilio-status oficial \
-        gmail gmail-status gmail-url email backfill chip chip-codigo chip-status chip-logout
+.PHONY: help up down restart logs ps config check smoke twilio twilio-status \
+        oficial gmail gmail-status gmail-url email backfill migrate backup restore-check retencao
 
 help: ## Lista os comandos disponíveis
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -38,33 +37,6 @@ check: ## Verifica as invariantes de arquitetura (AD-7/8/9) — rode antes de co
 
 smoke: ## Semeia dados, reinicia e prova a persistência (dev/staging — STORY-1.1)
 	deploy/scripts/smoke-test.sh
-
-chip: ## Pareia o chip de prospecção na Evolution — grava o QR num PNG (STORY-2.1)
-	deploy/scripts/parear-chip.sh
-
-chip-codigo: ## Pareia o chip por CÓDIGO de 8 caracteres (sem câmera). Exige NUMERO_PROSPECCAO no .env
-	deploy/scripts/parear-chip.sh --codigo
-
-chip-status: ## Estado da instância Evolution + número pareado (mascarado)
-	deploy/scripts/parear-chip.sh --status
-
-chip-logout: ## Desconecta o número da instância (reinicia a rampa de aquecimento!)
-	deploy/scripts/parear-chip.sh --logout
-
-evolution: ## Liga o número de prospecção à central (STORY-2.1)
-	deploy/scripts/conectar-evolution.sh
-
-evolution-status: ## Mostra a integração Evolution↔central que está valendo
-	deploy/scripts/conectar-evolution.sh --status
-
-fanout: ## Confere que N8N e central recebem o MESMO evento (STORY-2.2 / AD-5)
-	deploy/scripts/verificar-fanout.sh
-
-dedup: ## Simula a limpeza de mensagens duplicadas no espelho (STORY-2.2)
-	deploy/scripts/dedup-mensagens.sh --simular
-
-aquecimento: ## Verifica só-inbound + rampa do número de prospecção (STORY-2.3)
-	deploy/scripts/verificar-aquecimento.sh
 
 twilio: ## Liga o número oficial à central: cria a inbox + sincroniza templates (STORY-3.1)
 	deploy/scripts/conectar-twilio.sh
