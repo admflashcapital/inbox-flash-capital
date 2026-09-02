@@ -1,6 +1,18 @@
 # Runbook — Canal E-mail (Gmail Workspace via OAuth)
 
 **Épico:** EPIC-4 · **Stories:** 4.1 (inbox espelhada) e 4.2 (unificação de contato)
+> **Quando você vai precisar do Google Cloud de novo.** Só num consent NOVO — o canal já
+> autorizado é indiferente à `CENTRAL_URL_PUBLICA`, porque o refresh usa
+> `grant_type=refresh_token`, que não passa `redirect_uri`. Medido em 2026-09-02: a URL da
+> central mudou para um túnel e os 9 checks seguiram verdes.
+>
+> Consent novo acontece em: **banco recriado** (`down -v` mata o `refresh_token`), token
+> revogado em `myaccount.google.com/permissions`, mudança de escopo, ou troca da caixa.
+>
+> **E não cadastre a URL do túnel** — ela muda todo dia. Faça o consent pelo
+> `http://localhost:3001`, cadastrado em caráter permanente: o `conectar-gmail.sh` recusa
+> rodar apontando para um túnel e imprime os 4 comandos.
+
 **FRs:** FR-9, FR-10 · **Comandos:** `bash scripts/conectar-gmail.sh` · `bash scripts/conectar-gmail.sh --status` · `bash scripts/conectar-gmail.sh --url` · `bash scripts/verificar-canal-email.sh`
 
 A caixa Gmail de atendimento entra na central como a inbox `E-mail`. O Chatwoot **recebe** por IMAP
