@@ -1,5 +1,12 @@
 # Runbook — Aquecimento e Proteção do Número de Prospecção
 
+> ### 🗑️ ESTE RUNBOOK SERÁ APAGADO — Fase 1.1
+>
+> **A Evolution sai dos dois repos.** Este procedimento deixa de existir. **Não executar nada daqui.** Enquanto o arquivo não é removido, ele descreve um canal cancelado (EPIC-2).
+>
+> Ver **AD-10..AD-13** em `inbox/docs/architecture.md`, **ADR-010** em `crm/docs/07_Decisoes.md`, e o `HANDOFF-espelho-chatwoot.md`.
+
+
 > **Story:** 2.3 · **FR-6** · Guardrail de negócio (não é um AD, mas é inegociável)
 
 ## Por que isto existe

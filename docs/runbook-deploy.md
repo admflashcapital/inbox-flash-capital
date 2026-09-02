@@ -1,5 +1,12 @@
 # Runbook — Deploy da Central
 
+> ### ⚠️ DOC EM TRANSIÇÃO — Fase 1.2 e 1.3
+>
+> **Ainda descreve o as-built de hoje e continua válido até a Fase 1 rodar.** O que muda: o Caddy e o profile `edge` somem, junto com `COMPOSE_PROFILES`, `DOMAIN` e `ADMIN_EMAIL` (AD-10). O Chatwoot passa a publicar **só em `127.0.0.1:3001`**, e `docker compose up -d --wait` vira o comando único — sem Makefile. A seção sobre 443 e o segundo Caddy morre inteira.
+>
+> Ver **AD-10..AD-13** em `inbox/docs/architecture.md`, **ADR-010** em `crm/docs/07_Decisoes.md`, e o `HANDOFF-espelho-chatwoot.md`.
+
+
 > **Stories:** 1.1 (stack sobe com um comando) e 1.2 (banco isolado) · **FR-1** · **AD-8, AD-9**
 > Este runbook é a fonte de verdade operacional do deploy. Arquitetura em `docs/architecture.md`.
 

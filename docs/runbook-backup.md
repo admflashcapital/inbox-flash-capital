@@ -1,5 +1,12 @@
 # Runbook — Backup e Restore da Central
 
+> ### ⚠️ DOC EM TRANSIÇÃO — Fase 1.3
+>
+> **Procedimento vigente e correto.** Só os invólucros mudam: os alvos `make …` viram `bash scripts/…`, e os caminhos `deploy/…` passam para a raiz do repo (AD-10).
+>
+> Ver **AD-10..AD-13** em `inbox/docs/architecture.md`, **ADR-010** em `crm/docs/07_Decisoes.md`, e o `HANDOFF-espelho-chatwoot.md`.
+
+
 > **Story:** 1.4 · **FR-3** · LGPD
 > A central é o repositório de PII mais denso da Flash: conversa de cliente com CPF/CNPJ, valor em
 > aberto e situação de inadimplência. O backup dela **é** dado sensível.

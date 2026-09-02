@@ -1,5 +1,12 @@
 # EPIC-5 — Premissas, requisitos e dívida a resolver antes de construir
 
+> ### 📦 ANEXO HISTÓRICO — 2026-09-02
+>
+> **O EPIC-5 foi cancelado (AD-13).** Este documento descreve premissas de um Serviço de Sync que não será construído. Nada aqui é acionável — o contexto de domínio passa a ser carimbado nos `custom_attributes` da conversa no instante do disparo, dentro de `chatwoot_mirror.py::_garantir_conversa`.
+>
+> Ver **AD-10..AD-13** em `inbox/docs/architecture.md`, **ADR-010** em `crm/docs/07_Decisoes.md`, e o `HANDOFF-espelho-chatwoot.md`.
+
+
 > Levantamento feito em 2026-07-14 **lendo os três repos e medindo os bancos reais**, antes de
 > escrever qualquer linha do Serviço de Sync. Nada aqui é suposição: cada número foi contado, cada
 > formato foi verificado, cada arquivo citado foi lido.

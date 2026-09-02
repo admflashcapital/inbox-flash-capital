@@ -1,5 +1,12 @@
 # Runbook — Canal WhatsApp Prospecção (Evolution)
 
+> ### 🗑️ ESTE RUNBOOK SERÁ APAGADO — Fase 1.1
+>
+> **A Evolution sai dos dois repos.** Este procedimento deixa de existir. **Não executar nada daqui.** Enquanto o arquivo não é removido, ele descreve um canal cancelado (EPIC-2).
+>
+> Ver **AD-10..AD-13** em `inbox/docs/architecture.md`, **ADR-010** em `crm/docs/07_Decisoes.md`, e o `HANDOFF-espelho-chatwoot.md`.
+
+
 > **Stories:** 2.1 (inbox espelhada) · **FR-4** · **AD-4** (um número = uma inbox) · **AD-5** (fan-out)
 > A instância Evolution **mora no CRM** (`crm-flash-capital`) e continua sendo dele. A central só
 > pede para ser espelhada.

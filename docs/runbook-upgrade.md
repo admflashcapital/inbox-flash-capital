@@ -1,5 +1,12 @@
 # Runbook — Upgrade do Chatwoot
 
+> ### ⚠️ DOC EM TRANSIÇÃO — Fase 1.3
+>
+> **Procedimento vigente e correto.** Só os invólucros mudam: os alvos `make …` viram `bash scripts/…`, e os caminhos `deploy/…` passam para a raiz do repo (AD-10).
+>
+> Ver **AD-10..AD-13** em `inbox/docs/architecture.md`, **ADR-010** em `crm/docs/07_Decisoes.md`, e o `HANDOFF-espelho-chatwoot.md`.
+
+
 > **Story:** 1.3 · **FR-2** · **AD-7** (Community Edition, imagem oficial, **sem fork**)
 
 ## A regra

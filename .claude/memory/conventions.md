@@ -1,5 +1,10 @@
 # Convenções — Inbox Flash Capital
 
+> **Reescopo 2026-09-02** — EPIC-2 (Evolution) e EPIC-5 (Sync) **cancelados**; Caddy, Makefile e a rede `flash-canais` saem (AD-10..AD-13 em `docs/architecture.md`). O que segue vale até a Fase 1 rodar.
+>
+> **Muda aqui:** não há mais Python de Serviço de Sync neste repo; e os caminhos `deploy/…` passam para a raiz (`compose.yaml`, `.env.example`, `scripts/`), sem `Caddyfile`.
+
+
 ## Chatwoot (dicionário fechado — a consistência é o produto)
 
 - **Labels:** kebab-case, **só** as do Glossário do PRD. **Sem sinônimos.**

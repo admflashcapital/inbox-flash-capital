@@ -15,6 +15,13 @@ companions: []
 
 # Architecture Spine — Inbox Flash Capital
 
+> ### ℹ️ COMO LER ESTE DOC — 2026-09-02
+>
+> As decisões **AD-10..AD-13 são as vigentes**; **AD-5 está SUPERSEDED** e **AD-2/AD-3 REVISADOS**. O resto do documento (diagramas, árvore as-built, tabela de stack) ainda descreve o sistema **como ele é hoje** — com Caddy, Makefile, Evolution e a rede `flash-canais`. Isso é intencional: a reescrita acontece na Fase 1.7, depois que o código mudar. **Enquanto isso: as ADs mandam, o resto descreve.**
+>
+> Ver **AD-10..AD-13** em `inbox/docs/architecture.md`, **ADR-010** em `crm/docs/07_Decisoes.md`, e o `HANDOFF-espelho-chatwoot.md`.
+
+
 ## Design Paradigm
 
 **Hub-and-spoke com enriquecimento por eventos unidirecional.** O Chatwoot é o **hub** (espelho + cockpit de conversas). Cada canal é um **spoke** conectado por um **provider-adapter** (Evolution, Twilio, Gmail). O contexto de negócio entra por um **bridge assíncrono e unidirecional** (o Serviço de Sync), que empurra estado a partir dos sistemas de domínio. Nenhuma dependência aponta do hub para os bancos de domínio.

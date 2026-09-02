@@ -8,6 +8,13 @@ skill: bmad-product-brief
 
 # Product Brief: Inbox Flash Capital
 
+> ### ⚠️ REESCOPO — 2026-09-02
+>
+> **O MVP cai de 3 canais para 2** — WhatsApp Oficial (Twilio) e E-mail (Gmail). O canal de prospecção via Evolution foi cancelado junto com o EPIC-2, e o Serviço de Sync (EPIC-5) também. O Chatwoot é **painel de acompanhamento dos disparos da cobrança/operacional**, e **nunca** um site público (AD-11).
+>
+> Ver **AD-10..AD-13** em `inbox/docs/architecture.md`, **ADR-010** em `crm/docs/07_Decisoes.md`, e o `HANDOFF-espelho-chatwoot.md`.
+
+
 ## Executive Summary
 
 A Flash Capital fala com o mercado por vários canais e várias identidades ao mesmo tempo: um WhatsApp de relacionamento próximo com quem já opera, um número oficial (Twilio/Meta API) usado para cobrança e transacional, caixas de e-mail no Gmail, e um novo número de prospecção que recepciona os leads "pescados". Hoje cada canal vive numa ferramenta diferente, sem histórico unificado, sem visão única do contato e sem rastreabilidade — o operador troca de app o dia inteiro e ninguém enxerga a conversa inteira de um cliente.

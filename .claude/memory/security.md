@@ -1,5 +1,10 @@
 # Segurança — Regras Invioláveis — Inbox Flash Capital
 
+> **Reescopo 2026-09-02** — EPIC-2 (Evolution) e EPIC-5 (Sync) **cancelados**; Caddy, Makefile e a rede `flash-canais` saem (AD-10..AD-13 em `docs/architecture.md`). O que segue vale até a Fase 1 rodar.
+>
+> **Muda aqui:** o gate do `/twilio/callback` sai do Caddy e vira regra de ingress/Access — mas **continua obrigatório** (AD-11), porque o `Twilio::CallbackController` não valida assinatura. `/twilio/delivery_status` está registrado como "a Twilio chama direto" — isso é **suposição herdada**, não fato medido: confirmar no console da Twilio antes de qualquer exposição. As linhas sobre Evolution e Serviço de Sync morrem.
+
+
 > A central concentra conversa de cliente com **CPF/CNPJ, valor em aberto e situação de
 > inadimplência**. É o repositório de PII mais denso da Flash. Trate como tal.
 

@@ -7,6 +7,13 @@ skill: bmad-prd
 ---
 
 # PRD: Inbox Flash Capital
+
+> ### ⚠️ REESCOPO — 2026-09-02
+>
+> **Anulados:** a §4.2 e os requisitos **FR-4, FR-5 e FR-6** (canal de prospecção via Evolution), e os **FR-11..FR-14** (Serviço de Sync). O enriquecimento que os FR-11..14 pediam é entregue pelo AD-13 — `custom_attributes` carimbados no instante do disparo.
+>
+> Ver **AD-10..AD-13** em `inbox/docs/architecture.md`, **ADR-010** em `crm/docs/07_Decisoes.md`, e o `HANDOFF-espelho-chatwoot.md`.
+
 *Working title — confirmar.*
 
 ## 0. Document Purpose

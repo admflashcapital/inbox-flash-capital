@@ -7,15 +7,41 @@ Guia para o Claude Code (claude.ai/code) trabalhar neste repositório.
 
 ---
 
+## ⚠️ REESCOPO 2026-09-02 — leia ANTES de tudo
+
+O projeto foi retomado com uma simplificação. **Boa parte do que este arquivo descreve abaixo continua
+verdadeira como as-built, mas a direção mudou.** Se algo aqui conflitar com esta seção, esta seção ganha.
+
+| Cancelado / mudado | Onde está a decisão |
+|---|---|
+| **EPIC-2 (Evolution) cancelado** — sai dos dois repos | AD-11 · `crm/docs/07_Decisoes.md` ADR-010 |
+| **EPIC-5 (Serviço de Sync) cancelado** — `sync-service/` **não será construído** | **AD-13** |
+| **STORY-4.2 destravada** — o contexto vai nos `custom_attributes` no instante do disparo | **AD-13** |
+| **Caddy, Makefile, `/etc/hosts` e a rede `flash-canais` saem** — só `docker compose`, tudo em loopback | **AD-10** |
+| **A central nunca é site público** — a Twilio fala com o monorepo; o e-mail é polling IMAP | **AD-11** |
+| **O painel é amostral** enquanto o uptime não for garantido — o espelho não tem retry | **AD-12** |
+
+**Escopo vigente: 16 stories** (19 − 3 do EPIC-2). **Próximo trabalho: Fase 0 (backup) → Fase 1.**
+
+**Onde ler:** `docs/architecture.md` (AD-10..AD-13) · `HANDOFF-espelho-chatwoot.md` em `~/projects/` ·
+`docs/0014-atendimento-no-monorepo-corte-chatwoot.md` (ADR arquivado: a direção rejeitada, com medição).
+
+**Enquanto a Fase 1 não roda, os comandos `make …` e o Caddy continuam funcionando** — os docs de
+runbook estão marcados com o que muda e em qual fase. Não "adiante" a limpeza fora da ordem das fases:
+a Fase 2.1 do CRM (consertar os testes) precede qualquer remoção de arquivo lá.
+
+---
+
 ## Estado atual do repositório (leia primeiro)
 
 > **`PROGRESS.md` é a fonte da verdade do estado.** Esta seção dá o mapa grosso; o rastreamento
 > story a story (com hash de commit, gate e dívida técnica) vive lá. Se as duas divergirem,
 > **`PROGRESS.md` ganha** — e conserte esta seção.
 
-**A central está no ar.** `deploy/` existe (6 containers, 12 scripts de operação) e dois dos três
-canais estão ligados. O que **não** existe ainda é o `sync-service/` (EPIC-5) — esse é o único
-componente construído do zero, e nele TDD é obrigatório.
+**A central está no ar** (embora a stack esteja **desligada** no momento — os volumes persistem, com PII
+real desde 2026-07-14). `deploy/` existe (6 containers, 12 scripts de operação) e **os dois canais do
+escopo vigente** estão ligados: WhatsApp Oficial (Twilio) e E-mail (Gmail). O `sync-service/` **não
+existe e não será construído** — o EPIC-5 foi cancelado (AD-13).
 
 | Épico | Estado |
 |---|---|

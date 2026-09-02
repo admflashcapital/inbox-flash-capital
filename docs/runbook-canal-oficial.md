@@ -1,5 +1,12 @@
 # Runbook — Canal WhatsApp Oficial (Twilio/Meta)
 
+> ### ⚠️ DOC EM TRANSIÇÃO — Fase 1.2
+>
+> **Vigente.** A seção *“O Caddy come o token da API”* sai com o Caddy — era workaround do bug de header com underscore do Caddy 2.11, e sem proxy o header chega inteiro. Já o gate do `/twilio/callback` **continua obrigatório em qualquer exposição**: o `Twilio::CallbackController` não valida assinatura da Twilio, e quem chama esse endpoint é o **monorepo**, não a Twilio (AD-11).
+>
+> Ver **AD-10..AD-13** em `inbox/docs/architecture.md`, **ADR-010** em `crm/docs/07_Decisoes.md`, e o `HANDOFF-espelho-chatwoot.md`.
+
+
 > **Stories:** 3.1 (inbox oficial espelhada) · 3.2 (espelho dos disparos) · **FR-7, FR-8** · **AD-4**
 > (um número = uma inbox) · **AD-6** (o disparo em massa origina no monorepo) · **AD-8** (webhook
 > autenticado)

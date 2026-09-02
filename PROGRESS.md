@@ -5,8 +5,26 @@
 
 **Legenda:** `[ ]` pendente · `[~]` em andamento · `[x]` concluída · `[!]` bloqueada
 
-**Milestones:** M1 = EPIC-1 · M2 = EPIC-2 + 3 + 4 (canais) · M3 = EPIC-5 (sync) · M4 = EPIC-6 (go-live).
-O EPIC-1 bloqueia tudo. Os EPICs 2/3/4 podem correr em paralelo depois dele. O EPIC-5 precisa de ≥1 canal vivo.
+> ### ⚠️ REESCOPO 2026-09-02 — leia antes de decidir qualquer coisa aqui
+>
+> **O EPIC-2 (Evolution) e o EPIC-5 (Serviço de Sync) foram CANCELADOS.** Os milestones abaixo e vários
+> gates ainda descrevem o escopo antigo. Ver **AD-10..AD-13** em `docs/architecture.md`, o
+> `HANDOFF-espelho-chatwoot.md` e o ADR arquivado `docs/0014-atendimento-no-monorepo-corte-chatwoot.md`.
+>
+> | O que mudou | Onde está a decisão |
+> |---|---|
+> | EPIC-2 sai — Evolution removida dos dois repos | AD-11 · `crm` ADR-010 |
+> | EPIC-5 cancelado — contexto vai nos `custom_attributes` no instante do disparo | **AD-13** |
+> | STORY-4.2 **destravada** — não espera mais o Sync | **AD-13** |
+> | Caddy, Makefile, `/etc/hosts` e `flash-canais` saem; só loopback | **AD-10** |
+> | A central **nunca** é site público | **AD-11** |
+> | Painel é amostral enquanto o uptime não for garantido (espelho sem retry) | **AD-12** |
+>
+> **Escopo vigente: 16 stories** (19 − 3 do EPIC-2). **Próximo trabalho: Fase 0 (backup) → Fase 1.**
+
+**Milestones (escopo ANTIGO — mantido para leitura do histórico):** M1 = EPIC-1 · M2 = EPIC-2 + 3 + 4
+(canais) · M3 = EPIC-5 (sync) · M4 = EPIC-6 (go-live).
+O EPIC-1 bloqueia tudo. Os EPICs 2/3/4 podem correr em paralelo depois dele.
 Cada épico tem um gate de saída — use `/gate EPIC-N`.
 
 **Progresso total:** 8 / 19 stories `[x]`, +2 em `[~]` e 1 em `[!]`.
@@ -18,11 +36,11 @@ As 3 stories abertas estão travadas em coisas que **não são código**:
 
 | Story | Espera |
 |---|---|
-| 2.1 · 2.2 `[~]` | **parear o chip físico** pelo QR (`docs/runbook-canal-prospeccao.md`) |
-| 4.2 `[!]` | o **EPIC-5** — a resolução de identidade (AD-3) vive só no Serviço de Sync. Bloqueio de **desenho**, previsto desde o planejamento |
+| 2.1 · 2.2 ~~`[~]`~~ | **CANCELADAS** (2026-09-02) — o EPIC-2 sai junto com a Evolution |
+| 4.2 ~~`[!]`~~ | **DESTRAVADA** (2026-09-02) — o AD-13 substitui o Sync: o contexto (`titulo_id`, CNPJ, valor, atraso) é carimbado nos `custom_attributes` da conversa em `chatwoot_mirror.py::_garantir_conversa`, no instante do disparo |
 
-**Próximo trabalho real: EPIC-5 (Serviço de Sync).** É o que destrava a 4.2 (e portanto fecha o
-EPIC-4), e é o **único componente construído do zero** — TDD obrigatório.
+**Próximo trabalho real: Fase 0 (backup) → Fase 1 (simplificação).** Não é o EPIC-5 — ele foi
+cancelado. O roteiro está no `HANDOFF-espelho-chatwoot.md` e no plano da sessão.
 
 ---
 
@@ -53,7 +71,11 @@ SMTP transacional e agendar o cron de backup + cópia offsite criptografada.
 
 ---
 
-## EPIC-2 — Canal WhatsApp Prospecção (Evolution)
+## ~~EPIC-2 — Canal WhatsApp Prospecção (Evolution)~~ `[CANCELADO 2026-09-02]`
+
+> **Épico cancelado.** A Evolution sai dos dois repos (AD-11 do inbox, ADR-010 do CRM). Os 3 stories,
+> o runbook de prospecção, o de aquecimento e os 5 scripts são apagados na **Fase 1.1**. O conteúdo
+> abaixo fica só para leitura do histórico — **não executar nada daqui**.
 
 Número novo pré-pago, **só inbound**, convivendo com o Agente N8N sem perda de mensagem.
 
@@ -304,7 +326,11 @@ numa URL efêmera — e por isso apodreceu por 10 dias.
 
 ---
 
-## EPIC-5 — Serviço de Sync (Enriquecimento de Contato)
+## ~~EPIC-5 — Serviço de Sync (Enriquecimento de Contato)~~ `[CANCELADO 2026-09-02]`
+
+> **Épico cancelado — ver AD-13.** O monorepo já conhece `titulo_id`, CNPJ, valor e dias de atraso no
+> instante do disparo; carimbar isso nos `custom_attributes` da conversa entrega o que o Sync prometia,
+> sem construir o Sync nem exigir outbox. `docs/epic-5-premissas.md` vira anexo histórico.
 
 A Ponte: identidade por telefone+documento e push unidirecional de labels e atributos.
 **Único componente construído do zero** — aqui TDD é obrigatório.
@@ -342,6 +368,8 @@ Itens levantados em code-review e desvios as-built. **Nenhum bloqueia o MVP** �
 
 | Item | Risco | Alvo |
 |---|---|---|
+| **A janela de 24h do WhatsApp não está modelada em ponto nenhum do código — e falha em silêncio.** Fora da janela, só template aprovado passa; resposta livre é recusada pela Meta. Nenhum ponto do inbox nem do monorepo modela esse estado hoje, então a atendente descobre que a resposta não saiu... não descobrindo. É requisito de aceite de qualquer UI de resposta, não detalhe de implementação. *(extraído do ADR-0014 arquivado)* | atendente responde e a mensagem não chega, sem erro visível | **antes do go-live** · CA do EPIC-6 |
+| **O inbound é recebido, classificado e descartado sem persistir o corpo.** No monorepo, o `twilio_webhooks_router` usa o `Body` para a confirmação de sacado e o repassa ao espelho, mas **não o grava** em base própria. Se o espelho falhar (e ele falha em silêncio — AD-12), o conteúdo da resposta do cliente não existe em lugar nenhum sob controle da Flash Capital: só na Twilio e no aparelho do cliente. *(extraído do ADR-0014 arquivado)* | perda definitiva do teor da resposta do cliente | avaliar junto com a decisão de onde a central roda (Fase 4) |
 | **Handoff Agente ↔ humano não existe.** Contornado pela decisão de **modo espelho** (2026-07-13): no número de prospecção quem responde é o Agente N8N; a central só espelha, e `make aquecimento` falha se alguém digitar ali (`MODO_ESPELHO_PROSPECCAO=true`). O custo é que a atendente **não pode** intervir numa conversa de lead. O handoff real (o Agente pular a resposta quando a conversa tem `assignee` humano no Chatwoot — estado nativo, sem label nova) fica para quando a operação pedir. | atendente sem poder assumir a conversa do lead | fase 2 / quando doer |
 | **Espelho pode duplicar e pode perder.** Duplicar: o dedup nativo da Evolution depende do import por Postgres direto (desligado por AD-8/AD-9) e o Chatwoot não tem índice único em `source_id` — o replay do Baileys reinsere. Mitigado *a posteriori* por `dedup-mensagens.sh` (precisa estar no cron). Perder: central fora do ar = mensagens só no N8N e no WhatsApp, sem reenvio automático. | espelho incompleto/duplicado (não afeta o Agente nem o lead) | reenvio vira trabalho do Serviço de Sync se doer (EPIC-5) |
 | **Anti-SSRF do Chatwoot desligado para rede privada** (`SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true`). Necessário para falar com a Evolution e baixar mídia; em troca, um webhook malicioso configurado na central poderia alcançar serviço interno. Mitigação atual: só admin configura webhook, e a rede `flash-canais` tem apenas Evolution, Chatwoot e o Caddy. | SSRF a partir da central | revisar no EPIC-6 (governança) |

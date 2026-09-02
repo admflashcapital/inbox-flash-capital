@@ -7,8 +7,17 @@ fork**).
 
 O princípio inegociável: **o Chatwoot é espelho e cockpit, não fonte da verdade.** As conversas são
 dele; os dados de negócio continuam no CRM (Twenty) e na plataforma interna (Supabase). O contexto
-chega ao operador **mastigado** — labels e atributos empurrados por um Serviço de Sync — sem que a
-central consulte banco de domínio nenhum.
+chega ao operador **mastigado** — `titulo_id`, CNPJ, valor e dias de atraso carimbados nos
+`custom_attributes` da conversa **no instante do disparo** — sem que a central consulte banco de
+domínio nenhum.
+
+> ### ⚠️ REESCOPO 2026-09-02
+>
+> **O MVP são 2 canais, não 3** — WhatsApp Oficial (Twilio) e E-mail (Gmail). O canal de prospecção via
+> Evolution (EPIC-2) e o Serviço de Sync (EPIC-5) foram **cancelados**; Caddy, Makefile e a rede
+> `flash-canais` saem, e a central passa a publicar **só em `127.0.0.1:3001`**. Ela **nunca** é site
+> público. Decisões em `docs/architecture.md` **AD-10..AD-13**; roteiro no `HANDOFF-espelho-chatwoot.md`.
+> **Escopo vigente: 16 stories.**
 
 > **Status: EPIC-1 e EPIC-3 concluídos; EPIC-2 pronto até onde é automatizável (7/19 stories).**
 > A central sobe com um comando (`make up`), responde em HTTPS, tem backup/restore validados e banco

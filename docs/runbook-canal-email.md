@@ -1,5 +1,12 @@
 # Runbook — Canal E-mail (Gmail Workspace via OAuth)
 
+> ### ⚠️ DOC EM TRANSIÇÃO — Fase 1.3
+>
+> **Vigente.** Dois pontos mudam: os comandos `make gmail*` viram `bash scripts/conectar-gmail.sh` (AD-10), e a **§5 (ponte socat) continua sendo o caminho válido** — ela só sai quando houver URL pública, o que ainda não está decidido. O `refresh_token` já obtido não é afetado por mudança de `FRONTEND_URL`; só um consent **novo** exigiria revogar o grant antigo.
+>
+> Ver **AD-10..AD-13** em `inbox/docs/architecture.md`, **ADR-010** em `crm/docs/07_Decisoes.md`, e o `HANDOFF-espelho-chatwoot.md`.
+
+
 **Épico:** EPIC-4 · **Stories:** 4.1 (inbox espelhada) e 4.2 (unificação de contato)
 **FRs:** FR-9, FR-10 · **Comandos:** `make gmail` · `make gmail-status` · `make gmail-url` · `make email`
 
