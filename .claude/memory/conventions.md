@@ -1,8 +1,8 @@
 # Convenções — Inbox Flash Capital
 
-> **Reescopo 2026-09-02** — EPIC-2 (Evolution) e EPIC-5 (Sync) **cancelados**; Caddy, Makefile e a rede `flash-canais` saem (AD-10..AD-13 em `docs/architecture.md`). O que segue vale até a Fase 1 rodar.
+> **Reescopo 2026-09-02, JÁ APLICADO** — EPIC-2 (Evolution) e EPIC-5 (Sync) cancelados; Caddy, Makefile e a rede `flash-canais` saíram na Fase 1. Hoje: `compose.yaml`, `.env` e `scripts/` na raiz, `docker compose up -d --wait` como comando único, central em `127.0.0.1:3001`, rede `flash-espelho` com 2 membros (AD-10..AD-13 em `docs/architecture.md`).
 >
-> **Muda aqui:** não há mais Python de Serviço de Sync neste repo; e os caminhos `deploy/…` passam para a raiz (`compose.yaml`, `.env.example`, `scripts/`), sem `Caddyfile`.
+> **Como ficou:** não há Python neste repo (o Sync foi cancelado) nem `Caddyfile`. Bash em `scripts/` (com `scripts/lib/env.sh` para ler o `.env` sem `source`) e um seed Ruby em `scripts/seed/`, idempotente por contrato.
 
 
 ## Chatwoot (dicionário fechado — a consistência é o produto)

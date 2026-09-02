@@ -1,8 +1,8 @@
 # Segurança — Regras Invioláveis — Inbox Flash Capital
 
-> **Reescopo 2026-09-02** — EPIC-2 (Evolution) e EPIC-5 (Sync) **cancelados**; Caddy, Makefile e a rede `flash-canais` saem (AD-10..AD-13 em `docs/architecture.md`). O que segue vale até a Fase 1 rodar.
+> **Reescopo 2026-09-02, JÁ APLICADO** — EPIC-2 (Evolution) e EPIC-5 (Sync) cancelados; Caddy, Makefile e a rede `flash-canais` saíram na Fase 1. Hoje: `compose.yaml`, `.env` e `scripts/` na raiz, `docker compose up -d --wait` como comando único, central em `127.0.0.1:3001`, rede `flash-espelho` com 2 membros (AD-10..AD-13 em `docs/architecture.md`).
 >
-> **Muda aqui:** o gate do `/twilio/callback` sai do Caddy e vira regra de ingress/Access — mas **continua obrigatório** (AD-11), porque o `Twilio::CallbackController` não valida assinatura. `/twilio/delivery_status` está registrado como "a Twilio chama direto" — isso é **suposição herdada**, não fato medido: confirmar no console da Twilio antes de qualquer exposição. As linhas sobre Evolution e Serviço de Sync morrem.
+> **Como ficou:** o gate do `/twilio/callback` saiu do Caddy e hoje a proteção é **topológica** — a central só escuta em `127.0.0.1`. Qualquer ingresso futuro **precisa** do gate de volta (AD-11): o `Twilio::CallbackController` não valida assinatura. O `RELAY_TOKEN` continua no `.env` e é conferido por `verificar-canal-oficial.sh`. `/twilio/delivery_status` está registrado como "a Twilio chama direto" — **suposição herdada**, não fato medido: confirmar no console antes de expor.
 
 
 > A central concentra conversa de cliente com **CPF/CNPJ, valor em aberto e situação de

@@ -20,7 +20,22 @@
 > | A central **nunca** é site público | **AD-11** |
 > | Painel é amostral enquanto o uptime não for garantido (espelho sem retry) | **AD-12** |
 >
-> **Escopo vigente: 16 stories** (19 − 3 do EPIC-2). **Próximo trabalho: Fase 0 (backup) → Fase 1.**
+> **Escopo vigente: 16 stories** (19 − 3 do EPIC-2).
+>
+> ### ✅ Fase 0 e Fase 1 CONCLUÍDAS — 2026-09-02
+>
+> | Fase | O que entregou | Commit |
+> |---|---|---|
+> | **0** Rede de segurança | backup novo nos 2 repos (o anterior tinha 6 semanas) · `restore.sh --verificar` verde: 645 conversas, 777 mensagens, 277 anexos recompostos em ambiente limpo · volumes do CRM cobertos por snapshot · **Chatwoot medido pela 1ª vez: 864 MiB** (sidekiq 430 · web 342 · pg 77 · redis 16) | — |
+> | **1.1** Evolution fora | 5 scripts, 2 runbooks, 9 alvos de Makefile, 8 chaves de `.env` · inbox órfã `WhatsApp Prospecção` apagada do banco (0 conversas) · `SAFE_FETCH_ALLOW_PRIVATE_NETWORK` volta a `false` | `eebbbb7` |
+> | **1.2** Caddy fora | `chatwoot-web` publica `127.0.0.1:${CHATWOOT_HOST_PORT}` · 3 asserções reescritas, 2 delas eram armadilhas (falso verde e no-op silencioso) · a ponte socat do runbook de e-mail morreu junto | `42424b0` |
+> | **1.3** Achatamento | `compose.yaml`/`.env`/`scripts/` na raiz, sem Makefile · `env_get` de 14 cópias para `scripts/lib/env.sh` · `docker compose up -d --wait` sem flag nenhuma | `dce440d` |
+> | **1.4** Seed no boot | `chatwoot-seed` entre init e web · provado num projeto docker separado, do volume vazio | `e4d83a9` |
+> | **1.5** Rede | `flash-canais` (5 membros, 3 repos) → `flash-espelho` (2 membros) · `curlimages/curl` eliminado dos scripts | `3ebf97b` |
+> | **1.7** Docs | toda a documentação reescrita como as-built | `3cc8baf` |
+>
+> **Próximo trabalho: Fase 2 (CRM).** ⚠️ Lá a ordem é outra: o `commit-guard` roda a suíte inteira a
+> cada commit e **95 testes quebram na COLETA** se o código sair antes dos testes. Ver o plano.
 
 **Milestones (escopo ANTIGO — mantido para leitura do histórico):** M1 = EPIC-1 · M2 = EPIC-2 + 3 + 4
 (canais) · M3 = EPIC-5 (sync) · M4 = EPIC-6 (go-live).
@@ -39,8 +54,9 @@ As 3 stories abertas estão travadas em coisas que **não são código**:
 | 2.1 · 2.2 ~~`[~]`~~ | **CANCELADAS** (2026-09-02) — o EPIC-2 sai junto com a Evolution |
 | 4.2 ~~`[!]`~~ | **DESTRAVADA** (2026-09-02) — o AD-13 substitui o Sync: o contexto (`titulo_id`, CNPJ, valor, atraso) é carimbado nos `custom_attributes` da conversa em `chatwoot_mirror.py::_garantir_conversa`, no instante do disparo |
 
-**Próximo trabalho real: Fase 0 (backup) → Fase 1 (simplificação).** Não é o EPIC-5 — ele foi
-cancelado. O roteiro está no `HANDOFF-espelho-chatwoot.md` e no plano da sessão.
+**Próximo trabalho real: Fase 2 (CRM) → Fase 3 (espelho ponta a ponta).** As Fases 0 e 1 estão
+fechadas (ver o quadro acima). Não é o EPIC-5 — ele foi cancelado. O roteiro está no
+`HANDOFF-espelho-chatwoot.md` e no plano da sessão.
 
 ---
 
@@ -92,9 +108,9 @@ Número novo pré-pago, **só inbound**, convivendo com o Agente N8N sem perda d
 > **Decisão de operação (2026-07-13): modo espelho.** No número de prospecção quem responde o lead é
 > o **Agente N8N**; a central **só espelha** (a atendente acompanha, não digita). É o que evita a
 > resposta dupla enquanto não existe handoff. Não é só combinado: `MODO_ESPELHO_PROSPECCAO=true` faz
-> o `(removido — Evolution)` **falhar** se aparecer resposta digitada na central nessa inbox.
+> o `make aquecimento` **falhar** se aparecer resposta digitada na central nessa inbox.
 
-**STORY-2.2 — fan-out verificado na configuração e no código (2026-07-13, dev).** `(removido — Evolution)`
+**STORY-2.2 — fan-out verificado na configuração e no código (2026-07-13, dev).** `make fanout`
 prova que os dois consumidores estão vivos na mesma instância (webhook global → N8N **e** integração
 Chatwoot aplicada). No código da Evolution 2.3.7: os dois disparos acontecem no mesmo handler de
 mensagem (`chatwootService.eventWhatsapp` na linha 1331, `sendDataWebhook` na 1483) e o envio à
@@ -107,28 +123,27 @@ replay do Baileys. Resolvido do lado da central por `dedup-mensagens.sh` (testad
 **Perda:** com a central fora do ar, o espelho perde as mensagens daquele intervalo (o N8N não). É
 assimetria proposital; sem reenvio automático no MVP.
 
-**STORY-2.3 — política do número, com guardrail executável.** `(removido — Evolution)` **falha** se alguma
+**STORY-2.3 — política do número, com guardrail executável.** `make aquecimento` **falha** se alguma
 conversa da inbox de prospecção tiver sido **iniciada por nós** (assinatura de outbound frio), se
 existir **campanha** na inbox (AD-6) ou se o volume enviado em 24h passar do teto da rampa
 (20/40/60/80/100 por semana). Política e playbook de bloqueio em `docs/runbook-aquecimento-numero.md`.
 
 **STORY-2.1 — integração ligada e verificada até onde dá sem o chip (2026-07-13, dev).**
 Verificado ao vivo: rede `flash-canais` liga Evolution 2.3.7 ↔ Chatwoot 4.15.1 sem expor nenhuma das
-duas; `(removido — Evolution)` criou a inbox `WhatsApp Prospecção` (`Channel::Api`, webhook
+duas; `make evolution` criou a inbox `WhatsApp Prospecção` (`Channel::Api`, webhook
 `/chatwoot/webhook/crm`); a resposta digitada na central **chega** na Evolution; e a Evolution
 **escreve de volta** na conversa usando o token de admin. **Falta o passo manual do operador:** parear
 o chip pré-pago pelo QR (`docs/runbook-canal-prospeccao.md`) — só então dá para provar os CAs
 (mensagem real do lead, resposta chegando no WhatsApp, mídia anexada). A story só vira `[x]` depois
 disso.
 
-**Dois achados que mudaram o desenho:**
-1. **`SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true` é obrigatório na central.** O Chatwoot recusa webhook e
-   download de mídia em host sem IP público (anti-SSRF do `SafeFetch`), e a Evolution vive em rede
-   privada. Sem o flag, a resposta do atendente falha em silêncio (`failed` + `has no public ip
-   addresses`). Alternativa seria expor a Evolution na internet — pior.
-2. **Um host = um Caddy.** Central e CRM não podem ambos publicar 80/443. O Caddy da central virou
-   perfil `edge` (default em dev/staging); com as duas stacks no mesmo host, o Caddy do CRM serve o
-   vhost `inbox.<DOMAIN>` pela rede compartilhada.
+**Dois achados que mudaram o desenho** `[📦 os dois foram REVERTIDOS na Fase 1 — 2026-09-02]`:
+1. ~~**`SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true` é obrigatório na central.**~~ Era: o Chatwoot recusa
+   webhook e download de mídia em host sem IP público (anti-SSRF do `SafeFetch`), e a Evolution vivia
+   em rede privada; sem o flag a resposta falhava em silêncio. **Com a Evolution fora, a
+   justificativa sumiu e o flag voltou a `false`.**
+2. ~~**Um host = um Caddy.**~~ Não há mais Caddy nenhum (AD-10): a central publica em
+   `127.0.0.1:${CHATWOOT_HOST_PORT}` e não disputa porta com ninguém.
 
 **Gate EPIC-2:** mensagem inbound no número novo aparece na inbox `WhatsApp Prospecção`; resposta pela central chega ao lead; mídia é anexada; **N8N e Chatwoot recebem cada evento** (fan-out at-least-once, sem mensagem engolida nem duplicada); a saudação + link Jotform do agente aparecem na conversa; limite de aquecimento documentado e zero outbound frio em massa.
 
@@ -370,9 +385,9 @@ Itens levantados em code-review e desvios as-built. **Nenhum bloqueia o MVP** �
 |---|---|---|
 | **A janela de 24h do WhatsApp não está modelada em ponto nenhum do código — e falha em silêncio.** Fora da janela, só template aprovado passa; resposta livre é recusada pela Meta. Nenhum ponto do inbox nem do monorepo modela esse estado hoje, então a atendente descobre que a resposta não saiu... não descobrindo. É requisito de aceite de qualquer UI de resposta, não detalhe de implementação. *(extraído do ADR-0014 arquivado)* | atendente responde e a mensagem não chega, sem erro visível | **antes do go-live** · CA do EPIC-6 |
 | **O inbound é recebido, classificado e descartado sem persistir o corpo.** No monorepo, o `twilio_webhooks_router` usa o `Body` para a confirmação de sacado e o repassa ao espelho, mas **não o grava** em base própria. Se o espelho falhar (e ele falha em silêncio — AD-12), o conteúdo da resposta do cliente não existe em lugar nenhum sob controle da Flash Capital: só na Twilio e no aparelho do cliente. *(extraído do ADR-0014 arquivado)* | perda definitiva do teor da resposta do cliente | avaliar junto com a decisão de onde a central roda (Fase 4) |
-| **Handoff Agente ↔ humano não existe.** Contornado pela decisão de **modo espelho** (2026-07-13): no número de prospecção quem responde é o Agente N8N; a central só espelha, e `(removido — Evolution)` falha se alguém digitar ali (`MODO_ESPELHO_PROSPECCAO=true`). O custo é que a atendente **não pode** intervir numa conversa de lead. O handoff real (o Agente pular a resposta quando a conversa tem `assignee` humano no Chatwoot — estado nativo, sem label nova) fica para quando a operação pedir. | atendente sem poder assumir a conversa do lead | fase 2 / quando doer |
-| **Espelho pode duplicar e pode perder.** Duplicar: o dedup nativo da Evolution depende do import por Postgres direto (desligado por AD-8/AD-9) e o Chatwoot não tem índice único em `source_id` — o replay do Baileys reinsere. Mitigado *a posteriori* por `dedup-mensagens.sh` (precisa estar no cron). Perder: central fora do ar = mensagens só no N8N e no WhatsApp, sem reenvio automático. | espelho incompleto/duplicado (não afeta o Agente nem o lead) | reenvio vira trabalho do Serviço de Sync se doer (EPIC-5) |
-| **Anti-SSRF do Chatwoot desligado para rede privada** (`SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true`). Necessário para falar com a Evolution e baixar mídia; em troca, um webhook malicioso configurado na central poderia alcançar serviço interno. Mitigação atual: só admin configura webhook, e a rede `flash-canais` tem apenas Evolution, Chatwoot e o Caddy. | SSRF a partir da central | revisar no EPIC-6 (governança) |
+| ~~**Handoff Agente ↔ humano não existe.**~~ **SEM OBJETO desde 2026-09-02**: o Agente N8N atendia no número de prospecção, que saiu junto com a Evolution (EPIC-2 cancelado). Não há mais conversa de lead na central para assumir. | — | ✅ sem objeto |
+| **O espelho PERDE, e não tem como recuperar.** A metade "duplicar" desta dívida morreu com a Evolution (era replay do Baileys). Sobra a metade cara, hoje elevada a **AD-12**: `chatwoot_mirror.py` não tem retry, fila nem backfill, e nenhum job reconcilia depois — a falha é logada e descartada. Central fora do ar = **buraco permanente** no painel, não atraso. Decidir onde a central roda **é** decidir a completude do painel. | painel amostral, sem aviso na UI | **Fase 3.5 (benchmark) → Fase 4**; até lá, declarar "amostral" por escrito |
+| ~~**Anti-SSRF do Chatwoot desligado para rede privada**~~ (`SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true`). **FECHADA em 2026-09-02** (`eebbbb7`): o flag só existia para o Chatwoot alcançar a Evolution na rede privada; com a Evolution fora (AD-11), voltou a `false` e a proteção está ligada. | — | ✅ fechada |
 | **Retenção de conversa sem aval jurídico — e agora ela está ACUMULANDO.** `RETENCAO_CONVERSAS_DIAS=1825` (5 anos) é um default técnico, não uma decisão. O expurgo existe (`retencao-conversas.sh`) mas **não está no cron**. Desde 2026-07-14 isto deixou de ser hipotético: com o canal de e-mail ligado à caixa **real** (`operacional@`), a central passou a ingerir **PII de cliente de verdade** a cada minuto (CNPJ, valores, NF, boletos, dados de lead do Jotform) — e todo `bash scripts/backup.sh` a carrega junto. Decisão do operador (2026-07-14): **seguir, porque este host vira produção**. | LGPD / prova em disputa de dívida | **cron da retenção: antes do go-live** · aval jurídico: STORY-6.3 |
 | **Identidade dupla no canal Twilio: telefone e BSUID.** O inbound real criou **dois** `contact_inbox` para o mesmo contato: `whatsapp:+553182210297` (telefone) e `whatsapp:BR.4456758834604506` (o **BSUID**, identificador novo da Meta que a Twilio manda em `ExternalUserId`). Hoje o Chatwoot prefere o do telefone (`twilio_whatsapp_primary_source_id`) e é ele que o espelho do monorepo usa — então disparo e resposta casam. Mas a Meta está migrando para payloads **só com BSUID** (o próprio código do Chatwoot já trata esse caso). No dia em que o `From` vier sem telefone, o inbound resolveria o `contact_inbox` do BSUID e o espelho continuaria criando o do telefone: **mesmo contato, threads separadas**. | disparo e resposta em conversas diferentes (dado não se perde; a thread racha) | monitorar; revisar quando a Meta forçar BSUID |
 | **Webhook do Twilio depende de URL de ngrok efêmera — E JÁ QUEBROU DE NOVO.** Em 2026-07-14 o webhook do número oficial estava apontando para **`https://demo.twilio.com/welcome/sms/reply`** (a URL de exemplo da própria Twilio), não para o monorepo. O número não recebia nada e não alimentava a confirmação de sacado. Reapontado para o túnel atual (`https://7c2d-…ngrok-free.app/webhooks/twilio/inbound`) — **que vai apodrecer de novo no próximo restart do ngrok**. É a segunda ocorrência do mesmo modo de falha (a primeira custou 10 dias em silêncio). O conserto real é reservar o **domínio estático** que o ngrok dá de graça (o plano free inclui 1) ou publicar a API. Decisão do operador (2026-07-14): seguir com a URL efêmera por ora. | webhook apodrece em silêncio a cada restart — e ninguém percebe, porque a Twilio entrega em 200 no demo | **antes do go-live — é reincidente** |
@@ -406,7 +421,7 @@ Itens levantados em code-review e desvios as-built. **Nenhum bloqueia o MVP** �
 | 2026-07-13 | — | setup | Scaffold do repo: `.claude/` (hooks, 5 comandos, 4 memories), `PROGRESS.md`, `CLAUDE.md`, `README.md`, `.gitignore`. 11 skills instaladas em `.claude/skills/` (incl. as oficiais `chatwoot-cli` e `twilio/ai`). Nenhum código de runtime. |
 | 2026-07-13 | EPIC-1 | 1.1 · 1.2 · 1.3 · 1.4 | **A central subiu.** a raiz do repo criado: compose (Caddy 2.11.4 · Chatwoot `v4.15.1-ce` web+sidekiq+init · pgvector 0.8.5-pg16 · Redis 7.4.9), `Caddyfile`, `.env.example`, init-db e 5 scripts de operação; `Makefile` com `up/check/smoke/backup/restore-check/retencao`; runbooks de deploy, upgrade e backup. Decisões as-built: **`chatwoot-init` one-shot** (`db:chatwoot_prepare` via `service_completed_successfully`) para o `up` ser mesmo **um** comando — o compose oficial exige migração à mão; **extensões pré-criadas pelo superusuário** no init-db (o `pg_stat_statements` não é *trusted*, e o usuário da app é não-superusuário por AD-9); **`APP_DB_*`** no init para desfazer a colisão de `POSTGRES_PASSWORD` (superusuário na imagem do Postgres vs. usuário da app no Chatwoot). Gate do épico verificado ao vivo em dev. |
 
-| 2026-07-13 | EPIC-2 | 2.1 · 2.2 · 2.3 | **Canal de prospecção ligado.** A instância `crm` (Evolution, no CRM) passou a ter **dois consumidores**: o Agente N8N (webhook global) e a central (integração nativa Chatwoot). A inbox `WhatsApp Prospecção` é criada pela própria Evolution (`autoCreate`). Ponte por rede Docker externa `flash-canais` — nada exposto na internet. Novos comandos: `(removido — Evolution)`, `(removido — Evolution)`, `(removido — Evolution)`, `(removido — Evolution)`. Runbooks de canal e de aquecimento. **Achados que mudaram o desenho:** (1) o Chatwoot recusa webhook/mídia em host sem IP público (anti-SSRF do `SafeFetch`) → `SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true`, senão o canal falha **em silêncio**; (2) um host só tem uma porta 443 → o Caddy da central virou perfil `edge` e, no host compartilhado, o Caddy do CRM serve `inbox.<DOMAIN>`; (3) o dedup nativo da Evolution depende do import por Postgres direto (proibido por AD-9) → faxineiro `dedup-mensagens.sh` na central. Commits: `4bbccb5` (central) · `46b96b2` (CRM). Gate do épico **pendente do pareamento do chip** (manual). |
+| 2026-07-13 | EPIC-2 | 2.1 · 2.2 · 2.3 | **Canal de prospecção ligado.** A instância `crm` (Evolution, no CRM) passou a ter **dois consumidores**: o Agente N8N (webhook global) e a central (integração nativa Chatwoot). A inbox `WhatsApp Prospecção` é criada pela própria Evolution (`autoCreate`). Ponte por rede Docker externa `flash-canais` — nada exposto na internet. Novos comandos: `make evolution`, `make fanout`, `make dedup`, `make aquecimento`. Runbooks de canal e de aquecimento. **Achados que mudaram o desenho:** (1) o Chatwoot recusa webhook/mídia em host sem IP público (anti-SSRF do `SafeFetch`) → `SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true`, senão o canal falha **em silêncio**; (2) um host só tem uma porta 443 → o Caddy da central virou perfil `edge` e, no host compartilhado, o Caddy do CRM serve `inbox.<DOMAIN>`; (3) o dedup nativo da Evolution depende do import por Postgres direto (proibido por AD-9) → faxineiro `dedup-mensagens.sh` na central. Commits: `4bbccb5` (central) · `46b96b2` (CRM). Gate do épico **pendente do pareamento do chip** (manual). |
 
 | 2026-07-13 | EPIC-3 | 3.1 · 3.2 | **Canal oficial (Twilio) ligado — e o épico foi definido por uma descoberta.** O número oficial **já tinha dono do webhook**: o monorepo recebe o inbound, valida a assinatura e alimenta a confirmação de sacado. Um número Twilio tem **um** webhook de inbound — apontá-lo para o Chatwoot quebraria a cobrança; o inverso deixaria a confirmação de dinheiro refém do chat. Desenho forçado: **o monorepo segue dono e faz fan-out**, igual ao EPIC-2. Na central: `conectar-twilio.sh` (inbox `Channel::TwilioSms` **medium=whatsapp** — é o medium que ativa a janela de 24h nativa; como `sms`, a Meta rejeitaria o texto livre pós-24h **em silêncio**), Caddy barrando `/twilio/callback` com `RELAY_TOKEN` (o `Twilio::CallbackController` **não valida** a assinatura), `verificar-canal-oficial.sh`. No monorepo (branch `feat/espelho-chatwoot`): `ChatwootMirror`, fan-out do inbound **depois** da confirmação, espelho no choke point do dispatch. **O achado que salvou o épico:** o Chatwoot **reenviaria** o disparo se a mensagem chegasse sem `source_id` — cobrança em dobro. Provado ao vivo com credencial Twilio **falsa**: com SID → `sent` sem chamar a Twilio; sem SID → `failed` (HTTP 401). Comandos novos: `bash scripts/conectar-twilio.sh`, `bash scripts/conectar-twilio.sh --status`, `bash scripts/verificar-canal-oficial.sh`. Commits: `b16dabc` (central) · `c3d5438` (monorepo, branch). Gate **pendente de credencial real**. |
 
@@ -418,7 +433,7 @@ Itens levantados em code-review e desvios as-built. **Nenhum bloqueia o MVP** �
 
 | 2026-07-14 | EPIC-4 | gate 4.1 | **Gate da STORY-4.1 fechado ao vivo, com a caixa real.** A 1ª sincronização puxou **8 conversas de operação de verdade** (NF, boletos, Jotform); a resposta digitada na central chegou ao destinatário **na mesma thread** (o `In-Reply-To` sai do `Message-ID` do Gmail que veio no inbound). E o teste que mais importava: **forçamos o `expires_on` para o passado** e o refresher renovou o token no Google, preservou o `refresh_token` e o **IMAP autenticou com o token renovado** — o canal não morre em 1h. Andaime removido (ponte derrubada, `FRONTEND_URL` devolvida) e o `bash scripts/verificar-canal-email.sh` continua verde **sem** ele, provando que o refresh não depende do `redirect_uri`. O caminho até aqui teve **duas falhas silenciosas**: a URL de consentimento saindo com `client_id` **vazio** (o controller lê `installation_configs`, não o ENV — e o Chatwoot semeia a linha vazia, então o fallback devolve o vazio); e um **falso negativo do meu próprio verificador**, que consultava a coluna `value` — quando a coluna é `serialized_value`, jsonb **com YAML dentro**. Consequência de negócio registrada: a central passou a ingerir **PII real de cliente** a cada minuto; o operador decidiu seguir (este host vira produção), e o **cron da retenção LGPD** virou bloqueador de go-live. |
 
-| 2026-07-14 | EPIC-2 | 2.1 · 2.2 | **Chip pareado e o FAN-OUT PROVADO AO VIVO.** O chip entrou pelo **código de pareamento** (`(removido — Evolution)`) — sem câmera, sem UI da Evolution. A mensagem real do celular apareceu na inbox `WhatsApp Prospecção` **e** o N8N registrou execução do `WF-04-001` para o mesmo evento: **os dois consumidores viram o mesmo evento** (AD-5, o risco nº 1 do MVP). Mas o **Agente não respondeu**, e a investigação achou o que o CRM escondia. |
+| 2026-07-14 | EPIC-2 | 2.1 · 2.2 | **Chip pareado e o FAN-OUT PROVADO AO VIVO.** O chip entrou pelo **código de pareamento** (`make chip-codigo`) — sem câmera, sem UI da Evolution. A mensagem real do celular apareceu na inbox `WhatsApp Prospecção` **e** o N8N registrou execução do `WF-04-001` para o mesmo evento: **os dois consumidores viram o mesmo evento** (AD-5, o risco nº 1 do MVP). Mas o **Agente não respondeu**, e a investigação achou o que o CRM escondia. |
 | 2026-07-14 | — | achados no CRM | **Duas descobertas graves no `crm-flash-capital`, ambas invalidando o "MVP FEATURE-COMPLETE".** (1) **38 nós, em 20 dos 21 workflows, estavam SEM CREDENCIAL** — todo nó que fala com o Twenty declara `authentication: genericCredentialType` e não tinha credencial atribuída. Em runtime o n8n levanta `Credentials not found` e o workflow morre, **mesmo "ativo"**. Ou seja: nenhum workflow que toca o Twenty jamais conseguiu rodar; os 38/38 gates "PASS" foram validados com teste/mock, nunca com o n8n executando. (2) As credenciais eram referenciadas por **IDs placeholder** (`REPLACE_*_CRED`) que não existiam na instância — o `secrets-setup.md` mandava cadastrar as 5 na UI, à mão. Ambos consertados (`scripts/n8n-credenciais.sh` + fiação por URL de destino). O **Agente migrou para OpenAI** por decisão do operador (`gpt-5.4-mini`): não bastava trocar a URL — o `system` vira primeira mensagem, `max_tokens` é **rejeitado** pelos gpt-5.x (é `max_completion_tokens`) e a resposta vem em `choices[0].message.content`. Os três falhariam **calados** dentro de um job. Commits: `ed59d13`, `83f2769` (CRM). |
 | 2026-07-14 | EPIC-3 | revisão | **O canal oficial estava quebrado, e pior do que a dívida registrada.** O webhook do número apontava para **`https://demo.twilio.com/welcome/sms/reply`** — a URL de exemplo da própria Twilio. Não recebia mensagem, não capturava histórico, e **não alimentava a confirmação de sacado**. Tudo o mais estava certo: branch `feat/espelho-chatwoot` em uso, `chatwoot_mirror.py` dentro do container, `CHATWOOT_MIRROR_ENABLED=true`, apontando para a conta 3 / inbox 6. Reapontado para o túnel do monorepo. **É a segunda vez que esse webhook apodrece em silêncio** — vira dívida reincidente, com um item novo para monitoramento. |
 

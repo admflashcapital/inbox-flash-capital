@@ -8,24 +8,24 @@
   Proibido: criar/editar dado autoritativo (contato de domínio, contrato, operação, cobrança) só na central.
 
 - **AD-2 — Enriquecimento unidirecional e assíncrono (domínio → central).**
-  O Serviço de Sync **só empurra** para o Chatwoot. A central **nunca** faz chamada síncrona aos bancos
-  de domínio no caminho de atendimento. Domínio fora do ar degrada o enriquecimento, **não** o atendimento.
+  O domínio **só empurra** para o Chatwoot — hoje pelo `chatwoot_mirror.py` do monorepo, no instante
+  do disparo (AD-13). A central **nunca** faz chamada síncrona aos bancos de domínio no caminho de
+  atendimento. Domínio fora do ar degrada o enriquecimento, **não** o atendimento. **O inverso não
+  vale:** central fora do ar perde o evento para sempre (AD-12).
 
 - **AD-3 — Identidade de contato por chave dupla (E.164 + documento).**
   Telefone normalizado para E.164, documento só dígitos, **antes** de casar.
-  **Merge automático só quando telefone E documento casam.** Casando só uma chave → **sugestão de
-  merge** (`pending`) para revisão humana; não altera o contato até aprovação.
-  Essa regra vive **num lugar só**: o Serviço de Sync.
+  A regra vive **num lugar só**: `chatwoot_mirror.py` (`_garantir_contato`/`_garantir_conversa`) no
+  monorepo. A **sugestão de merge** era função do Serviço de Sync e **não existe** (AD-13): o contato
+  é resolvido pelo E.164 que a Twilio devolve no disparo.
 
 - **AD-4 — Um número = uma Inbox; provider é adapter plugável.**
-  Cada canal entra por seu provider (Evolution/Twilio/Gmail) como Inbox distinta. O modelo
+  Cada canal entra por seu provider (Twilio/Gmail) como Inbox distinta. O modelo
   Conversa/Contato do hub é **agnóstico de provider**. Proibido: lógica de canal vazando para o hub
   ou para o domínio.
 
-- **AD-5 — Convivência multi-consumidor no número de prospecção via fan-out.**
-  A instância Evolution **permanece no CRM** e faz fan-out: **N8N e Chatwoot recebem cada mensagem**.
-  Não é fila competida. Entrega at-least-once; **consumidores idempotentes**.
-  Proibido: um consumidor que "consome" o evento e some com ele.
+- **AD-5 — ~~Fan-out no número de prospecção~~** `[SUPERSEDED 2026-09-02 — ver AD-11]`
+  A Evolution saiu dos dois repos e o EPIC-2 foi cancelado. Nada de fan-out, nada de segundo número.
 
 - **AD-6 — Disparo em massa origina no monorepo; a central recebe o outbound por push.**
   O pipeline do monorepo, ao disparar, **também registra a mensagem outbound** na conversa via API do
@@ -36,26 +36,24 @@
   Proibido: forkar; habilitar features da pasta `enterprise/` (licença comercial); usar `latest`.
 
 - **AD-8 — Segredos fora do repo; webhooks autenticados; TLS sempre.**
-  Tokens (Evolution/Twilio/Chatwoot/Gmail) em `.env`/secret store, nunca versionados.
-  Todo webhook valida origem (assinatura `X-Twilio-Signature` no inbound Twilio; token compartilhado
-  nos webhooks Evolution/Chatwoot). Tráfego externo só por TLS.
+  Tokens (Twilio/Chatwoot/Gmail) no `.env`, nunca versionados; lidos por `env_get` de
+  `scripts/lib/env.sh` — **nunca `source`**, para segredo não entrar no ambiente do processo.
+  A assinatura `X-Twilio-Signature` é validada **no monorepo**, dono do webhook; o relay para a
+  central leva `X-Relay-Token`. Sem ingresso, não há tráfego externo a proteger com TLS — a central
+  só escuta em loopback (AD-10).
 
 - **AD-9 — Banco da central isolado dos bancos de domínio.**
-  Postgres próprio do Chatwoot; o Serviço de Sync tem seu próprio store de mapeamento de identidade
-  (`identity_map`, `merge_suggestion`). Proibido: cross-DB com Twenty/Supabase.
+  Postgres próprio do Chatwoot. Proibido: cross-DB com Twenty/Supabase — verificado por
+  `verificar-invariantes.sh` (sem `dblink`/`postgres_fdw`, usuário não-superusuário, nenhuma
+  credencial de banco de domínio no `.env`). O `identity_map`/`merge_suggestion` do Sync **não
+  existe** (AD-13).
 
 ## Guardrail de negócio (não é AD, mas é inegociável)
 
-**Segmentação de risco de número.** Prospecção fria sai por **e-mail**. O número de prospecção é
-**só inbound** (recepciona o lead pescado, manda o link do Jotform). Cobrança fica isolada no número
-oficial. Cold outreach queima reputação — e um número queimado leva o canal de dinheiro junto.
-
-**Modo espelho na prospecção (decisão de operação, 2026-07-13).** Na inbox `WhatsApp Prospecção`
-quem responde o lead é o **Agente N8N**; a central **só espelha** (a atendente acompanha, não digita).
-Enquanto não existir handoff, uma resposta digitada ali chegaria **em dobro** ao lead. Não é só
-combinado: `MODO_ESPELHO_PROSPECCAO=true` faz `(removido — Evolution)` **falhar** se aparecer resposta
-digitada nessa inbox. O AC da STORY-2.1 ("responder pela central chega no lead") continua sendo a
-capacidade técnica a provar — mas **só em contato de teste**.
+**Segmentação de risco de número.** Prospecção fria sai por **e-mail**, nunca por WhatsApp. Cold
+outreach queima reputação — e um número queimado levaria o canal de dinheiro junto. Foi para
+proteger isso que existiu o número de prospecção com a Evolution; com o EPIC-2 cancelado o guardrail
+fica pela via mais simples: **a central só tem o número oficial**.
 
 **Service account não pluga no canal de e-mail (2026-07-14).** O Chatwoot só sabe o fluxo OAuth de
 **usuário** (`grant_type=refresh_token`); service account usa JWT-bearer e nunca emite

@@ -1,7 +1,7 @@
 
-> **Reescopo 2026-09-02** — EPIC-2 (Evolution) e EPIC-5 (Sync) **cancelados**; Caddy, Makefile e a rede `flash-canais` saem (AD-10..AD-13 em `docs/architecture.md`). O que segue vale até a Fase 1 rodar.
+> **Reescopo 2026-09-02, JÁ APLICADO** — EPIC-2 (Evolution) e EPIC-5 (Sync) cancelados; Caddy, Makefile e a rede `flash-canais` saíram na Fase 1. Hoje: `compose.yaml`, `.env` e `scripts/` na raiz, `docker compose up -d --wait` como comando único, central em `127.0.0.1:3001`, rede `flash-espelho` com 2 membros (AD-10..AD-13 em `docs/architecture.md`).
 >
-> **Não abrir gate nem story do EPIC-2 ou do EPIC-5** — os dois foram cancelados; o escopo vigente é de **16 stories**. Os alvos `make …` continuam válidos até a Fase 1.3, quando viram `bash scripts/…`.
+> **Não abrir gate nem story do EPIC-2 ou do EPIC-5** — os dois foram cancelados; o escopo vigente é de **16 stories**. Não existe mais `make`: use `bash scripts/…` e `docker compose …`.
 
 ---
 description: Roda testes, lint e as verificações de infra da central
@@ -11,21 +11,18 @@ Execute o que estiver instalado/existir e relate o resultado (ferramentas do Ser
 `.venv` — use `.venv/bin/<tool>` se o venv não estiver ativado):
 
 **Código (Serviço de Sync):**
-- `.venv/bin/pytest -q --tb=short` — se houver testes em `sync-service/tests/`
-- `.venv/bin/ruff check .`
-- `.venv/bin/mypy .` — se mypy estiver instalado
+**Não há suíte de testes neste repo** — nem código de aplicação. O Chatwoot é imagem oficial sem
+fork (AD-7) e o Serviço de Sync foi cancelado (AD-13). O verde aqui são os verificadores.
 
-**Infra (quando houver a raiz do repo):**
-- `docker compose config` — o compose é válido?
+**Infra:**
+- `docker compose config --quiet` — o compose é válido?
 - `docker compose ps` — serviços Up + health checks verdes?
-- `bash scripts/verificar-invariantes.sh` — invariantes de arquitetura do EPIC-1 (tag fixa `-ce`, banco isolado sem cross-DB,
-  usuário não-superusuário, só o Caddy publicando porta, `.env` fora do git)
-- `caddy validate --config (removido — Caddy)` — se o caddy estiver instalado
-
-**Canal Prospecção (EPIC-2, quando a Evolution estiver no ar):**
-- `(removido — Evolution)` — N8N **e** central recebem o mesmo evento? (AD-5 — o risco nº 1 do MVP)
-- `(removido — Evolution)` — o número de prospecção segue **só inbound**, sem campanha e dentro da rampa?
-- `(removido — Evolution)` — há mensagem duplicada no espelho? (idempotência do AD-5)
+- `bash scripts/verificar-invariantes.sh` — invariantes de arquitetura (tag fixa `-ce`, banco isolado
+  sem cross-DB, usuário não-superusuário, **nada publicando fora de `127.0.0.1`**, `.env` fora do
+  git, simetria `.env` × `.env.example` nos dois sentidos, e a prova viva da API da central)
+- `bash -n scripts/*.sh` — sintaxe dos scripts
+- `docker network inspect flash-espelho --format '{{range .Containers}}{{.Name}} {{end}}'` —
+  precisa listar **exatamente** `fastapi_api` e `inbox-flash-capital-chatwoot-web-1`
 
 **Canal Oficial (EPIC-3 — é o canal de DINHEIRO, não pule):**
 - `bash scripts/verificar-canal-oficial.sh` — `medium=whatsapp` (janela de 24h ativa), templates Meta sincronizados, número em

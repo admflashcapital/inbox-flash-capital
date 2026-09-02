@@ -1,8 +1,8 @@
 # Skills — roteador de acionamento por estágio — Inbox Flash Capital
 
-> **Reescopo 2026-09-02** — EPIC-2 (Evolution) e EPIC-5 (Sync) **cancelados**; Caddy, Makefile e a rede `flash-canais` saem (AD-10..AD-13 em `docs/architecture.md`). O que segue vale até a Fase 1 rodar.
+> **Reescopo 2026-09-02, JÁ APLICADO** — EPIC-2 (Evolution) e EPIC-5 (Sync) cancelados; Caddy, Makefile e a rede `flash-canais` saíram na Fase 1. Hoje: `compose.yaml`, `.env` e `scripts/` na raiz, `docker compose up -d --wait` como comando único, central em `127.0.0.1:3001`, rede `flash-espelho` com 2 membros (AD-10..AD-13 em `docs/architecture.md`).
 >
-> **Muda aqui:** as skills ligadas à Evolution/prospecção perdem uso.
+> **Como ficou:** as skills ligadas à Evolution/prospecção perderam uso — a Evolution saiu do repo.
 
 
 > Carregado pelo `/story`. Ao iniciar uma story, acione as skills da linha do épico dela **+** as
