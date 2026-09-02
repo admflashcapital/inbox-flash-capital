@@ -1,0 +1,41 @@
+# Traffic policy do túnel da central — o gate que o Caddy fazia, agora na borda do ngrok.
+#
+# POR QUE ISTO EXISTE. Enquanto a central só publicava em 127.0.0.1, a proteção do
+# `/twilio/callback` era topológica: ninguém alcançava a porta. Ao expor o túnel em dev
+# (para destravar a resposta pela tela — ver AD-11.1), essa proteção desaparece, e o
+# `Twilio::CallbackController` do Chatwoot **não valida assinatura nenhuma**. Sem este
+# arquivo, qualquer um que descubra a URL forja uma mensagem inbound na conversa de um
+# cliente real — e a central hoje tem PII de verdade.
+#
+# O inbound LEGÍTIMO não passa por aqui: ele chega ao monorepo (que valida a assinatura
+# da Twilio) e é relayado container-a-container pela rede `flash-espelho`, sem tocar no
+# túnel. Então negar o path na borda não custa nada de funcionalidade.
+#
+# Verificado no plano FREE em 2026-09-02: `/twilio/callback` → 403, `/app/login` → 200.
+#
+# Uso: ngrok http 3001 --traffic-policy-file deploy/ngrok-policy.yml
+on_http_request:
+  # 1. O path que aceita mensagem forjada. Falha fechada: nega sempre.
+  #    Não há exceção por header porque nada legítimo entra por aqui de fora.
+  - expressions:
+      - "req.url.path.startsWith('/twilio/callback')"
+    actions:
+      - type: deny
+        config:
+          status_code: 403
+
+  # 2. `/twilio/delivery_status` fica ABERTO de propósito: é a própria Twilio que o
+  #    chama, do IP dela, para as mensagens que a CENTRAL envia — é justamente ele que
+  #    o 21609 exige que seja alcançável. Forjá-lo só altera status de entrega de uma
+  #    mensagem existente (impacto baixo, e sem PII no corpo).
+
+  # 3. Headers que o Chatwoot não emite sozinho e o Caddy emitia.
+  - expressions:
+      - "true"
+    actions:
+      - type: add-headers
+        config:
+          headers:
+            X-Content-Type-Options: nosniff
+            Referrer-Policy: strict-origin-when-cross-origin
+            X-Frame-Options: SAMEORIGIN
