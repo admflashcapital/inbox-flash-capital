@@ -19,8 +19,10 @@
 #   4. Janela de 24h desligada. Ela vem do `medium` do canal: criado como `sms`,
 #      a atendente escreve texto livre depois das 24h e a Meta REJEITA — falha
 #      silenciosa no canal de cobrança.
-#   5. Cron sumido. Sem o expurgo, a central guarda conversa de cobrança para
-#      sempre; sem o monitor, ninguém sabe que um canal caiu.
+#   5. Cron sumido — os QUATRO. Sem o expurgo, a central guarda conversa de
+#      cobrança para sempre; sem o monitor, ninguém sabe que um canal caiu; sem
+#      o backup, não há de onde restaurar E a poda 7+4 nunca roda (é o próprio
+#      backup.sh que poda); sem o ensaio, o backup é esperança, não backup.
 #
 # NÃO substitui os outros verificadores: `verificar-invariantes.sh` cobre o
 # EPIC-1, os `verificar-canal-*.sh` cobrem os canais, e `monitorar-canais.sh`
@@ -82,6 +84,30 @@ if [ "$MARCA" = "Flash Capital" ]; then
   ok "a central se apresenta como 'Flash Capital', não como 'Chatwoot'"
 else
   falha "INSTALLATION_NAME='${MARCA:-vazio}' — a aba do navegador e o rodapé dos e-mails ainda dizem Chatwoot"
+fi
+
+# `accounts.locale` é enum inteiro; pt_BR = 16. Não é o idioma do dashboard (esse
+# vem do usuário): é o que o `ApplicationMailer` usa para escolher o locale de
+# TODO e-mail que a central envia, inclusive a resposta ao cliente. A conta nasce
+# 'en' e nenhuma tela do CE oferece a troca — só o seed.
+LOCALE="$(consultar "SELECT locale FROM accounts WHERE id=${CONTA};")"
+if [ "${LOCALE:-}" = "16" ]; then
+  ok "locale da conta é pt_BR — o e-mail que a central envia sai em português"
+else
+  falha "locale da conta = ${LOCALE:-vazio} (pt_BR = 16): o e-mail enviado ao cliente sai com envelope em inglês. Rode: docker compose run --rm chatwoot-seed"
+fi
+
+# O espelho do monorepo deve falar pela conta de MÁQUINA, não pelo token de uma
+# pessoa. Checagem estrutural de propósito: comparar o valor do token exigiria
+# passá-lo no argv do psql, e argv é legível por qualquer usuário via /proc.
+ESPELHO="$(consultar "
+  SELECT count(*) FROM users u
+    JOIN access_tokens t ON t.owner_type='User' AND t.owner_id=u.id
+   WHERE u.email='espelho@flashcapital.com.br';")"
+if [ "${ESPELHO:-0}" -ge 1 ]; then
+  ok "o espelho do monorepo tem conta de máquina própria (revogável sem afetar ninguém)"
+else
+  aviso "não há conta de máquina para o espelho: o CENTRAL_ACCESS_TOKEN é de uma pessoa. Revogá-lo derruba o acesso dela, e mexer no usuário dela quebra o espelho em silêncio. Ver a dívida no PROGRESS.md"
 fi
 
 echo
@@ -178,13 +204,26 @@ else
   falha "LOGRAGE_ENABLED=${LOGRAGE:-vazio} no container — o log é texto puro e ninguém filtra um incidente. Recrie: docker compose up -d --force-recreate chatwoot-web"
 fi
 
-for JOB in retencao-conversas monitorar-canais; do
-  if crontab -l 2>/dev/null | grep -q "${JOB}.sh"; then
-    ok "cron de ${JOB} registrado no host"
+# Os QUATRO jobs do host. Cron que some não dá erro: dá silêncio — e cada um
+# destes silêncios custa uma coisa diferente. O do restore casa a linha COM a
+# flag: `restore.sh` sozinho também casaria um `--producao` agendado, que seria
+# um restore destrutivo automático toda semana.
+verificar_cron() {
+  local rotulo="$1" padrao="$2" dor="$3"
+  if crontab -l 2>/dev/null | grep -q -- "$padrao"; then
+    ok "cron de ${rotulo} registrado no host"
   else
-    falha "o cron de ${JOB} não está registrado — ver docs/runbook-operacao.md"
+    falha "cron de ${rotulo} não registrado — ${dor}. Ver docs/runbook-operacao.md"
   fi
-done
+}
+verificar_cron "expurgo LGPD"      "retencao-conversas.sh" \
+  "a central passa a guardar conversa de cobrança para sempre"
+verificar_cron "monitor de canais" "monitorar-canais.sh" \
+  "um canal cai e ninguém fica sabendo"
+verificar_cron "backup"            "backup.sh" \
+  "o par banco+anexos para de ser gerado, e a poda 7+4 só acontece quando o script roda"
+verificar_cron "ensaio de restore" "restore.sh --verificar" \
+  "backup que ninguém testou não é backup, é esperança"
 
 # Papel customizado não existe no CE: quem vê a conversa vê o CPF/CNPJ, porque
 # o atributo é da CONVERSA e a policy libera para administrator OU agent. O que

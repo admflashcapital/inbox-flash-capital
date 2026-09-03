@@ -38,6 +38,21 @@ if conta.nil?
 end
 log("conta #{conta.id} (#{conta.name})")
 
+# ── Idioma da conta (MEDIDO 2026-09-03: nasce 'en') ────────────────
+# Isto NÃO é o idioma do dashboard — esse vem do usuário. `account.locale` é o
+# que o `ApplicationMailer` usa para escolher o locale de TODO e-mail que a
+# central envia, inclusive a resposta que a atendente escreve para o cliente:
+# `application_mailer.rb:69` cai em `account.locale`. Com 'en', o cliente
+# brasileiro recebe um corpo em português dentro de um envelope em inglês.
+# A conta nasce 'en' e nenhuma tela do CE oferece essa troca — só aqui.
+if conta.locale == "pt_BR"
+  log("locale da conta já é pt_BR")
+else
+  anterior = conta.locale
+  conta.update!(locale: "pt_BR")
+  log("locale da conta: #{anterior} → pt_BR (vale para o e-mail que a central envia)")
+end
+
 # ── Canal oficial — Twilio (Channel::TwilioSms, medium whatsapp) ───
 # Replica o que o TwilioChannelsController faz em `build_inbox`, MENOS duas
 # coisas de propósito:
@@ -66,6 +81,35 @@ else
   )
   inbox = conta.inboxes.create!(name: nome_oficial, channel: canal)
   log("inbox '#{nome_oficial}' criada (id #{inbox.id}, Channel::TwilioSms, medium=whatsapp)")
+end
+
+# ── Content Templates: uma vez, na instalação nova ─────────────────
+# Fora da janela de 24h o ÚNICO envio possível é por template aprovado. Sem
+# sincronizar, a UI não tem o que oferecer e a conversa morre — e esse era um
+# passo manual (`conectar-twilio.sh --templates`) que alguém tinha de lembrar.
+#
+# Roda SÓ quando o canal ainda não tem template nenhum. Um seed de boot não pode
+# depender de rede de terceiro em TODA subida: com a Twilio fora do ar isso
+# viraria latência (ou falha) em cada `docker compose up`, e a stack inteira
+# ficaria refém do dia ruim de um fornecedor. Assim o custo é pago uma vez.
+#
+# Re-sincronizar depois: botão "Sync Templates" na aba Configuração da inbox
+# (a UI expõe para canal Twilio+WhatsApp), ou `scripts/conectar-twilio.sh --templates`.
+canal_oficial = inbox&.channel
+if canal_oficial.is_a?(Channel::TwilioSms) && canal_oficial.content_templates.blank?
+  begin
+    Timeout.timeout(20) { Twilio::TemplateSyncService.new(channel: canal_oficial).call }
+    quantos = canal_oficial.reload.content_templates.to_h["templates"].to_a.size
+    if quantos.positive?
+      log("#{quantos} Content Templates sincronizados da Twilio (primeira vez)")
+    else
+      log("sync de templates não trouxe nada — rode `scripts/conectar-twilio.sh --templates` com a Twilio no ar")
+    end
+  rescue StandardError => e
+    # Nunca derruba o boot: sem template a atendente ainda responde DENTRO da
+    # janela de 24h. Falhar aqui deixaria a central inteira fora do ar.
+    log("sync de templates falhou (#{e.class}) — a stack sobe assim mesmo; rode `scripts/conectar-twilio.sh --templates` depois")
+  end
 end
 
 # ── Canal de e-mail (Channel::Email + OAuth do Google) ─────────────
@@ -245,6 +289,66 @@ RESPOSTAS_RAPIDAS.each do |r|
   cr.content = r[:texto]
   cr.save!
   log("resposta rápida '/#{r[:atalho]}' #{novo_registro ? 'criada' : 'já existia'}")
+end
+
+# ── Identidade própria para o espelho do monorepo ──────────────────
+# MEDIDO em 2026-09-03: o `CENTRAL_ACCESS_TOKEN` em uso pertencia ao ADMIN
+# HUMANO — o oposto do que `.claude/memory/security.md` exige. Consequências
+# reais: não dá para revogar o acesso da máquina sem derrubar o acesso da
+# pessoa, e mexer no usuário do admin quebra o espelho em silêncio (AD-12: cada
+# minuto mudo é buraco permanente no painel, não atraso).
+#
+# Aqui o token deixa de ser algo que alguém pega na UI e cola no `.env`: o valor
+# NASCE no `.env` (`openssl rand -hex 32`, nos dois repos) e o seed o materializa
+# numa conta de máquina. Isso apaga da instalação um passo manual que hoje nem
+# está documentado.
+#
+# `has_secure_token` só gera valor quando o campo vem em branco — atribuir
+# explicitamente funciona. E `access_tokens.token` tem índice ÚNICO: por isso um
+# token já existente NUNCA é tocado. Erro aqui impediria web e sidekiq de subir.
+EMAIL_ESPELHO = "espelho@flashcapital.com.br"
+token_espelho = env("CENTRAL_ACCESS_TOKEN")
+
+if token_espelho.nil?
+  log("CENTRAL_ACCESS_TOKEN vazio — o espelho do monorepo não tem como falar com a central")
+elsif (ja_existe = AccessToken.find_by(token: token_espelho))
+  dono = ja_existe.owner
+  if dono.is_a?(User) && dono.email == EMAIL_ESPELHO
+    log("espelho já usa a conta de máquina #{EMAIL_ESPELHO}")
+  else
+    log("⚠ o CENTRAL_ACCESS_TOKEN pertence a #{dono.try(:email) || dono.class} — não é conta de máquina.")
+    log("  não mexo: o índice do token é único e o espelho quebraria no meio.")
+    log("  para separar: gere um valor novo, ponha nos .env dos DOIS repos e rode o seed de novo.")
+  end
+else
+  admin = AccountUser.where(account_id: conta.id, role: :administrator).first&.user
+  if admin.nil?
+    log("⚠ sem administrador na conta — não dá para criar a conta de máquina (o AgentBuilder exige um inviter)")
+  else
+    usuario = User.from_email(EMAIL_ESPELHO)
+    if usuario.nil?
+      usuario = AgentBuilder.new(
+        email: EMAIL_ESPELHO, name: "Espelho (monorepo)",
+        inviter: admin, account: conta, role: :administrator
+      ).perform
+      # Senha aleatória e descartada: esta conta NUNCA loga pela tela, só usa o
+      # token. `confirmed_at` porque não há SMTP para confirmar convite.
+      secreta = "#{SecureRandom.alphanumeric(28)}aA1!"
+      usuario.update!(password: secreta, password_confirmation: secreta, confirmed_at: Time.current)
+      secreta = nil
+      log("conta de máquina #{EMAIL_ESPELHO} criada")
+    end
+    # `administrator` de propósito: é EXATAMENTE o poder que o espelho já
+    # exercia com o token do admin humano. Rebaixar para `agent` aqui mudaria o
+    # comportamento do espelho só na instalação nova — e a falha apareceria lá,
+    # não aqui.
+    vinculo = AccountUser.find_or_initialize_by(account_id: conta.id, user_id: usuario.id)
+    vinculo.inviter_id = admin.id if vinculo.new_record?
+    vinculo.role = :administrator
+    vinculo.save!
+    AccessToken.create!(owner: usuario, token: token_espelho)
+    log("token do espelho materializado na conta de máquina — nada a copiar da UI")
+  end
 end
 
 log("pronto.")

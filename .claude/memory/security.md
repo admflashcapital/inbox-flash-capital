@@ -49,7 +49,15 @@ Webhook público sem verificação = ingestão forjada (mensagem falsa na conver
 
 - **Gmail:** conta/app password dedicada à caixa de atendimento — não a conta pessoal de ninguém
 - **Twilio:** credencial já existente no monorepo; a central **não** ganha permissão de disparo em massa
-- **Chatwoot:** o `CENTRAL_ACCESS_TOKEN` que o espelho do monorepo usa é de agente, separado do token de admin humano
+- **Chatwoot:** o `CENTRAL_ACCESS_TOKEN` do espelho tem de ser de uma **conta de máquina**
+  (`espelho@flashcapital.com.br`), nunca o token de uma pessoa. O seed materializa esse token a partir
+  do `.env` — o valor é inventado (`openssl rand -hex 32`) e vai igual nos dois repos; não se pega
+  token na UI. **⚠️ Nesta instalação isso ainda NÃO vale**: medido em 2026-09-03, o token em uso
+  pertence a `adm@flashcapital.com.br` (administrator). Enquanto for assim, revogar o acesso da
+  máquina derruba o acesso da pessoa, e mexer no usuário dela quebra o espelho **em silêncio**
+  (AD-12). Para separar: gere um valor novo, ponha nos `.env` dos dois repos e rode o seed — ele
+  cria a conta de máquina. O seed **não** troca sozinho: `access_tokens.token` tem índice único e
+  falhar ali impediria web e sidekiq de subirem.
 
 ## LGPD (Story 6.3)
 
