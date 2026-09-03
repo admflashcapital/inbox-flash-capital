@@ -12,11 +12,12 @@
 #   --simular   (default) só CONTA o que seria apagado. Não apaga nada.
 #   --executar  apaga de verdade.
 #
-# ⚠️ TENSÃO REAL, decida antes de agendar: a central guarda a conversa de
-#    COBRANÇA. Apagar cedo demais destrói a prova da negociação de uma dívida;
-#    tarde demais viola a minimização da LGPD. O default (1825 dias = 5 anos)
-#    segue a prescrição civil comum de dívida — CONFIRME com o jurídico da
-#    Flash antes de pôr no cron. O agendamento definitivo é da STORY-6.3.
+# A TENSÃO que definiu o prazo, para quem for revisá-lo: a central guarda a
+# conversa de COBRANÇA. Apagar cedo demais destrói a prova da negociação de uma
+# dívida; tarde demais viola a minimização da LGPD. O default (1825 dias = 5
+# anos) segue a prescrição civil comum de dívida, foi APROVADO por escrito pelo
+# operador em 2026-09-02, e está no cron do host (domingo 04:10, com flock).
+# Procedimento completo, com o direito de exclusão do titular: docs/runbook-lgpd.md.
 #
 # Uso:
 #   scripts/retencao-conversas.sh --simular

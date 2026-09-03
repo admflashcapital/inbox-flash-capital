@@ -83,13 +83,13 @@ scripts/retencao-conversas.sh --executar    # apaga de verdade
 Apaga conversas **resolvidas** mais velhas que `RETENCAO_CONVERSAS_DIAS` (default **1825 dias = 5
 anos**), com mensagens e anexos. Conversa aberta ou pendente nunca é tocada.
 
-> ⚠️ **Decisão pendente do jurídico.** A central guarda a conversa de **cobrança**: apagar cedo
-> demais destrói a prova da negociação de uma dívida; tarde demais viola a LGPD. O default de 5 anos
-> segue a prescrição civil comum, mas **precisa ser confirmado** antes de ir para o cron. O
-> agendamento definitivo é da **STORY-6.3**, junto com o direito de exclusão do titular.
+> **Decidido e agendado.** Os 5 anos foram aprovados por escrito pelo operador em 2026-09-02 e o
+> expurgo está no cron do host (domingo 04:10, com `flock`, log em `backups/retencao.log`). A tensão
+> que motivou a decisão continua valendo como critério: apagar cedo demais destrói a prova da
+> negociação de uma dívida; tarde demais viola a minimização.
 
 Lembre-se (AD-1): apagar o contato na central **não** apaga a verdade no Twenty/Supabase. Pedido de
-titular atinge os **dois** lados.
+titular atinge os **dois** lados — o procedimento completo está em `docs/runbook-lgpd.md`.
 
 ## Registro dos ensaios de restore
 
