@@ -311,9 +311,9 @@ Cockpit, papéis, atribuição, labels manuais, respostas rápidas, LGPD e obser
 
 | # | Story | Status | Commit |
 |---|---|---|---|
-| 6.1 | Cockpit unificado e papéis de agente (FR-15) | [x] | |
-| 6.2 | Atribuição, labels manuais e respostas rápidas (FR-16) | [x] | |
-| 6.3 | Observabilidade e conformidade LGPD | [x] | |
+| 6.1 | Cockpit unificado e papéis de agente (FR-15) | [x] | `b213f2f` |
+| 6.2 | Atribuição, labels manuais e respostas rápidas (FR-16) | [x] | `b213f2f` |
+| 6.3 | Observabilidade e conformidade LGPD | [x] | `bb657b6` + `07ea955` |
 
 **Gate EPIC-6** (reescrito em 2026-09-03 — o enunciado anterior pedia duas coisas que o Community Edition **não entrega**, e prometê-las era pior do que não tê-las): as 2 inboxes visíveis numa interface única; papéis (admin/agente) negam acesso indevido, com o escopo vindo de `inbox_members` — **não de papel customizado**, que é premium e está desligado; atribuição **manual** funcionando e a automática desligada por decisão registrada; respostas rápidas inseridas; labels manuais aplicáveis e visíveis na barra lateral; log estruturado (JSON) e alerta de saúde dos canais chegando no sino do Nexus; expurgo LGPD **agendado**; e o acesso a CPF/CNPJ **restrito por inbox** — no CE, quem abre a conversa vê o documento, porque o atributo é da conversa e a policy libera para agente.
 
