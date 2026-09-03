@@ -119,9 +119,9 @@ echo "[smoke] http://127.0.0.1:${PORTA}/app/login → HTTP ${CODIGO}"
 # ── 5. Limpeza — o smoke NÃO pode deixar conta para trás ───────────
 # Aprendido do jeito difícil (2026-07-13): a conta semeada aqui SOBREVIVEU ao
 # teste, virou a `Account` de id 1 e, como o `.env` apontava
-# `CENTRAL_ACCOUNT_ID=1`, TODO o trabalho dos canais (inbox de prospecção, inbox
-# oficial da Twilio) foi criado dentro da conta de TESTE — não na conta real do
-# operador. Da UI, o operador via uma central vazia e não entendia por quê.
+# `CENTRAL_ACCOUNT_ID=1`, TODO o trabalho dos canais foi criado dentro da conta
+# de TESTE — não na conta real do operador. Da UI, o operador via uma central
+# vazia e não entendia por quê.
 #
 # Um teste que deixa estado para trás não é um teste: é uma armadilha. O smoke
 # prova o que precisa provar e some.

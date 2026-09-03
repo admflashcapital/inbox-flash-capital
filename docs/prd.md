@@ -43,10 +43,10 @@ O Inbox Flash Capital consolida numa única tela todos os canais de conversa da 
 
 - **UJ-3. Carla conduz uma cobrança vendo a régua.**
   - **Persona + contexto:** Carla, cobrança, fala com inadimplentes pelo número oficial.
-  - **Entry state:** autenticada, filtra a inbox pela label `em-cobranca`.
-  - **Path:** o disparo de cobrança saiu pelo pipeline do monorepo e foi espelhado como mensagem na conversa → o cliente respondeu → Carla vê `regua-etapa-2`, dias de atraso e valor em aberto nos atributos → negocia.
+  - **Entry state:** autenticada, na inbox `WhatsApp Oficial`.
+  - **Path:** o disparo de cobrança saiu pelo pipeline do monorepo e foi espelhado como mensagem na conversa → o cliente respondeu → Carla vê nos **atributos** o título, os dias de atraso e o valor em aberto que o disparo carimbou (AD-13) → negocia.
   - **Climax:** a resposta do cliente e o disparo estão na mesma thread, com a situação de cobrança visível.
-  - **Resolution:** Carla atualiza o resultado; a mudança de etapa da régua (feita no sistema de origem) reflete a nova label.
+  - **Resolution:** Carla etiqueta o **resultado da conversa** (`promessa-pagamento`, `negociacao`, `contestacao`…). A etapa da régua não vira label: ela é estado do título, vive no monorepo (AD-1) e chega aqui como atributo no próximo disparo.
 
 - **UJ-4. Bruno atende um e-mail que virou conversa.**
   - **Persona + contexto:** Bruno, operação, monitora a caixa Gmail de atendimento.

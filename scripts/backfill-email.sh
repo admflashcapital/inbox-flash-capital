@@ -15,8 +15,9 @@
 # ⚠️ O Chatwoot lê SÓ a pasta INBOX (`imap.select('INBOX')` está fixo no código).
 #    E-mail ARQUIVADO no Gmail sai da INBOX e NUNCA será importado por aqui.
 #
-# ⚠️ Isto traz PII de cliente para a central. Ver a dívida de retenção (LGPD) no
-#    PROGRESS.md — o expurgo existe (`bash scripts/retencao-conversas.sh`) mas não está no cron.
+# ⚠️ Isto traz PII de cliente para a central. O expurgo (`retencao-conversas.sh`)
+#    roda no cron do host, domingo 04:10 — mas apaga só conversa RESOLVIDA mais
+#    velha que 5 anos. Histórico importado hoje fica. Ver docs/runbook-lgpd.md.
 #
 # Uso:
 #   scripts/backfill-email.sh          # 30 dias (default)

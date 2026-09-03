@@ -27,12 +27,27 @@ bash scripts/backup.sh        # = scripts/backup.sh
 - O `pg_dump` roda **dentro** do container, pelo socket local — nenhuma senha trafega em linha de
   comando nem aparece em `ps`.
 
-### Agendar em produção (cron do host)
+### Agendamento (cron do host) — instalado
 
 ```cron
-# 03:10 todo dia — backup da central
-10 3 * * *  cd /srv/inbox-flash-capital && BACKUP_DIR=/srv/backups/inbox scripts/backup.sh >> /var/log/inbox-backup.log 2>&1
+10 5 * * *  … backup.sh                >> backups/backup.log
+40 5 * * 6  … restore.sh --verificar   >> backups/restore-verificar.log
 ```
+
+Ambos com `flock` e com `cd` para a raiz do repo (cron roda com `cwd=$HOME`; sem o `cd`, o
+`docker compose` não acha o `compose.yaml` e o log vai para o lugar errado). As quatro entradas
+completas estão em `docs/runbook-operacao.md`.
+
+**Por que 05:10 e não 03:10:** no domingo o expurgo LGPD roda às 04:10. Um backup feito **antes** dele
+congelaria por quatro semanas exatamente a conversa que a política acabou de apagar. Rodando depois, o
+snapshot semanal já nasce expurgado.
+
+**Por que a poda depende do cron:** a retenção 7+4 é executada *pelo próprio* `backup.sh`, no fim da
+rodada. Sem o job agendado, nada é gerado **e** nada é podado — os artefatos antigos ficam para sempre.
+`verificar-operacao.sh` cobra as duas entradas.
+
+Ao mudar de host, reveja o `BACKUP_DIR`: fora do repo, e num disco que não seja o mesmo que morre com a
+máquina.
 
 **Passo manual, e é o que salva a empresa:** o backup local morre junto com o host. Copie
 `BACKUP_DIR` para fora da máquina (outro provedor, ou Drive/S3), **criptografado**:

@@ -220,7 +220,7 @@ Duas coisas que o desenho torna óbvias e que decidem o resto:
 
 | Concern | Convention |
 | --- | --- |
-| Naming (labels) | kebab-case, **dicionário fechado** do Glossário do PRD (`lead-frio`, `lead-qualificado`, `cliente-ativo`, `em-cobranca`, `regua-etapa-N`, `inadimplente`, `nao-identificado`). Sem sinônimos. |
+| Naming (labels) | kebab-case, **dicionário fechado** de 7, semeadas: `promessa-pagamento`, `negociacao`, `contestacao`, `aguardando-comprovante`, `contato-errado`, `sem-retorno`, `escalar-alcada`. Descrevem o que a **conversa** apurou, nunca o estado do título (AD-1). Aplicação manual. Sem sinônimos. |
 | Naming (atributos custom) | snake_case: `cnpj`, `cpf`, `status_operacao`, `dias_atraso`, `valor_em_aberto`, `origem`, `link_twenty`, `link_supabase`, `source_twenty_id`, `source_supabase_id`. |
 | Naming (inboxes) | fixos: `WhatsApp Oficial`, `E-mail`. |
 | Data & formats | telefone E.164; documento = só dígitos para casar; timestamps UTC; ids de origem guardados como atributos `source_*_id` para link reverso. |

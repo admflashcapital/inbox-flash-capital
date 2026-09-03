@@ -102,14 +102,27 @@ responsável por checar antes.**
 Nota de operação: a atendente responde pelo WhatsApp apenas enquanto a central tiver **URL pública**
 (AD-11.1). Túnel caído ⇒ erro 21609 no envio. O monitor abaixo cobra isso.
 
-## Os dois jobs do host
+## Os quatro jobs do host
 
 ```
-10 4 * * 0  … retencao-conversas.sh --executar   >> backups/retencao.log
 0  * * * *  … monitorar-canais.sh   --executar   >> backups/monitor-canais.log
+10 4 * * 0  … retencao-conversas.sh --executar   >> backups/retencao.log
+10 5 * * *  … backup.sh                          >> backups/backup.log
+40 5 * * 6  … restore.sh --verificar             >> backups/restore-verificar.log
 ```
 
-Ambos com `flock` (execução única) e `cd` para a raiz do repo.
+Todos com `flock` (execução única) e `cd` para a raiz do repo — cron roda com `cwd=$HOME`, e sem o `cd`
+o `docker compose` não acha o `compose.yaml`.
+
+A ordem no domingo não é acaso: **expurgo 04:10, backup 05:10**. Invertida, o snapshot semanal
+guardaria por quatro semanas a conversa que a política acabou de apagar. E a poda 7+4 dos artefatos é
+feita pelo próprio `backup.sh`: sem o job, nada é gerado **e** nada é podado.
+
+O ensaio de restore não encosta na produção — sobe um Postgres efêmero, recompõe o último par
+banco+anexos, confere as contagens e destrói tudo. É o que separa backup de esperança.
+
+`verificar-operacao.sh` cobra as quatro entradas. A do restore casa a linha **com a flag**
+`--verificar`: um `restore.sh --producao` agendado seria um restore destrutivo automático toda semana.
 
 ### O que o monitor observa
 
@@ -140,7 +153,7 @@ valor** no `.env` do monorepo.
 ## Checagem
 
 ```bash
-bash scripts/verificar-operacao.sh        # 12 invariantes da operação
+bash scripts/verificar-operacao.sh        # 15 invariantes da operação
 bash scripts/monitorar-canais.sh --simular
 bash scripts/criar-agente.sh --listar
 ```

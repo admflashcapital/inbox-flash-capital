@@ -112,8 +112,8 @@ Compose v2. **Só isso.** Imagem do Chatwoot **sempre com tag fixa** — `latest
 | `bash scripts/verificar-canal-oficial.sh` · `-canal-email.sh` | invariantes de cada canal |
 | `bash scripts/conectar-twilio.sh [--status\|--templates]` | canal oficial |
 | `bash scripts/conectar-gmail.sh [--status\|--url]` | canal de e-mail (o consent é clique humano) |
-| `bash scripts/backup.sh` · `bash scripts/restore.sh --verificar` | backup e ensaio de restore |
-| `docker compose run --rm chatwoot-seed` | re-semeia canais, atributos, labels e respostas rápidas (idempotente) |
+| `bash scripts/backup.sh` · `bash scripts/restore.sh --verificar` | backup e ensaio de restore — **os dois no cron** (05:10 diário / sáb 05:40) |
+| `docker compose run --rm chatwoot-seed` | re-semeia canais, locale, atributos, labels, respostas rápidas e a conta de máquina do espelho (idempotente) |
 | `bash scripts/verificar-operacao.sh` | invariantes da operação (EPIC-6) |
 | `bash scripts/criar-agente.sh --nome N --email E --inbox "E-mail"` · `--listar` | põe alguém para atender |
 | `bash scripts/monitorar-canais.sh --simular` | sonda de saúde dos canais (no cron, avisa no sino do Nexus) |

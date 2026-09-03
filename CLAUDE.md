@@ -47,11 +47,11 @@ O compose, o `.env` e os `scripts/` estão na raiz, então `docker compose` acha
 | `bash scripts/verificar-invariantes.sh` | invariantes AD-7/8/9/10 — **rode antes de commitar** |
 | `bash scripts/verificar-canal-oficial.sh` · `-canal-email.sh` | invariantes de cada canal |
 | `SMOKE_EU_SEI_O_QUE_ESTOU_FAZENDO=1 bash scripts/smoke-test.sh` | semeia, reinicia, prova persistência (dev) |
-| `bash scripts/backup.sh` · `bash scripts/restore.sh --verificar` | backup do par banco+anexos e ensaio de restore |
+| `bash scripts/backup.sh` · `bash scripts/restore.sh --verificar` | backup do par banco+anexos e ensaio de restore — **os dois no cron** (05:10 diário / sáb 05:40) |
 | `bash scripts/conectar-twilio.sh [--status\|--templates]` | canal oficial (a inbox já nasce do seed) |
 | `bash scripts/conectar-gmail.sh [--status\|--url]` | canal de e-mail — o consent é clique humano |
 | `docker compose run --rm chatwoot-init` | migrações do upgrade (one-shot idempotente) |
-| `docker compose run --rm chatwoot-seed` | re-semeia canais e configs (idempotente) |
+| `docker compose run --rm chatwoot-seed` | re-semeia canais, locale, configs e a conta de máquina do espelho (idempotente) |
 | `bash scripts/verificar-operacao.sh` | invariantes da operação (EPIC-6): papéis, labels, janela de 24h, crons |
 | `bash scripts/criar-agente.sh --nome N --email E --inbox "E-mail"` · `--listar` | põe alguém para atender (pede a senha sem ecoar) |
 | `bash scripts/monitorar-canais.sh --simular` | sonda de saúde dos canais; no cron avisa no sino do Nexus |
@@ -217,9 +217,12 @@ Ciclo por story (configurado em `.claude/`):
   existe, e `env_get` de `scripts/lib/env.sh` para ler o `.env` — nunca `source`.
 - **Ruby (seed):** só `scripts/seed/chatwoot_seed.rb`, rodado por `rails runner`. Idempotente por
   contrato: rodar de novo não pode duplicar nem sobrescrever.
-- **Labels do Chatwoot:** kebab-case, **dicionário fechado** do Glossário do PRD (`lead-frio`,
-  `lead-qualificado`, `cliente-ativo`, `em-cobranca`, `regua-etapa-N`, `inadimplente`,
-  `nao-identificado`). **Sem sinônimos** — label nova exige atualizar o Glossário.
+- **Labels do Chatwoot:** kebab-case, **dicionário fechado** de 7, semeadas pelo
+  `chatwoot_seed.rb`: `promessa-pagamento`, `negociacao`, `contestacao`, `aguardando-comprovante`,
+  `contato-errado`, `sem-retorno`, `escalar-alcada`. O critério: **label descreve o que a CONVERSA
+  apurou, nunca o estado do TÍTULO** — estado de título é do monorepo (AD-1), e duplicar aqui criaria
+  duas verdades. Aplicação é sempre **manual** (o AD-13 carimba atributos, não labels). Label nova
+  entra no seed, nunca só pela tela. Ver `docs/runbook-operacao.md`.
 - **Atributos custom:** snake_case (`cnpj`, `status_operacao`, `dias_atraso`, `valor_em_aberto`,
   `link_twenty`, `link_supabase`, `source_twenty_id`, `source_supabase_id`).
 - **Nomes de inbox:** fixos — `WhatsApp Oficial`, `E-mail`. São os nomes que o `chatwoot-seed`

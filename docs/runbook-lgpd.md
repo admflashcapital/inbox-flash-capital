@@ -126,6 +126,6 @@ Ao menor sinal, revogue em `myaccount.google.com/permissions`.
 ## Checagem
 
 ```bash
-bash scripts/verificar-operacao.sh    # cobra os dois crons e o escopo por inbox
+bash scripts/verificar-operacao.sh    # cobra os quatro crons e o escopo por inbox
 bash scripts/monitorar-canais.sh --simular
 ```
