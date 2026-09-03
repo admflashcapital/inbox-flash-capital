@@ -1,6 +1,6 @@
 # Segurança — Regras Invioláveis — Inbox Flash Capital
 
-> **Escopo: 16 stories**, nos épicos 1, 3, 4 e 6. `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-13).
+> **Escopo: 19 stories** no inventário, das quais **11 vivas** (épicos 1, 3, 4 e 6) — os épicos 2 e 5 foram cancelados. `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-13).
 >
 > A proteção do `/twilio/callback` vive na **borda**: `deploy/ngrok-policy.yml` devolve **403** na URL pública, e `verificar-canal-oficial.sh` bate nela ao vivo. Deixou de ser topológica quando a central passou a ter `CENTRAL_URL_PUBLICA` (AD-11.1). Todo ingresso novo tem de trazer esse gate — o `Twilio::CallbackController` não valida assinatura — e exigir o `X-Relay-Token` (que hoje viaja mas nada cobra na entrada). `/twilio/delivery_status` fica **aberto de propósito**: é a Twilio que o chama, e sem ele o envio pela tela morre com 21609. Medido: ela aceita que ele devolva 404.
 
@@ -53,10 +53,16 @@ Webhook público sem verificação = ingestão forjada (mensagem falsa na conver
 
 ## LGPD (Story 6.3)
 
-- Retenção de conversas **configurada** (não infinita por default)
-- Acesso a dado sensível (CPF/CNPJ, valor em aberto) **restrito por papel**
+- Retenção **decidida e agendada**: 1825 dias (5 anos), aprovada por escrito em 2026-09-02, no cron
+  do host (domingo 04:10, com `flock`). `destroy_all`, nunca `delete_all` — são os callbacks que
+  removem os anexos do volume.
+- Acesso a dado sensível (CPF/CNPJ, valor em aberto) **restrito por INBOX, não por papel** — ver
+  AD-14. O CE não tem papel customizado, e o atributo é da conversa: quem a abre vê o documento.
+  **Não há trilha de auditoria** (`audit_logs` é premium): não se sabe quem leu o quê.
 - Direito de exclusão: apagar o contato na central **não** apaga a verdade no domínio — e vice-versa.
-  O pedido do titular atinge **os dois lados**; documente o procedimento antes do go-live.
+  O pedido do titular atinge **os dois lados**, e os backups seguram o dado por até ~4 semanas
+  (7 diários + 4 semanais): restore depois de exclusão **ressuscita o dado**, e a exclusão precisa
+  ser refeita. Procedimento completo: `docs/runbook-lgpd.md`.
 
 ## gitleaks
 

@@ -70,7 +70,7 @@ O Inbox Flash Capital consolida numa única tela todos os canais de conversa da 
 - **Twilio / número oficial** — número WhatsApp Business API oficial (Meta), já em uso no monorepo para cobrança/transacional.
 - **Twenty** — CRM open-source (fonte da verdade do funil comercial). Entidade central: **Lead** (empresa+contato achatados; tem CNPJ, telefone, e-mail).
 - **Supabase (monorepo)** — Postgres da plataforma interna (fonte da verdade operacional). Entidades: **cedentes**, **sacados**, **perfil**.
-- **Label (Etiqueta)** — marcador de segmento/estado no Chatwoot, filtrável e acionável por automação. Ex.: `lead-frio`, `lead-qualificado`, `cliente-ativo`, `em-cobranca`, `regua-etapa-N`, `inadimplente`.
+- **Label (Etiqueta)** — marcador que a atendente aplica **à mão** na conversa, filtrável. Descreve o que a CONVERSA apurou, nunca o estado do TÍTULO — esse é do monorepo (AD-1), e repeti-lo aqui criaria duas verdades. Dicionário fechado, semeado por `scripts/seed/chatwoot_seed.rb`: `promessa-pagamento`, `negociacao`, `contestacao`, `aguardando-comprovante`, `contato-errado`, `sem-retorno`, `escalar-alcada`.
 - **Atributo custom** — dado-ponto exibido na barra lateral da Conversa, gravado pelo monorepo no disparo. Ex.: `titulo_id`, `cnpj`, `dias_atraso`, `valor_em_aberto`.
 - **Espelho** — o push do monorepo para a central: a mensagem que saiu pela Twilio é replicada na conversa, com `source_id` = `MessageSid`. Best-effort e sem retry (AD-12).
 - **Régua de cobrança** — máquina de estados de cobrança cuja lógica vive no worker/API do monorepo; cada disparo dela é espelhado na central com o contexto do título.
@@ -168,8 +168,8 @@ A conversa exibe, na barra lateral, o contexto do título que originou o disparo
 #### FR-15: Cockpit unificado e papéis
 Operador pode atender todas as inboxes em escopo numa interface única, e gestão pode definir papéis/permissões de agentes.
 **Consequences (testable):**
-- As 3 inboxes aparecem para os agentes autorizados numa só tela.
-- Agentes têm papéis (admin/agente) e só veem o que lhes cabe.
+- As 2 inboxes aparecem para os agentes autorizados numa só tela.
+- Agentes têm papéis (admin/agente) e só veem o que lhes cabe. ⚠️ O CE tem **dois** papéis e nada além: `custom_roles` é premium e está desligado. O que restringe um agente é a **inbox** (`inbox_members`), não o papel.
 
 #### FR-16: Atribuição, labels e respostas rápidas
 Operador pode assumir/atribuir conversas, aplicar labels manualmente e usar respostas rápidas.
@@ -223,7 +223,7 @@ Operador pode assumir/atribuir conversas, aplicar labels manualmente e usar resp
 ## 8. Cross-Cutting NFRs
 
 - **Desacoplamento:** nenhuma chamada síncrona da central aos bancos de domínio no caminho de atendimento (AD-2). O contexto chega empurrado, no disparo.
-- **Segurança:** segredos (tokens Twilio/Chatwoot, credenciais Gmail) fora do repositório; validação de assinatura nos webhooks (o webhook Twilio inbound já valida `X-Twilio-Signature` no monorepo). ⚠️ O `/twilio/callback` da própria central **não valida assinatura nenhuma** — hoje quem protege é a topologia (AD-10).
+- **Segurança:** segredos (tokens Twilio/Chatwoot, credenciais Gmail) fora do repositório; validação de assinatura nos webhooks (o webhook Twilio inbound já valida `X-Twilio-Signature` no monorepo). ⚠️ O `/twilio/callback` da própria central **não valida assinatura nenhuma** — quem o nega é a **borda** (`deploy/ngrok-policy.yml`, HTTP 403). A proteção puramente topológica acabou quando a central ganhou URL pública (AD-11.1).
 - **Privacidade / LGPD:** retenção de conversas configurável; base legal e política de acesso definidas; dados sensíveis (CPF/CNPJ) tratados como internos.
 - **Observabilidade:** logs e healthcheck de cada serviço; alerta na saúde dos canais (Twilio e IMAP).
 - **Confiabilidade:** o fan-out do inbound alimenta a confirmação de sacado **e** a central; a confirmação (dinheiro) nunca pode ficar refém da central (chat).
@@ -241,7 +241,7 @@ Operador pode assumir/atribuir conversas, aplicar labels manualmente e usar resp
 1. ✅ **Espelho dos disparos em massa:** o **monorepo empurra o outbound** para a conversa via API do Chatwoot (não depende só do inbound nativo). Ver AD-6.
 
 **Em aberto (defaults assumidos, ajustáveis):**
-2. **Retenção de conversas (LGPD): a pergunta mais urgente em aberto.** `scripts/retencao-conversas.sh` existe e nunca foi agendado, com conversa de cliente real entrando todo dia. O default do script é 1825 dias (5 anos, prescrição civil comum de dívida). Apagar cedo destrói a prova de uma negociação; tarde viola a minimização. **Precisa do jurídico antes do cron.**
+2. ~~**Retenção de conversas (LGPD)**~~ **DECIDIDA.** 1825 dias (5 anos, prescrição civil comum de dívida) aprovados por escrito pelo operador em 2026-09-02; `scripts/retencao-conversas.sh` está no cron do host (domingo 04:10, com `flock`). Procedimento completo, incluindo o direito de exclusão do titular, em `docs/runbook-lgpd.md`. **Resíduo:** esta máquina não fica ligada às 4h de domingo — o cron existe, a execução não é garantida.
 3. Onde a central executa e como se acessa — decisão de diretoria, fora do escopo das fases de simplificação. Hoje: localhost, sem ingresso.
 
 ## 11. Assumptions Index

@@ -13,21 +13,25 @@ Guia para o Claude Code (claude.ai/code) trabalhar neste repositório.
 > story a story (com hash de commit, gate e dívida técnica) vive lá. Se as duas divergirem,
 > **`PROGRESS.md` ganha** — e conserte esta seção.
 
-**A central está no ar.** A stack sobe com `docker compose up -d --wait` (6 serviços, 11 scripts de
-operação) e **os dois canais do escopo** estão ligados: WhatsApp Oficial (Twilio) e E-mail (Gmail).
+**A central está no ar e o MVP está fechado.** A stack sobe com `docker compose up -d --wait` e **os
+dois canais do escopo** estão ligados: WhatsApp Oficial (Twilio) e E-mail (Gmail). Recebem, respondem,
+espelham os disparos do monorepo e carimbam o contexto do título. A operação está configurada: papéis,
+labels, respostas rápidas, log estruturado, expurgo LGPD e sonda de saúde no cron.
 O banco tem **PII real de cliente desde 2026-07-14** — trate backup como segredo.
 
-**Escopo: 16 stories.** Próximo trabalho: **espelho ponta a ponta** (STORY-4.2 — carimbar
-`titulo_id`, CNPJ, valor e dias de atraso nos `custom_attributes`, AD-13).
+**Escopo: 19 stories** no inventário, **11 vivas**, **11 concluídas** — os épicos 2 e 5 foram
+cancelados. Próximo trabalho: **Fase 3.5**, o benchmark de 24h que decide onde a central roda (e, por
+AD-12, a completude do painel). Está em stand-by por decisão: o CRM ainda não fechou, e medir só metade
+não decide nada.
 
 | Épico | Estado |
 |---|---|
 | **EPIC-1** Fundação | ✅ fechado, gate verificado ao vivo — a stack sobe com `docker compose up -d --wait`, backup/restore validados |
 | **EPIC-2** WhatsApp Prospecção | ❌ **CANCELADO** — fora do escopo |
 | **EPIC-3** WhatsApp Oficial | ✅ fechado, gate verificado **com o número real de produção** — recebe, responde e espelha os disparos do monorepo sem reenviá-los |
-| **EPIC-4** E-mail (Gmail) | ✅ STORY-4.1 fechada e verificada ao vivo; a 4.2 está destravada pelo AD-13 (contexto nos `custom_attributes`) |
+| **EPIC-4** E-mail (Gmail) | ✅ fechado — a caixa recebe e responde na mesma thread, e o disparo carimba os 8 atributos do título na conversa (AD-13) |
 | **EPIC-5** Serviço de Sync | ❌ **CANCELADO** (AD-13) — não se constrói serviço de reconciliação |
-| **EPIC-6** Operação & Governança | ⬜ não iniciado |
+| **EPIC-6** Operação & Governança | ✅ fechado — papéis por inbox, 7 labels, 5 respostas rápidas, atribuição manual por decisão, log JSON, expurgo LGPD e sonda de saúde no cron. Cobrado por `verificar-operacao.sh` |
 
 O que **já está decidido e não se re-discute** está em `docs/architecture.md` (AD-1..AD-9) e
 condensado em `.claude/memory/decisions.md`.
@@ -48,6 +52,9 @@ O compose, o `.env` e os `scripts/` estão na raiz, então `docker compose` acha
 | `bash scripts/conectar-gmail.sh [--status\|--url]` | canal de e-mail — o consent é clique humano |
 | `docker compose run --rm chatwoot-init` | migrações do upgrade (one-shot idempotente) |
 | `docker compose run --rm chatwoot-seed` | re-semeia canais e configs (idempotente) |
+| `bash scripts/verificar-operacao.sh` | invariantes da operação (EPIC-6): papéis, labels, janela de 24h, crons |
+| `bash scripts/criar-agente.sh --nome N --email E --inbox "E-mail"` · `--listar` | põe alguém para atender (pede a senha sem ecoar) |
+| `bash scripts/monitorar-canais.sh --simular` | sonda de saúde dos canais; no cron avisa no sino do Nexus |
 | `bash scripts/retencao-conversas.sh --simular` | expurgo LGPD (simulado) |
 
 A central escuta em **`http://127.0.0.1:${CHATWOOT_HOST_PORT}`** (hoje 3001). O navegador entra por

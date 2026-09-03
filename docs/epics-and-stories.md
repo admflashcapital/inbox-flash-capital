@@ -229,7 +229,7 @@ So that a equipe atenda de um lugar só com acesso adequado.
 
 **Acceptance Criteria:**
 
-**Given** as 3 inboxes configuradas
+**Given** as 2 inboxes configuradas
 **When** um agente autorizado acessa a central
 **Then** ele vê as inboxes numa interface única.
 
@@ -252,7 +252,7 @@ So that eu conduza o atendimento com agilidade.
 **Given** a composição de resposta
 **When** uso uma resposta rápida configurada
 **Then** ela é inserida
-**And** posso aplicar labels manualmente além das empurradas pelo Sync.
+**And** posso aplicar labels manualmente — **todas** são manuais: o Sync que as empurraria foi cancelado (AD-13), e o dicionário fechado é semeado por `scripts/seed/chatwoot_seed.rb`.
 
 ### Story 6.3: Observabilidade e conformidade LGPD
 

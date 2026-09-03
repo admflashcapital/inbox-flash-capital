@@ -100,3 +100,22 @@ fica pela via mais simples: **a central só tem o número oficial**.
   é o caminho comum, então carimbar na criação passa no teste e não entrega nada. O endpoint
   **substitui** o hash inteiro, não mescla. Supersede a premissa do AD-2/AD-3 de que a regra vive no
   Sync.
+
+- **AD-14 — Quem restringe acesso é a INBOX, não o papel.** `[MEDIDO 2026-09-03]`
+  O CE tem **dois** papéis (`agent`, `administrator`); `custom_roles` é premium, está desligado e o
+  modelo **não existe na imagem** — ligar exigiria fork (AD-7). E o CPF/CNPJ é atributo da
+  **conversa**, liberado pela policy para `administrator? || agent?`: **quem abre a conversa vê o
+  documento**. Logo não existe "agente que atende sem ver o CPF". O escopo real é `inbox_members`
+  (`User#assigned_inboxes` → `InboxPolicy::Scope` → `ConversationFinder`); `destroy?` de conversa é
+  só de admin; e **não há trilha de auditoria** (`audit_logs` é premium). Um agente entra apenas nas
+  inboxes de que precisa (`criar-agente.sh --inbox`), e `verificar-operacao.sh` cobra isso. O gate do
+  EPIC-6 foi reescrito de "restrito por papel" para "restrito por inbox".
+
+- **A janela de 24h é NATIVA — e protege a tela, não a API.** `[MEDIDO 2026-09-03]`
+  `Conversations::MessageWindowService` devolve 24h para `Channel::TwilioSms` **se e somente se**
+  `medium == 'whatsapp'`: passadas 24h o editor fecha, aparece banner em pt-BR e a UI só oferece os
+  Content Templates. Mas `Base::SendOnChannelService` e o `MessagesController` **não** consultam
+  `can_reply?`, e o `Twilio::SendOnTwilioService` não tem o fallback-para-template do canal WhatsApp
+  Cloud. Quem posta pela API passa fora da janela e só falha na Twilio. **Regra: o chamador checa
+  antes.** (O `PROGRESS.md` afirmou por semanas que a janela "não estava modelada em ponto nenhum";
+  era falso para a tela.)

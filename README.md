@@ -62,7 +62,16 @@ consegue responder (AD-11.1). Por isso a central tem uma URL pública (`CENTRAL_
 E a recíproca, que é a decisão cara (AD-12): **o espelho não tem retry, fila nem backfill**. Cada
 minuto com a central inalcançável é um **buraco permanente** no painel, não um atraso.
 
-Detalhe completo (AD-1..AD-13, diagramas, ERD, convenções) em **`docs/architecture.md`**.
+> **Este painel é amostral por construção, e é para ficar escrito.** Enquanto a central rodar numa
+> máquina sem uptime garantido, "100% das conversas visíveis" (SM-1) é uma meta que a arquitetura
+> impede de atingir. Quem ler um relatório daqui precisa saber disso. O teto só sobe quando a Fase 4
+> decidir onde a central roda.
+
+**Quem atende, atende por inbox.** O Community Edition tem dois papéis e nada além, e o CPF/CNPJ é
+atributo da conversa: **quem abre a conversa vê o documento** (AD-14). O que restringe um agente é a
+lista de inboxes de que ele participa — por isso `criar-agente.sh` pede `--inbox`.
+
+Detalhe completo (AD-1..AD-14, diagramas, ERD, convenções) em **`docs/architecture.md`**.
 
 ## Subir o ambiente
 
@@ -104,7 +113,11 @@ Compose v2. **Só isso.** Imagem do Chatwoot **sempre com tag fixa** — `latest
 | `bash scripts/conectar-twilio.sh [--status\|--templates]` | canal oficial |
 | `bash scripts/conectar-gmail.sh [--status\|--url]` | canal de e-mail (o consent é clique humano) |
 | `bash scripts/backup.sh` · `bash scripts/restore.sh --verificar` | backup e ensaio de restore |
-| `docker compose run --rm chatwoot-seed` | re-semeia canais e configs (idempotente) |
+| `docker compose run --rm chatwoot-seed` | re-semeia canais, atributos, labels e respostas rápidas (idempotente) |
+| `bash scripts/verificar-operacao.sh` | invariantes da operação (EPIC-6) |
+| `bash scripts/criar-agente.sh --nome N --email E --inbox "E-mail"` · `--listar` | põe alguém para atender |
+| `bash scripts/monitorar-canais.sh --simular` | sonda de saúde dos canais (no cron, avisa no sino do Nexus) |
+| `bash scripts/retencao-conversas.sh --simular` | expurgo LGPD (simulado) |
 | `SMOKE_EU_SEI_O_QUE_ESTOU_FAZENDO=1 bash scripts/smoke-test.sh` | (dev) semeia, reinicia, prova persistência |
 
 ## Documentação
@@ -121,7 +134,7 @@ Compose v2. **Só isso.** Imagem do Chatwoot **sempre com tag fixa** — `latest
 ## Desenvolvimento
 
 **EPIC-1 bloqueia tudo**; os canais podem correr em paralelo depois dele; a Operação (EPIC-6) fecha
-o MVP. Não há código de aplicação neste repo — o Chatwoot é imagem oficial sem fork (AD-7). O que
+o MVP — **e fechou em 2026-09-03**. Não há código de aplicação neste repo — o Chatwoot é imagem oficial sem fork (AD-7). O que
 existe é infra, scripts de operação e um seed em Ruby.
 
 Comandos do Claude Code (em `.claude/commands/`):

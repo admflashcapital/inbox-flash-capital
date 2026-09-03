@@ -168,6 +168,25 @@ Mapa de camadas → responsabilidade:
   diferentes que precisam bater — `verificar-canal-oficial.sh` cobra as 8 definições ao vivo, mas
   nada cobra o lado Python. Mexeu em `CHAVES`, mexa no seed no mesmo dia.
 
+### AD-14 — Quem restringe acesso é a inbox, não o papel `[MEDIDO 2026-09-03]`
+- **Binds:** FR-15, STORY-6.1, STORY-6.3, NFR de privacidade
+- **Prevents:** prometer no gate um controle de acesso que o Community Edition não tem.
+- **O fato medido:** o CE tem **dois** papéis, `agent` e `administrator`
+  (`AccountUser` enum). `custom_roles` é `premium: true, enabled: false` e o modelo **não existe na
+  imagem** — não é configuração faltando, é código ausente. Ligar exigiria fork, que o AD-7 proíbe.
+- **A consequência que ninguém pode ignorar:** o CPF/CNPJ é atributo da **conversa**, e
+  `CustomAttributeDefinitionPolicy` libera para `administrator? || agent?`. Portanto **quem consegue
+  abrir a conversa vê o documento.** Não há "agente que atende sem ver o CPF".
+- **Rule:** o escopo de um agente é a lista de `inbox_members`, e só. Um agente entra **apenas** nas
+  inboxes de que precisa (`scripts/criar-agente.sh --inbox`). Agente sem inbox nenhuma vê uma tela
+  vazia; agente em todas vê todo documento carimbado. `verificar-operacao.sh` cobra os dois extremos.
+- **O que sobra de controle real:** listagem e abertura de conversa por `inbox_members`
+  (`User#assigned_inboxes` → `InboxPolicy::Scope` → `ConversationFinder`); exclusão de conversa
+  restrita a administrador (`ConversationPolicy#destroy?`); telas de configuração escondidas de quem
+  não é admin. **Não há trilha de auditoria** (`audit_logs` é premium): não se sabe quem leu o quê.
+- **Efeito no gate:** o enunciado do EPIC-6 pedia "acesso a CPF/CNPJ restrito por papel". Foi
+  reescrito para "restrito por inbox", que é o que existe. Procedimento em `docs/runbook-lgpd.md`.
+
 ### Diagrama de direção de dependência (quem pode depender de quem)
 
 ```mermaid
@@ -265,7 +284,9 @@ e é assim que se quer, porque um Chatwoot sem as inboxes aceitaria o espelho e 
 
 A central usa **só** o Contact/Conversation/Message do próprio Chatwoot. Não há store de identidade
 próprio: o monorepo conhece `titulo_id`, CNPJ, valor e dias de atraso **no instante do disparo** e
-carimba tudo nos `custom_attributes` da conversa em `chatwoot_mirror.py::_garantir_conversa` (AD-13).
+carimba tudo nos `custom_attributes` da conversa em `chatwoot_mirror.py::_carimbar_atributos` (AD-13)
+— etapa separada, chamada depois que a conversa está resolvida. **Não** dentro de
+`_garantir_conversa`: ele tem duas saídas, e o reuso é o caminho comum (ver a nota em AD-13).
 
 ```mermaid
 erDiagram
@@ -298,18 +319,21 @@ inbox-flash-capital/
   .env.example               # [✔] todas as chaves, valores vazios; simetria verificada nos 2 sentidos
   scripts/
     lib/env.sh               # [✔] env_get — lê UMA chave do .env sem dar `source` (segredo fora do ambiente)
-    seed/chatwoot_seed.rb    # [✔] rails runner idempotente: as 2 inboxes + installation_configs
+    seed/chatwoot_seed.rb    # [✔] rails runner idempotente: 2 inboxes, 8 atributos, 7 labels, 5 respostas rápidas, marca
     init-db/                 # [1.2] cria usuário, banco e extensões da central (AD-9)
     backup.sh  restore.sh    # [1.4] backup do par banco+anexos; restore em ambiente limpo
     smoke-test.sh            # [1.1] semeia, reinicia e prova a persistência (dev; exige opt-in)
     verificar-invariantes.sh # [1.x] falha se AD-7/8/9/10 forem violados
-    retencao-conversas.sh    # [6.3] expurgo LGPD de conversa resolvida antiga
+    retencao-conversas.sh    # [6.3] expurgo LGPD de conversa resolvida antiga (cron: domingo 04:10)
+    monitorar-canais.sh      # [6.3] 6 sinais de liveness; avisa no sino do Nexus (cron: de hora em hora)
+    criar-agente.sh          # [6.1] põe alguém para atender; a senha nunca passa por argv nem env
+    verificar-operacao.sh    # [6.x] papéis, labels, respostas rápidas, janela de 24h, crons
     conectar-twilio.sh       # [3.1] --status e --templates (a inbox já nasce do seed)
     conectar-gmail.sh        # [4.1] --status e --url (o consent do Google é clique humano)
     verificar-canal-oficial.sh  # [3.1] janela 24h, templates, AD-6, RELAY_TOKEN, nada fora da loopback
     verificar-canal-email.sh    # [4.1] provider, IMAP, refresh_token, job do Sidekiq, installation_configs
     backfill-email.sh        # [4.1] recupera e-mail perdido em janela de queda do poller
-  docs/                      # product-brief, prd, architecture, epics + runbooks
+  docs/                      # product-brief, prd, architecture, epics + runbooks (inclui runbook-operacao e runbook-lgpd)
   .claude/                   # scaffold de dev: hooks, comandos, memories, skills
   CLAUDE.md  PROGRESS.md  README.md
 ```
@@ -327,6 +351,8 @@ inbox-flash-capital/
 | WhatsApp Oficial (FR-7, FR-8) | Twilio → Chatwoot; monorepo push | AD-4, AD-6 |
 | E-mail (FR-9, FR-10) | Gmail → Chatwoot | AD-4, AD-3 |
 | ~~Enriquecimento (FR-11..14)~~ | **anulado** — `chatwoot_mirror.py` do monorepo carimba no disparo | **AD-13** |
+| Janela de 24h (FR-7) | Chatwoot **nativo**, e só porque `medium: whatsapp` — a UI fecha o editor e oferece os templates. Sem defesa server-side: quem posta pela API checa antes | AD-7 |
+| Acesso a documento (NFR privacidade) | por **inbox**, nunca por papel | **AD-14** |
 | Operação (FR-15, FR-16) | Chatwoot nativo | AD-7 |
 
 ## Deferred

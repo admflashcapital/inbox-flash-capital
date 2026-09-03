@@ -1,19 +1,24 @@
 # Convenções — Inbox Flash Capital
 
-> **Escopo: 16 stories**, nos épicos 1, 3, 4 e 6. `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-13).
+> **Escopo: 19 stories** no inventário, das quais **11 vivas** (épicos 1, 3, 4 e 6) — os épicos 2 e 5 foram cancelados. `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-13).
 >
 > Não há Python neste repo. Bash em `scripts/` (com `scripts/lib/env.sh` para ler o `.env` sem `source`) e um seed Ruby em `scripts/seed/`, idempotente por contrato.
 
 
 ## Chatwoot (dicionário fechado — a consistência é o produto)
 
-- **Labels:** kebab-case, **só** as do Glossário do PRD. **Sem sinônimos.**
-  `lead-frio` · `lead-qualificado` · `cliente-ativo` · `em-cobranca` · `regua-etapa-N` ·
-  `inadimplente` · `nao-identificado`
-  Label nova = atualizar o Glossário em `docs/prd.md` **primeiro**. Sinônimo solto mata o filtro.
+- **Labels:** kebab-case, **só** as do Glossário do PRD, e **todas manuais** — ninguém empurra label
+  para a central (o AD-13 carimba atributos; o Sync foi cancelado).
+  `promessa-pagamento` · `negociacao` · `contestacao` · `aguardando-comprovante` ·
+  `contato-errado` · `sem-retorno` · `escalar-alcada`
+  Critério: a label descreve o que a **conversa** apurou, nunca o estado do **título** — esse é do
+  monorepo (AD-1). Label nova = atualizar o Glossário em `docs/prd.md` **e** o seed, nesta ordem.
+  Sinônimo solto mata o filtro. ⚠️ O model força minúsculas, recusa espaço, e `show_on_sidebar` é
+  nullable sem default: não setar deixa a label invisível na barra lateral.
 - **Atributos custom:** snake_case. Quem os grava é o **monorepo**, no instante do disparo
   (AD-13) — a central não os deriva de nada:
-  `titulo_id` · `cnpj` · `valor_em_aberto` · `dias_atraso`
+  `titulo_id` · `cnpj` · `cedente` · `numero_nf` · `data_vencimento` · `valor_em_aberto` ·
+  `dias_atraso` · `link_boleto`
 - **Nomes de inbox:** fixos — `WhatsApp Oficial` · `E-mail`
 
 ## Dados e formatos
