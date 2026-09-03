@@ -86,6 +86,23 @@ else
   log("  bash scripts/conectar-gmail.sh --url")
 end
 
+# ── Atribuição: MANUAL, por decisão (STORY-6.2) ────────────────────
+# O Chatwoot cria inbox com `enable_auto_assignment = true` por default — e esse
+# flag MENTE enquanto não houver membro: `available_agents` é a interseção de
+# `inbox_members` com agentes ONLINE, e o `AutoAssignment::AssignmentService`
+# devolve 0 de cara quando a lista é vazia. Ficar `true` sem membro é a tela
+# dizer que distribui quando não distribui.
+#
+# Com um operador só, round robin é ruído. Então o flag passa a dizer a verdade.
+# Ligar depois é trocar este `false` e povoar `inbox_members` — lembrando que o
+# `periodic_assignment_job` roda `*/30`: a atribuição automática leva ATÉ 30 min.
+conta.inboxes.each do |ibx|
+  next unless ibx.enable_auto_assignment?
+
+  ibx.update!(enable_auto_assignment: false)
+  log("inbox '#{ibx.name}': atribuição automática desligada — a fila é manual")
+end
+
 # ── Credenciais OAuth no installation_configs ──────────────────────
 # A env var sozinha NÃO basta: o Chatwoot semeia essas linhas VAZIAS e o
 # GlobalConfigService devolve o vazio do banco, não o ENV. Sem isto, a URL de
@@ -106,6 +123,26 @@ end
     log("#{chave} gravado no installation_configs")
   end
 end
+# ── Identidade da instalação (STORY-6.1) ───────────────────────────
+# Sem isto a central se apresenta como "Chatwoot" na aba do navegador, no
+# título das telas e no rodapé do que ela manda. Quem atende é a Flash Capital.
+# Valor literal, não `.env`: é identidade do produto, não configuração de
+# ambiente — e mudar por ambiente só criaria divergência entre dev e produção.
+{
+  "INSTALLATION_NAME" => "Flash Capital",
+  "BRAND_NAME" => "Flash Capital"
+}.each do |chave, valor|
+  cfg = InstallationConfig.find_or_initialize_by(name: chave)
+  if cfg.value == valor
+    log("#{chave} já é '#{valor}'")
+  else
+    cfg.value = valor
+    cfg.locked = false
+    cfg.save!
+    log("#{chave} = '#{valor}'")
+  end
+end
+
 GlobalConfig.clear_cache if defined?(GlobalConfig) && GlobalConfig.respond_to?(:clear_cache)
 
 # ── Atributos de conversa que o espelho carimba (AD-13) ────────────
@@ -141,6 +178,73 @@ ATRIBUTOS_DA_CONVERSA.each do |a|
   d.attribute_description = a[:desc]
   d.save!
   log("atributo de conversa '#{a[:chave]}' #{novo_registro ? 'criado' : 'já existia'} (#{a[:tipo]})")
+end
+
+# ── Labels (STORY-6.2) — dicionário fechado, aplicação MANUAL ──────
+# NINGUÉM empurra label para a central. O AD-13 carimba ATRIBUTOS no instante do
+# disparo, e o Serviço de Sync — que aplicaria labels de segmento — foi
+# cancelado (EPIC-5). Então toda label aqui é marcação da atendente.
+#
+# O critério que define o dicionário: label descreve o que a CONVERSA apurou,
+# nunca o estado do TÍTULO. Estado de título é do monorepo (AD-1); repetir aqui
+# criaria duas verdades que divergem no primeiro pagamento não conciliado.
+#
+# ⚠️ `Label#title` é forçado a minúsculas e RECUSA espaço (validação do model).
+# ⚠️ `show_on_sidebar` é nullable SEM default: não setar = a label existe, é
+#    aplicável, e NÃO aparece na barra lateral. Mesma classe de falha silenciosa
+#    que o AD-13 (atributo sem definição).
+# Renomear depois dispara `Labels::UpdateJob` para reescrever todas as taggings:
+# acerte o dicionário na primeira vez.
+LABELS = [
+  { titulo: "promessa-pagamento",     cor: "#2e7d32", desc: "O sacado se comprometeu com uma data" },
+  { titulo: "negociacao",             cor: "#1f93ff", desc: "Pede parcelamento ou desconto — decisão não é da atendente" },
+  { titulo: "contestacao",            cor: "#ef6c00", desc: "Contesta mercadoria, nota ou valor. Vai para o cedente antes de cobrar de novo" },
+  { titulo: "aguardando-comprovante", cor: "#6a1b9a", desc: "Diz que pagou; falta o comprovante para conferir com a conciliação" },
+  { titulo: "contato-errado",         cor: "#607d8b", desc: "Quem respondeu não é o responsável financeiro — o contato precisa ser trocado na rede" },
+  { titulo: "sem-retorno",            cor: "#f9a825", desc: "Mandamos e não responde. É o que justifica escalar o canal" },
+  { titulo: "escalar-alcada",         cor: "#c62828", desc: "Precisa de decisão acima da operação (recompra, protesto, jurídico)" }
+]
+
+LABELS.each do |l|
+  lbl = Label.find_or_initialize_by(title: l[:titulo], account_id: conta.id)
+  novo_registro = lbl.new_record?
+  lbl.description = l[:desc]
+  lbl.color = l[:cor]
+  lbl.show_on_sidebar = true
+  lbl.save!
+  log("label '#{l[:titulo]}' #{novo_registro ? 'criada' : 'já existia'}")
+end
+
+# ── Respostas rápidas (STORY-6.2) ──────────────────────────────────
+# Sem variável de propósito. O Chatwoot substitui `{{contact.name}}` no momento
+# em que a atendente insere a resposta pelo `/` (`editorHelper.js:489`), então o
+# cliente nunca receberia a chave crua — mas o NOME do contato aqui vem do canal
+# e é heterogêneo (medido: "comercial", "Financeiro lokaforte", um rótulo de
+# número). "Olá comercial," sai pior do que não saudar.
+#
+# O que NÃO entra aqui: dados de pagamento (chave PIX, conta). São dado de
+# negócio, mudam sem aviso, e uma chave errada versionada no repo vira dinheiro
+# no lugar errado. Essa resposta o operador cria na tela — ver
+# docs/runbook-operacao.md.
+RESPOSTAS_RAPIDAS = [
+  { atalho: "prazo",
+    texto: "Perfeito, anotei o pagamento para o dia informado. Vou registrar aqui e retorno se houver qualquer divergência na baixa." },
+  { atalho: "comprovante",
+    texto: "Consegue nos enviar o comprovante por aqui, por favor? Com ele conseguimos dar baixa hoje mesmo e encerrar a cobrança." },
+  { atalho: "2via",
+    texto: "Claro, já providencio a segunda via do boleto atualizado e envio por aqui em seguida." },
+  { atalho: "responsavel",
+    texto: "Consegue nos indicar o contato do setor financeiro responsável por este pagamento? Assim falamos direto com quem resolve e paramos de incomodar você." },
+  { atalho: "encerrar",
+    texto: "Pagamento confirmado e baixado aqui. Obrigado pelo retorno — qualquer coisa, é só chamar por este mesmo número." }
+]
+
+RESPOSTAS_RAPIDAS.each do |r|
+  cr = CannedResponse.find_or_initialize_by(short_code: r[:atalho], account_id: conta.id)
+  novo_registro = cr.new_record?
+  cr.content = r[:texto]
+  cr.save!
+  log("resposta rápida '/#{r[:atalho]}' #{novo_registro ? 'criada' : 'já existia'}")
 end
 
 log("pronto.")
