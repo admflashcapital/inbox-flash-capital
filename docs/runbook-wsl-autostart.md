@@ -128,3 +128,34 @@ tail -3 backups/monitor-canais.log
 ```
 
 É o item **R5** do plano de resiliência: R1 sem esse teste é suposição, não disponibilidade.
+
+## ⚠️ A tarefa dispara no LOGON — e só
+
+Esta é a limitação que mais importa saber, porque ela falha **em silêncio**.
+
+O gatilho é `-AtLogOn`. Se a VM do WSL cair no meio do dia — um `wsl --shutdown`, um
+`docker` que trava, um upgrade —, a âncora morre junto e **não volta sozinha**: não há novo
+logon. A partir daí a máquina fica num estado enganoso — de pé, containers rodando, tudo
+verde — mas segurada apenas pelo terminal que estiver aberto. Fechou o terminal, cai tudo:
+os 25 containers e os cinco crons.
+
+**Medido em 2026-09-04.** A tarefa foi criada e provada de manhã; à tarde a VM tinha 5 h de
+uptime e **zero** âncora. Só apareceu porque alguém foi olhar.
+
+**Por isso o `monitorar-canais.sh` ganhou o sinal 7**, que roda de hora em hora e avisa no
+sino do Nexus: `pgrep -x sleep` vazio ⇒ falha. Ele **não** cobre a VM já desligada — aí nada
+roda, inclusive ele. Cobre a janela em que ela está viva e frágil, que é quando ainda dá
+para agir.
+
+Para religar sem reiniciar o Windows, no PowerShell:
+
+```powershell
+Start-ScheduledTask -TaskName "WSL-Always-On"
+```
+
+E para conferir de dentro do Linux:
+
+```bash
+pgrep -x sleep && echo "ancorada" || echo "SEM ÂNCORA — a VM morre com o último terminal"
+```
+

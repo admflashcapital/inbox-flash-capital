@@ -50,9 +50,10 @@ IDADE_MAX_IMAP_S=180
 ESTADO_ARQ="${RAIZ}/backups/monitor-canais.estado"
 
 FALHAS=()
+SINAIS_OK=0
 log() { echo "[monitor] $1"; }
 falha() { echo "[monitor] ✗ $1"; FALHAS+=("$1"); }
-ok() { echo "[monitor] ✓ $1"; }
+ok() { echo "[monitor] ✓ $1"; SINAIS_OK=$((SINAIS_OK + 1)); }
 
 # ── 1. A central está de pé e serve ────────────────────────────────
 LOCAL="$(curl -s --max-time 10 "http://127.0.0.1:${PORTA}/api" 2>/dev/null)"
@@ -161,6 +162,23 @@ else
   falha "o cron do expurgo LGPD sumiu — a central passa a guardar conversa de cobrança para sempre"
 fi
 
+# ── 7. A VM do WSL está ancorada, ou depende de um terminal aberto? ─
+# A VM do WSL2 desliga quando o ÚLTIMO processo dela termina: fechar o terminal
+# é desligar o servidor. A tarefa WSL-Always-On do Windows segura isso com um
+# `sleep infinity` — mas ela dispara **no logon**, e só. Um `wsl --shutdown` no
+# meio do dia derruba a âncora e ela NÃO volta sozinha: a máquina segue de pé
+# enquanto houver um terminal aberto e morre silenciosamente quando ele fechar.
+# Medido em 2026-09-04: foi exatamente o que aconteceu, e só apareceu porque
+# alguém foi olhar. Este sinal é o "alguém foi olhar" virando automático.
+#
+# Ele NÃO cobre a VM já desligada — aí ninguém roda nada, inclusive isto. Cobre
+# a janela em que ela está viva e frágil, que é quando ainda dá para agir.
+if pgrep -x sleep >/dev/null 2>&1; then
+  ok "VM do WSL ancorada (a âncora do WSL-Always-On está viva)"
+else
+  falha "a VM do WSL NÃO está ancorada: ela morre quando o último terminal fechar, e leva os 25 containers e todos os crons junto. No PowerShell: Start-ScheduledTask -TaskName 'WSL-Always-On' — ver docs/runbook-wsl-autostart.md"
+fi
+
 # ── Veredito, e o aviso só quando o estado MUDA ────────────────────
 echo
 if [ "${#FALHAS[@]}" -eq 0 ]; then
@@ -168,7 +186,7 @@ if [ "${#FALHAS[@]}" -eq 0 ]; then
   RESUMO="Todos os sinais da central de atendimento voltaram ao normal."
   TIPO="success"
   TITULO="Central de atendimento normalizada"
-  echo "[monitor] ✅ 6 sinais, nenhuma falha."
+  echo "[monitor] ✅ ${SINAIS_OK} sinais, nenhuma falha."
 else
   ESTADO="$(printf '%s\n' "${FALHAS[@]}" | cksum | cut -d' ' -f1)"
   RESUMO="$(printf '%s\n' "${FALHAS[@]}" | sed 's/^/• /')"
