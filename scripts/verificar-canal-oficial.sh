@@ -148,24 +148,38 @@ case "$PUB" in
     ok "central em loopback: a proteção do /twilio/callback é topológica (sem borda para cobrar)"
     ;;
   *)
-    # O que se cobra é o EFEITO — "o anônimo não chega no controller" —, não um código
-    # específico. A borda de hoje (ngrok policy) nega com 403; a do AD-15 (Cloudflare
-    # Access Service Auth) responde 302 para o IdP, e 401 em alguns caminhos. Fixar 403
-    # faria este verificador ficar vermelho no dia da migração, com a agravante de
-    # mandar o operador subir um túnel que já não existe.
-    # 200/404/405 são os códigos do PRÓPRIO Rails: se vierem, o anônimo passou.
-    COD_CB="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${PUB}/twilio/callback" 2>/dev/null)"
-    case "$COD_CB" in
-      403)         ok "borda nega /twilio/callback na URL pública (HTTP 403 — policy do túnel)" ;;
-      302|303|401) ok "borda nega /twilio/callback na URL pública (HTTP ${COD_CB} — Access do AD-15)" ;;
-      000|"")      falha "/twilio/callback não respondeu em ${PUB} — a borda está fora do ar, não protegendo" ;;
-      *)           falha "/twilio/callback devolveu ${COD_CB} em ${PUB} — isso é resposta do próprio Rails, ou seja o anônimo CHEGOU no controller, que não valida assinatura nenhuma. Confira a policy da borda (hoje: deploy/ngrok-policy.yml; no AD-15: a App de Service Auth do Access)" ;;
-    esac
-    COD_DS="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${PUB}/twilio/delivery_status" 2>/dev/null)"
-    case "$COD_DS" in
-      403|000|"") falha "/twilio/delivery_status devolveu ${COD_DS:-sem resposta} — a Twilio precisa alcançá-lo, senão volta o 21609 e a atendente não responde" ;;
-      *)          ok "/twilio/delivery_status alcançável (HTTP ${COD_DS}) — sem 21609 no envio pela tela" ;;
-    esac
+    # ⚠️ PRIMEIRO prove que o túnel está VIVO, e só então interprete os códigos.
+    # Um túnel ngrok morto devolve **404**, exatamente igual ao 404 legítimo do
+    # Rails na rota POST-only. Sem esta pré-condição, os dois testes abaixo
+    # mentem quando o túnel cai: o callback vira "o anônimo chegou no Rails" e o
+    # delivery_status vira "alcançável" — os dois falsos, e o segundo é falso
+    # VERDE, que é o pior tipo. Medido em 2026-09-04, num reboot real.
+    # A prova de vida é a mesma do monitorar-canais.sh: o /api público tem de
+    # devolver o MESMO `version` que o /api local.
+    PORTA_LOCAL="$(env_get CHATWOOT_HOST_PORT)"; PORTA_LOCAL="${PORTA_LOCAL:-3001}"
+    V_LOCAL="$(curl -s --max-time 10 "http://127.0.0.1:${PORTA_LOCAL}/api" 2>/dev/null | jq -r '.version // empty' 2>/dev/null)"
+    V_PUB="$(curl -s --max-time 10 "${PUB}/api" 2>/dev/null | jq -r '.version // empty' 2>/dev/null)"
+    if [ -z "$V_PUB" ] || [ "$V_PUB" != "$V_LOCAL" ]; then
+      falha "a URL pública não chega nesta central (${PUB}) — túnel caído ou apontando para outro lugar. Sem ela a atendente não responde pelo WhatsApp (21609), e NÃO dá para avaliar a borda: um ngrok morto devolve 404 igual ao Rails. Suba os túneis: cd ../monorepo-flash-capital && bash scripts/tuneis-manha.sh"
+    else
+      # Daqui para baixo o túnel está provado vivo, então o código HTTP é do que
+      # está atrás dele. Cobra-se o EFEITO — "o anônimo não chega no controller" —
+      # e não um código fixo: a borda de hoje (ngrok policy) nega com 403; a do
+      # AD-15 (Cloudflare Access Service Auth) responde 302 para o IdP.
+      # 200/404/405 são resposta do PRÓPRIO Rails: se vierem, o anônimo passou.
+      COD_CB="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${PUB}/twilio/callback" 2>/dev/null)"
+      case "$COD_CB" in
+        403)         ok "borda nega /twilio/callback na URL pública (HTTP 403 — policy do túnel)" ;;
+        302|303|401) ok "borda nega /twilio/callback na URL pública (HTTP ${COD_CB} — Access do AD-15)" ;;
+        000|"")      falha "/twilio/callback não respondeu em ${PUB} — a borda está fora do ar, não protegendo" ;;
+        *)           falha "/twilio/callback devolveu ${COD_CB} com o túnel VIVO — é resposta do próprio Rails, ou seja o anônimo CHEGOU no controller, que não valida assinatura nenhuma. Confira a policy da borda (hoje: deploy/ngrok-policy.yml; no AD-15: a App de Service Auth do Access)" ;;
+      esac
+      COD_DS="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "${PUB}/twilio/delivery_status" 2>/dev/null)"
+      case "$COD_DS" in
+        403|000|"") falha "/twilio/delivery_status devolveu ${COD_DS:-sem resposta} — a Twilio precisa alcançá-lo, senão volta o 21609 e a atendente não responde" ;;
+        *)          ok "/twilio/delivery_status alcançável (HTTP ${COD_DS}) — sem 21609 no envio pela tela" ;;
+      esac
+    fi
     ;;
 esac
 
