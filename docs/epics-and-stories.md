@@ -3,7 +3,7 @@ stepsCompleted: [step-01, step-02, step-03, step-04]
 inputDocuments: [docs/product-brief.md, docs/prd.md, docs/architecture.md]
 title: Inbox Flash Capital — Epic Breakdown
 created: 2026-07-13
-updated: 2026-07-13
+updated: 2026-09-04
 phase: 3-solutioning
 skill: bmad-create-epics-and-stories
 ---
@@ -46,6 +46,12 @@ A numeração tem lacunas em **2** e **5**, e elas não são reaproveitadas: os 
 | FR-10 | 4.2 |
 | FR-15 | 6.1 |
 | FR-16 | 6.2 |
+| *(sem FR — NFRs)* | 6.3 — observabilidade, LGPD e retenção nascem dos **NFRs** acima, não de um FR |
+
+**FRs anulados, e por quê:** FR-4, FR-5, FR-6 caíram com o **EPIC-2** (canal de prospecção; a Evolution
+saiu dos dois repos — AD-11) · FR-11..FR-14 caíram com o **EPIC-5** (Serviço de Sync — AD-13) · e a
+"unificação automática sob o mesmo contato" foi **retirada** por ter nascido como um segundo "FR-10"
+(`docs/prd.md` §4.4).
 
 ## Epic List
 
@@ -71,7 +77,17 @@ So that a plataforma esteja disponível sem passos manuais frágeis.
 **Given** o repositório `inbox-flash-capital` com `compose.yaml` e `.env` preenchido
 **When** executo `docker compose up`
 **Then** sobem os serviços web, Sidekiq, Postgres (com pgvector) e Redis
-**And** a UI do Chatwoot responde em HTTPS num domínio da Flash com certificado válido.
+**And** a UI do Chatwoot responde em **`http://127.0.0.1:${CHATWOOT_HOST_PORT}`** — e **só** ali.
+
+> ⚠️ **Este critério foi reescrito em 2026-09-04.** Ele pedia "HTTPS num domínio da Flash com
+> certificado válido", o que os **AD-10** (nada publica além da loopback) e **AD-11** (a central nunca
+> é site público) passaram a proibir, e que o as-built nunca fez — `FORCE_SSL=false` é o valor
+> **correto**, porque quem termina o TLS é a **borda** (AD-8), não o Chatwoot. O gate do EPIC-1 foi
+> dado como PASS contra o comportamento real; o texto é que ficou para trás. O HTTPS num nome estável
+> chega pelo **AD-15**, na borda, sem mudar nada aqui dentro.
+
+**And** a rede externa `flash-espelho` existe (`docker network create flash-espelho`) — o compose a
+declara `external`, e sem ela o `up` aborta antes de subir container nenhum.
 
 **Given** a stack no ar
 **When** reinicio os containers
@@ -168,7 +184,7 @@ So that disparo e resposta fiquem na mesma thread.
 
 ## Epic 4: Canal E-mail (Gmail)
 
-Conectar uma caixa Gmail de atendimento como inbox de e-mail, com as threads unificadas ao mesmo contato dos canais de WhatsApp.
+Conectar uma caixa Gmail de atendimento como inbox de e-mail. A unificação **automática** com o contato do WhatsApp era do Serviço de Sync e caiu com ele (AD-13): sem chave em comum, o merge é **manual** na tela. Ver `docs/prd.md` §4.4.
 
 ### Story 4.1: Inbox de e-mail espelhada
 
@@ -233,9 +249,11 @@ So that a equipe atenda de um lugar só com acesso adequado.
 **When** um agente autorizado acessa a central
 **Then** ele vê as inboxes numa interface única.
 
-**Given** papéis definidos (admin/agente)
-**When** um agente sem permissão tenta acessar uma inbox restrita
-**Then** o acesso é negado conforme o papel.
+**Given** um agente vinculado a um subconjunto das inboxes (`inbox_members`)
+**When** ele tenta listar ou abrir uma conversa de inbox em que não está
+**Then** o acesso é negado — **pela inbox, não pelo papel** (AD-14). O CE tem só `agent` e
+`administrator`; `custom_roles` é premium e o modelo não existe na imagem. Um agente sem inbox
+nenhuma vê a tela vazia; um agente em todas vê todo documento carimbado.
 
 ### Story 6.2: Atribuição, labels manuais e respostas rápidas
 
@@ -247,7 +265,9 @@ So that eu conduza o atendimento com agilidade.
 
 **Given** uma conversa
 **When** eu assumo ou atribuo a outro agente
-**Then** a atribuição (manual e automática por inbox) é aplicada.
+**Then** a atribuição **manual** é aplicada — e a **automática fica desligada por decisão** nas duas
+inboxes, porque com uma pessoa atendendo ela distribuiria de si para si. `verificar-operacao.sh`
+cobra `enable_auto_assignment = false`.
 
 **Given** a composição de resposta
 **When** uso uma resposta rápida configurada
@@ -272,7 +292,10 @@ So that a central seja auditável e conforme.
 
 **Given** a política de retenção definida
 **When** verifico a configuração
-**Then** a retenção de conversas está aplicada e o acesso a dados sensíveis (CPF/CNPJ) é restrito por papel.
+**Then** a retenção de conversas está aplicada **e agendada**, e o acesso a CPF/CNPJ é restrito
+**por inbox** (AD-14) — no CE o documento é atributo da **conversa** e a policy o libera para
+`administrator? || agent?`, então quem abre a conversa vê o documento. Não existe "agente que atende
+sem ver o CPF", e **não há trilha de auditoria** (`audit_logs` é premium).
 
 ---
 

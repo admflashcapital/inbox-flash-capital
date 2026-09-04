@@ -1,6 +1,6 @@
 # Convenções — Inbox Flash Capital
 
-> **Escopo: 19 stories** no inventário, das quais **11 vivas** (épicos 1, 3, 4 e 6) — os épicos 2 e 5 foram cancelados. `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-13).
+> **Escopo: 19 stories** no inventário, das quais **11 vivas** (épicos 1, 3, 4 e 6) — os épicos 2 e 5 foram cancelados. `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-15).
 >
 > Não há Python neste repo. Bash em `scripts/` (com `scripts/lib/env.sh` para ler o `.env` sem `source`) e um seed Ruby em `scripts/seed/`, idempotente por contrato.
 
@@ -28,22 +28,17 @@
   a conversão E.164 ↔ shape do Twenty não é responsabilidade da central.
 - **Documento:** **só dígitos** para casar (CPF/CNPJ sem máscara).
 - **Timestamps:** UTC.
-- **Link reverso:** ids de origem guardados como atributos `source_*_id`.
-
-## Python (scripts de operação)
-
-- `ruff format` + `ruff check --fix` (hook automático em Write/Edit de `.py`)
-- Type hints e docstrings Google em toda função pública
-- Testes: `pytest` + `httpx` (simular webhooks), mocks para APIs externas
-- Alinhado ao monorepo: Python 3.12 + FastAPI + httpx
-- **Idempotência é requisito, não zelo:** o push é upsert por identidade; o fan-out é at-least-once,
-  então o mesmo evento **vai** chegar duas vezes. Retry com backoff exponencial em falha transitória.
 
 ## Infra
 
 - `compose.yaml` + `.env.example` + `scripts/`
 - Imagem do Chatwoot **sempre com tag explícita** — `latest` é proibido (AD-7/FR-2)
-- Upgrade: bump da tag + migrações, **validado em staging antes de produção**
+- **O seed é idempotente por contrato:** rodar duas vezes seguidas cria **zero** objetos. Toda
+  extensão dele entra por `find_or_initialize_by`/`find_or_create_by`, nunca por `create!` solto —
+  o `up` roda o seed toda vez, e um `create!` derrubaria a subida inteira no segundo boot.
+- Upgrade: bump da tag + migrações, **validado em staging antes de produção** — ⚠️ **staging ainda não
+  existe** (dívida rastreada no `PROGRESS.md`); até existir, o upgrade é feito em dev e o risco é
+  assumido explicitamente, não esquecido.
 
 ## Variáveis de ambiente
 

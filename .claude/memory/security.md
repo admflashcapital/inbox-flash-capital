@@ -1,6 +1,6 @@
 # Segurança — Regras Invioláveis — Inbox Flash Capital
 
-> **Escopo: 19 stories** no inventário, das quais **11 vivas** (épicos 1, 3, 4 e 6) — os épicos 2 e 5 foram cancelados. `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-14).
+> **Escopo: 19 stories** no inventário, das quais **11 vivas** (épicos 1, 3, 4 e 6) — os épicos 2 e 5 foram cancelados. `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-15).
 >
 > A proteção do `/twilio/callback` vive na **borda**: `deploy/ngrok-policy.yml` devolve **403** na URL pública, e `verificar-canal-oficial.sh` bate nela ao vivo. Deixou de ser topológica quando a central passou a ter `CENTRAL_URL_PUBLICA` (AD-11.1). Todo ingresso novo tem de trazer esse gate — o `Twilio::CallbackController` não valida assinatura — e **cobrar a identidade do relay na entrada** (`X-Relay-Token` ou o Service Auth da Cloudflare). Com o monorepo no Railway o relay vem de fora, então isso deixou de ser pré-condição futura: sem ele, ou o espelho morre, ou o path fica aberto para forjar mensagem. `/twilio/delivery_status` fica **aberto de propósito**: é a Twilio que o chama, e sem ele o envio pela tela morre com 21609. Medido: ela aceita que ele devolva 404.
 

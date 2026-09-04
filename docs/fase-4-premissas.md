@@ -239,7 +239,9 @@ Ordem por dependência, não por dificuldade. Nada disto está iniciado.
 | 1.2 | ⬜ instalar o `cloudflared` na máquina e mapear `inbox.` e `n8n.` | inbox + crm | 1.1 |
 | 1.3 | ⬜ traduzir `deploy/ngrok-policy.yml` em Custom Rules + Transform Rules (a sintaxe morre, **as regras vão**) | inbox | 1.1 |
 | 1.4 | ⬜ **`/twilio/delivery_status` → Bypass** (a Twilio **não** manda header: Service Auth ali devolve 403 e traz o 21609 de volta) | inbox | 0.3, 1.3 |
-| 1.5 | ⬜ **`/twilio/callback` e `/api/*` → Service Auth** para o espelho — o outbound passa por `/api/v1/...`, não só pelo callback | inbox | 0.3, 1.3 |
+| 1.5 | ⬜ **`/twilio/callback` → Service Auth** (só o espelho passa) | inbox | 0.3, 1.3 |
+| 1.5b | ⬜ **`/api/*` → DUAS políticas na mesma app: Service Auth (espelho) + Allow (equipe)**. 🚨 Service Auth sozinho aqui **tranca a equipe para fora**: a tela do Chatwoot é uma SPA e faz todo o trabalho por `/api/v1/...` — a atendente logaria e veria a tela vazia. Ver `docs/runbook-cloudflare.md` §2.2 | inbox | 0.3, 1.3 |
+| 1.5c | ⬜ **`GET /api` (sem `/v1`) → Bypass** — é a prova de vida do `monitorar-canais.sh`, feita **sem credencial**; sob Access ele falha para sempre. Devolve só versão e status de fila/banco, nada de conversa (não fere o AD-11) | inbox | 1.5b |
 | 1.6 | ⬜ teto de tamanho de corpo (requisito 4, nunca coberto) | inbox | 1.3 |
 | 1.7 | ⬜ restrição de path do n8n: `^/webhook(-test)?/` + catch-all 403 | crm | 1.1 |
 

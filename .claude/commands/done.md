@@ -29,8 +29,9 @@ Para encerrar a STORY-$ARGUMENTS:
 
 4. **Commit (uma story = um commit):**
    `git add -A && git commit -m "feat(EPIC-N): STORY-$ARGUMENTS — <descrição>"`
-   O hook `commit-guard.sh` roda gitleaks + pytest automaticamente — não commita com secret ou
-   teste falhando.
+   O hook `commit-guard.sh` roda **`gitleaks protect --staged`** e bloqueia o commit se achar
+   segredo. Ele **não roda testes** — este repo não tem código de aplicação; o verde é o
+   verificador do passo 1, e você é quem o roda.
 
 5. Pegue o hash (`git rev-parse --short HEAD`) e preencha a coluna **Commit** da story no
    `PROGRESS.md` (entra no próximo commit).

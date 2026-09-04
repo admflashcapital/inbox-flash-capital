@@ -1,6 +1,6 @@
 # Skills — roteador de acionamento por estágio — Inbox Flash Capital
 
-> **Escopo: 19 stories** no inventário, das quais **11 vivas** (épicos 1, 3, 4 e 6) — os épicos 2 e 5 foram cancelados. `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-13).
+> **Escopo: 19 stories** no inventário, das quais **11 vivas** (épicos 1, 3, 4 e 6) — os épicos 2 e 5 foram cancelados. `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-15).
 >
 
 > Carregado pelo `/story`. Ao iniciar uma story, acione as skills da linha do épico dela **+** as
@@ -29,7 +29,6 @@
 
 | Tarefa | Skill |
 |---|---|
-| Escrever/ajustar testes Python (pytest, fixtures, mocks de API externa) | `python-testing-patterns` |
 | Desenhar contrato de webhook ou de chamada à API da central | `api-design-principles` |
 | Mexer em `.env`, token, credencial de webhook | `secrets-management` |
 | Retenção, PII em log, direito de exclusão | `gdpr-data-handling` |

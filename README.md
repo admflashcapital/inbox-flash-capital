@@ -71,7 +71,7 @@ minuto com a central inalcançável é um **buraco permanente** no painel, não 
 atributo da conversa: **quem abre a conversa vê o documento** (AD-14). O que restringe um agente é a
 lista de inboxes de que ele participa — por isso `criar-agente.sh` pede `--inbox`.
 
-Detalhe completo (AD-1..AD-14, diagramas, ERD, convenções) em **`docs/architecture.md`**.
+Detalhe completo (AD-1..AD-15, diagramas, ERD, convenções) em **`docs/architecture.md`**.
 
 ## Subir o ambiente
 
@@ -79,10 +79,16 @@ O compose, o `.env` e os `scripts/` estão na raiz, então `docker compose` acha
 `-f`, sem `--env-file`.
 
 ```bash
+docker network create flash-espelho        # UMA vez por máquina — o compose a declara `external`
 cp .env.example .env                       # preencha os segredos (nunca commite o .env)
 docker compose up -d --wait                # sobe a central inteira e espera ficar saudável
 bash scripts/verificar-invariantes.sh      # tag fixa, banco isolado, nada fora de 127.0.0.1
 ```
+
+> ⚠️ **A primeira linha não é opcional.** `flash-espelho` é a rede por onde o monorepo alcança a
+> central, e o compose a declara `external: true` — sem ela o `up` aborta com
+> `network flash-espelho declared as external, but could not be found`, antes de subir qualquer
+> container. Ela sobrevive a `docker compose down -v`; só se cria de novo em máquina nova.
 
 A cadeia de boot é: `postgres`+`redis` healthy → **`chatwoot-init`** (migrações) →
 **`chatwoot-seed`** (canais e configs, idempotente) → `chatwoot-web` + `chatwoot-sidekiq`.
@@ -108,6 +114,13 @@ Compose v2. **Só isso.** Imagem do Chatwoot **sempre com tag fixa** — `latest
 | `docs/runbook-cloudflare.md` | passo a passo da Cloudflare, primeira vez — executar quando o domínio chegar |
 | `docs/plano-resiliencia.md` | queda de luz/internet/máquina: o que se perde, o que volta sozinho, o que falta construir |
 | `docs/runbook-wsl-autostart.md` | o WSL sobe com o Windows sem abrir terminal — criar, conferir e **reverter** |
+
+**Arquivo — direção medida e rejeitada, mantida para não refazer a análise:**
+
+| Doc | O que registra |
+|---|---|
+| `docs/0014-atendimento-no-monorepo-corte-chatwoot.md` | ADR **SUPERSEDED**: cortar o Chatwoot e trazer o atendimento para o monorepo. Rejeitado em 2026-09-02; o que sobreviveu virou AD-10..AD-13 |
+| `docs/epic-5-premissas.md` | medição do terreno para o **Serviço de Sync**, cancelado em 2026-09-02 (AD-13). Os números do banco continuam válidos |
 
 ## Operar
 

@@ -145,6 +145,7 @@ uma senha, um clique de consentimento e a criação da conta.
 | # | Passo | Onde |
 |---|---|---|
 | 1 | `git clone` e preencher o `.env` (incl. `CENTRAL_ACCESS_TOKEN` inventado) | shell |
+| 1b | **`docker network create flash-espelho`** — o compose a declara `external`, então sem ela o passo 2 aborta antes de subir container nenhum (`declared as external, but could not be found`). Uma vez por máquina; sobrevive ao `down -v` | shell |
 | 2 | `docker compose up -d --wait` | shell |
 | 3 | o seed não acha conta, imprime o passo 4 e **sai com 0** (não é erro) | automático |
 | 4 | criar conta + admin em `/installation/onboarding` | **navegador** |

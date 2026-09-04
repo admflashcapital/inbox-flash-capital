@@ -99,11 +99,33 @@ Conexão é **de dentro para fora**: sem port forward, sem IP fixo, sem mexer no
 **Três** aplicações. A Cloudflare avalia a mais específica primeiro:
 
 ```
-App 1  inbox.<dominio>/twilio/delivery_status  → Bypass          (a Twilio)
-App 2  inbox.<dominio>/twilio/callback         → Service Auth    (o espelho)
-       inbox.<dominio>/api/*                   → Service Auth    (o espelho)
-App 3  inbox.<dominio>                         → Allow, e-mails da equipe
+App 1  inbox.<dominio>/twilio/delivery_status  → Bypass                     (a Twilio)
+App 2  inbox.<dominio>/twilio/callback         → Service Auth               (só o espelho)
+App 3  inbox.<dominio>/api/*                   → DUAS políticas na MESMA app:
+                                                   1) Service Auth  → o espelho (headers CF-Access-Client-*)
+                                                   2) Allow         → e-mails da equipe (o NAVEGADOR)
+App 4  inbox.<dominio>                         → Allow, e-mails da equipe
 ```
+
+🚨 **`/api/*` NÃO pode ser Service Auth sozinho — isso trancaria a equipe inteira para fora.**
+A tela do Chatwoot é uma SPA: depois do login, **todo** o trabalho dela é XHR para
+`/api/v1/accounts/{id}/conversations`, `/messages`, `/labels`. Se `/api/*` só aceitar service token,
+a atendente autentica na App 4, a tela carrega **e fica vazia** — cada chamada volta 403, sem erro
+legível. É o mesmo path para dois consumidores de naturezas diferentes, e por isso ele precisa de
+**duas políticas**, não de uma. (A Cloudflare avalia as políticas de uma aplicação em ordem: a de
+Service Auth casa quando os headers vêm, a de Allow atende o resto.)
+
+🚨 **E `GET /api` (sem `/v1`) é a prova de vida do `monitorar-canais.sh`.** O sinal 2 bate em
+`${CENTRAL_URL_PUBLICA}/api` **sem credencial nenhuma** e compara o `version` com o da central local
+— é ele que pega túnel morto sem cair na armadilha do 404. Sob Access ele passa a receber o redirect
+do IdP e **falha todo hora, para sempre**. Decidir na hora de configurar, entre: (a) **Bypass** em
+`/api` exato — ele devolve só versão e status de fila/banco, nada de conversa, então não fere o
+AD-11; ou (b) ensinar o monitor a mandar os headers de Service Auth. **Escolher (a) e deixar escrito
+aqui qual foi**, porque um monitor que falha sempre é um monitor que ninguém lê.
+
+> ⚠️ **Este bloco é desenho, não medição.** Nada aqui foi exercitado numa conta Cloudflare — os dois
+> alertas acima saem da leitura do que o SPA e o monitor fazem hoje, que **está** medido. Conferir na
+> tela no dia da execução, e corrigir este runbook com o que a tela mostrar.
 
 ⚠️ **A Twilio precisa de Bypass, não de Service Auth.** Service Auth exige que o chamador mande
 `CF-Access-Client-Id` e `CF-Access-Client-Secret`; a configuração de StatusCallback da Twilio aceita
@@ -114,11 +136,13 @@ envio com **21609** → a atendente para de responder pelo WhatsApp. Se quiser e
 ⚠️ **O espelho não usa só `/twilio/callback`.** O outbound passa por `_get`/`_post` em
 `/api/v1/accounts/{id}/contacts/search`, `/conversations` e nos atributos
 (`chatwoot_mirror.py::_garantir_contato`, `_garantir_conversa`, `_carimbar_atributos`). Deixar `/api/*`
-sob a App 3 faz o espelho receber a **página de login** e **nenhum disparo é espelhado** — em silêncio,
-porque `_get` só chama `raise_for_status()` e a exceção do `.json()` cai no `except` largo.
+só com a política de e-mail da equipe faz o espelho receber a **página de login** e **nenhum disparo é
+espelhado** — em silêncio, porque `_get` só chama `raise_for_status()` e a exceção do `.json()` cai no
+`except` largo.
 
-O espelho **pode** mandar os headers de Service Auth: é código nosso. Por isso ele é Service Auth e a
-Twilio é Bypass.
+O espelho **pode** mandar os headers de Service Auth: é código nosso — por isso ele é Service Auth, e a
+Twilio, que só aceita uma URL sem headers, é Bypass. O navegador da atendente **não pode** mandá-los, e
+é por isso que a mesma app precisa da segunda política.
 
 ### 2.3 WAF → **Custom rules** — o que o Access não faz
 

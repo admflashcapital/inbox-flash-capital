@@ -2,8 +2,15 @@
 >
 > **Este ADR foi desconsiderado por decisão do Vitor.** O Chatwoot **permanece** como painel de
 > acompanhamento dos disparos; não se constrói UI de chat no painel interno, e o corte do Chatwoot (D3)
-> não acontece. O que vale é o **Anexo A — Trilha C**, hoje detalhado em `HANDOFF-espelho-chatwoot.md`
-> e nos **AD-10..AD-13** de `docs/architecture.md`.
+> não acontece. O que vale é o **Anexo A — Trilha C**, hoje detalhado nos **AD-10..AD-15** de
+> `docs/architecture.md` e, do lado do monorepo, em `monorepo-flash-capital/docs/ESPELHO-CHATWOOT.md`.
+>
+> ⚠️ **Não siga os ponteiros do corpo deste documento.** Ele foi escrito em 2026-09-02 e cita
+> `inbox/PROGRESS.md` **por número de linha**; aquele arquivo foi reescrito várias vezes desde então e
+> as âncoras apontam para conteúdo diferente. O mesmo vale para `HANDOFF-espelho-chatwoot.md`, citado
+> na versão original desta nota: esse arquivo **nunca existiu com esse nome** em nenhum dos três repos.
+> O que continua válido aqui é o **raciocínio e as medições**, não os endereços. Para o estado atual,
+> vá ao `PROGRESS.md` §Dívida técnica e ao `docs/architecture.md`.
 >
 > **Arquivado aqui — não apagado — porque registra uma direção rejeitada com medição.** Se alguém
 > repropuser "cortar o Chatwoot e trazer o atendimento para o monorepo" daqui a seis meses, este é o

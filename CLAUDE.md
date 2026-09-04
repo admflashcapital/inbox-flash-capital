@@ -19,10 +19,25 @@ espelham os disparos do monorepo e carimbam o contexto do título. A operação 
 labels, respostas rápidas, log estruturado, expurgo LGPD e sonda de saúde no cron.
 O banco tem **PII real de cliente desde 2026-07-14** — trate backup como segredo.
 
+> 🚨 **"Espelha os disparos" vale em DEV, não em produção.** O `chatwoot_mirror.py` vive na
+> `feat/regua-comunicacao-v2` do monorepo; a **`main` de lá não tem `api/integrations/chatwoot/`**.
+> Como produção roda do Railway, a partir da `main`, **até o merge + deploy nenhum disparo real é
+> espelhado e nenhum inbound é relayado**. O gate do EPIC-3 foi provado ao vivo rodando a branch — o
+> que está fechado é o **código**, não a produção. Rastreado no `PROGRESS.md` §Dívida técnica e no
+> **B0.2** de `docs/plano-resiliencia.md`.
+
 **Escopo: 19 stories** no inventário, **11 vivas**, **11 concluídas** — os épicos 2 e 5 foram
-cancelados. Próximo trabalho: **Fase 3.5**, o benchmark de 24h que decide onde a central roda (e, por
-AD-12, a completude do painel). Está em stand-by por decisão: o CRM ainda não fechou, e medir só metade
-não decide nada.
+cancelados. **Não há story pendente.** O que resta não é story:
+
+1. **O merge da branch do monorepo** — é o que leva o espelho para produção (acima).
+2. **Bloco B0** de `docs/plano-resiliencia.md` — tirar a receita da máquina do escritório. O webhook
+   de produção da Twilio ainda termina num túnel daqui.
+3. **Fase 4** (AD-15) — comprar o domínio e conferir os seis limites do plano gratuito da Cloudflare.
+4. A **dívida técnica** rastreada no `PROGRESS.md`.
+
+A **Fase 3.5** (benchmark de 24h) **deixou de ser gate** em 2026-09-03: ela existia para decidir onde a
+central roda, e essa decisão saiu (AD-15). O que sobra dela é janela de observação para dimensionar uma
+VPS futura — útil, não bloqueante.
 
 | Épico | Estado |
 |---|---|
@@ -33,7 +48,7 @@ não decide nada.
 | **EPIC-5** Serviço de Sync | ❌ **CANCELADO** (AD-13) — não se constrói serviço de reconciliação |
 | **EPIC-6** Operação & Governança | ✅ fechado — papéis por inbox, 7 labels, 5 respostas rápidas, atribuição manual por decisão, log JSON, expurgo LGPD e sonda de saúde no cron. Cobrado por `verificar-operacao.sh` |
 
-O que **já está decidido e não se re-discute** está em `docs/architecture.md` (AD-1..AD-14) e
+O que **já está decidido e não se re-discute** está em `docs/architecture.md` (AD-1..AD-15) e
 condensado em `.claude/memory/decisions.md`.
 
 ### Comandos de operação
@@ -130,9 +145,9 @@ Antes de implementar qualquer coisa, leia o doc relevante — eles são a fonte 
 | Doc | Para quê |
 |---|---|
 | `docs/product-brief.md` | Contexto de negócio, problema, usuários, escopo do MVP |
-| `docs/prd.md` | 16 requisitos funcionais (FR-1..16), glossário fechado, jornadas, NFRs, non-goals |
-| `docs/architecture.md` | **Arquitetura**: paradigma hub-and-spoke, AD-1..AD-14, diagramas, stack, convenções, árvore-alvo do repo |
-| `docs/epics-and-stories.md` | 6 epics · 19 stories (1.1..6.3) com critérios de aceite Given/When/Then |
+| `docs/prd.md` | **9 FRs vivos** (1, 2, 3, 7, 8, 9, 10, 15, 16) — os demais caíram com os épicos 2 e 5; glossário fechado, jornadas, NFRs, non-goals |
+| `docs/architecture.md` | **Arquitetura**: paradigma hub-and-spoke, AD-1..AD-15, diagramas, stack, convenções, árvore-alvo do repo |
+| `docs/epics-and-stories.md` | 4 épicos vivos · **11 stories** (1.1..6.3) com critérios de aceite Given/When/Then — o inventário tem 19, 8 canceladas |
 | `docs/fase-4-premissas.md` | **previsão** da fronteira pública (não iniciada): decisões tomadas, a topologia Railway × escritório, o rastreio |
 | `docs/runbook-cloudflare.md` | Cloudflare passo a passo (primeira vez) — os 6 limites a conferir e o desenho alvo |
 | `docs/plano-resiliencia.md` | resiliência a queda: o que se perde por canal e o plano do que falta |
@@ -206,10 +221,11 @@ Ciclo por story (configurado em `.claude/`):
   pytest onde não há código.
 - Comandos: `/status` (próxima story) · `/story 2.1` (carrega a story + define o 1º teste) · `/test` ·
   `/done 2.1` (verifica, atualiza `PROGRESS.md`, commita) · `/gate EPIC-1` (gate de saída do épico).
-- Hooks (`.claude/settings.json` + `.claude/hooks/`): `ruff --fix` em Write/Edit de `.py`;
-  `commit-guard.sh` roda gitleaks + pytest antes de `git commit` (degrada com segurança se a
-  ferramenta ou os testes ainda não existirem).
-- `PROGRESS.md` rastreia as 19 stories por épico (`[ ]` pendente · `[~]` em andamento · `[x]` done ·
+- Hooks (`.claude/settings.json` + `.claude/hooks/`): `commit-guard.sh` roda **`gitleaks protect
+  --staged`** antes de `git commit` e bloqueia se achar segredo; sem `gitleaks` instalado ele **pula
+  o scan** em vez de travar. Ele **não roda testes** — não por omissão, mas porque não há código de
+  aplicação aqui. O verde deste repo são os `scripts/verificar-*.sh`, rodados à mão (`/test`).
+- `PROGRESS.md` rastreia as 19 stories do inventário (11 vivas) por épico (`[ ]` pendente · `[~]` em andamento · `[x]` done ·
   `[!]` bloqueada), com gate de saída por épico.
 - Ordem de build: **EPIC-1** (fundação) bloqueia tudo → **EPIC-3/4** (canais, podem correr em
   paralelo) → **EPIC-6** (operação/governança).
@@ -229,8 +245,10 @@ Ciclo por story (configurado em `.claude/`):
   apurou, nunca o estado do TÍTULO** — estado de título é do monorepo (AD-1), e duplicar aqui criaria
   duas verdades. Aplicação é sempre **manual** (o AD-13 carimba atributos, não labels). Label nova
   entra no seed, nunca só pela tela. Ver `docs/runbook-operacao.md`.
-- **Atributos custom:** snake_case (`cnpj`, `status_operacao`, `dias_atraso`, `valor_em_aberto`,
-  `link_twenty`, `link_supabase`, `source_twenty_id`, `source_supabase_id`).
+- **Atributos custom:** snake_case, **conjunto fechado em 8** (AD-13) — `titulo_id`, `cnpj`,
+  `cedente`, `numero_nf`, `data_vencimento`, `valor_em_aberto`, `dias_atraso`, `link_boleto`.
+  A lista canônica é `atributos.py::CHAVES` no monorepo; o seed deste repo tem de ter as 8
+  `CustomAttributeDefinition` correspondentes, senão o valor é gravado e **não aparece**.
 - **Nomes de inbox:** fixos — `WhatsApp Oficial`, `E-mail`. São os nomes que o `chatwoot-seed`
   procura antes de criar: renomear pela UI faz o seed criar uma inbox duplicada.
 - **Dados:** telefone sempre **E.164**; documento **só dígitos** para casar; timestamps **UTC**.

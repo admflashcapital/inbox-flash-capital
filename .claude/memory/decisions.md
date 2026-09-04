@@ -1,6 +1,6 @@
 # Decisões Arquiteturais — Inbox Flash Capital
 
-> Condensado de `docs/architecture.md` (AD-1..AD-13). NÃO violar durante a implementação.
+> Condensado de `docs/architecture.md` (AD-1..AD-15). NÃO violar durante a implementação.
 > Mudar exige atualizar o AD no doc, não uma decisão de sessão.
 
 - **AD-1 — Chatwoot é espelho, nunca fonte da verdade de dado de domínio.**
@@ -110,6 +110,19 @@ fica pela via mais simples: **a central só tem o número oficial**.
   só de admin; e **não há trilha de auditoria** (`audit_logs` é premium). Um agente entra apenas nas
   inboxes de que precisa (`criar-agente.sh --inbox`), e `verificar-operacao.sh` cobra isso. O gate do
   EPIC-6 foi reescrito de "restrito por papel" para "restrito por inbox".
+
+- **AD-15 — A fronteira pública é um Cloudflare Tunnel sobre a máquina do escritório.** `[2026-09-03]`
+  A central roda **na máquina do escritório**, 24h, e é alcançada por um `cloudflared` **no compose
+  deste repo**, num **domínio novo** cuja zona vive na Cloudflare (plano gratuito).
+  `flashcapital.com.br` **não é tocado**: a zona serve o site institucional e os hosts do Railway, e a
+  delegação de NS que o Tunnel exige é exclusiva. Descartados com número: Partial Setup por CNAME =
+  **US$ 200/mês**; zona filha só em Enterprise; VPS com proxy próprio reintroduz o proxy que o AD-10
+  cortou; PaaS perde a base de configuração dos scripts Docker. **Isto não decide disponibilidade** —
+  máquina de escritório cai, e cada minuto fora é buraco permanente (AD-12); o tratamento é
+  `docs/plano-resiliencia.md`. **Decidido e especificado, NÃO executado**: falta comprar o domínio e
+  conferir os seis limites do plano gratuito. A especificação da borda **não muda** com a troca de
+  túnel: negar `/twilio/callback`, deixar `/twilio/delivery_status` alcançável (AD-11.1) e cobrar a
+  identidade do relay na entrada.
 
 - **A janela de 24h é NATIVA — e protege a tela, não a API.** `[MEDIDO 2026-09-03]`
   `Conversations::MessageWindowService` devolve 24h para `Channel::TwilioSms` **se e somente se**

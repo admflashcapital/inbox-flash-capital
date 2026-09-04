@@ -5,10 +5,11 @@ purpose: build-substrate
 altitude: feature
 paradigm: hub-and-spoke com enriquecimento por eventos unidirecional (mirror hub + adapters + event-driven bridge)
 scope: Central de atendimento — Chatwoot self-hosted e os providers de canal (Twilio, Gmail). Não governa a lógica interna do Twenty nem do monorepo.
-status: draft
+status: accepted
 created: 2026-07-13
-updated: 2026-07-13
-binds: [FR-1, FR-2, FR-3, FR-4, FR-5, FR-6, FR-7, FR-8, FR-9, FR-10, FR-11, FR-12, FR-13, FR-14, FR-15, FR-16]
+updated: 2026-09-04
+binds: [FR-1, FR-2, FR-3, FR-7, FR-8, FR-9, FR-10, FR-15, FR-16]
+binds-anulados: [FR-4, FR-5, FR-6 (EPIC-2, ver AD-11), FR-11, FR-12, FR-13, FR-14 (EPIC-5, ver AD-13)]
 sources: [docs/product-brief.md, docs/prd.md]
 companions: []
 ---
@@ -47,9 +48,15 @@ Mapa de camadas → responsabilidade:
 - **Rule:** cada canal conectado por seu provider (Twilio/Gmail) como uma Inbox distinta. O modelo Conversa/Contato do hub é agnóstico de provider. As inboxes nascem do `chatwoot-seed`, pelos nomes fixos de `INBOX_OFICIAL_NOME` e `INBOX_EMAIL_NOME`.
 
 ### AD-5 — Convivência multi-consumidor no número de prospecção sem perda `[SUPERSEDED 2026-09-02 — Evolution removida dos dois repos; ver AD-11]`
-- **Binds:** FR-5
-- **Prevents:** o agente N8N e o Chatwoot "engolirem" o evento um do outro.
-- **Rule:** a instância Evolution permanece no CRM e faz **fan-out** dos eventos (N8N **e** Chatwoot recebem cada mensagem); não é uma fila competida. Entrega at-least-once; consumidores idempotentes.
+- **Binds:** FR-5 (anulado)
+- **O que ele decidia, no passado:** que a Evolution no CRM faria *fan-out* do número de prospecção,
+  para o agente N8N e o Chatwoot não engolirem o evento um do outro.
+- **Por que caiu:** a Evolution, o `lid-service`, o `evolution_db` e a rede `flash-canais` foram
+  **removidos dos dois repos** em 2026-09-02 e o EPIC-2 foi cancelado (AD-11). **Não há segundo
+  número, não há fan-out e não há consumidor concorrente.** A central tem só o número oficial, e o
+  guardrail de reputação passou a ser cumprido pela via mais simples: prospecção fria sai por e-mail.
+- **Fica registrado, não apagado**, porque descreve um desenho que já custou implementação — se
+  alguém repropuser um segundo número na central, é aqui que está por que ele saiu.
 
 ### AD-6 — Disparo em massa origina no monorepo; central recebe o outbound por push `[ADOPTED]`
 - **Binds:** FR-8
@@ -129,7 +136,7 @@ Mapa de camadas → responsabilidade:
   Google Cloud só é tocado num **consent novo**.
 - **O que ainda falta:** a URL do túnel muda a cada rodada e o subdomínio fixo não existe no plano
   free (`ERR_NGROK_313`, medido). O custo diário é reconfigurar o `.env` — automatizado, mas real. O
-  ingresso da Fase 4 substitui isso por um domínio estável.
+  ingresso do **AD-15** substitui isso por um domínio estável.
 
 ### AD-12 — O painel é tão completo quanto o uptime de quem o alimenta `[ACCEPTED 2026-09-02]`
 - **Binds:** FR-8, AD-6
@@ -187,6 +194,33 @@ Mapa de camadas → responsabilidade:
 - **Efeito no gate:** o enunciado do EPIC-6 pedia "acesso a CPF/CNPJ restrito por papel". Foi
   reescrito para "restrito por inbox", que é o que existe. Procedimento em `docs/runbook-lgpd.md`.
 
+
+### AD-15 — A fronteira pública é um Cloudflare Tunnel sobre a máquina do escritório `[ACCEPTED 2026-09-03]`
+- **Binds:** AD-10, AD-11, AD-11.1, AD-12
+- **Prevents:** que a decisão de maior peso da Fase 4 continue existindo só como previsão, e que
+  alguém reabra a discussão do ingresso sem os números que já a fecharam.
+- **A regra:** a central roda **na máquina do escritório**, ligada 24h, e é alcançada por um
+  `cloudflared` **no compose deste repo**, publicando um hostname de um **domínio novo** cuja zona
+  vive na Cloudflare (plano gratuito). `flashcapital.com.br` **não é tocado** — a zona dele serve o
+  site institucional e os hosts do Railway (ADR-0002 do monorepo), e a delegação de NS que o Tunnel
+  exige é exclusiva.
+- **Por que não as alternativas** (medidas, não supostas): Partial Setup por CNAME custa **US$ 200/mês**
+  (plano Business); zona filha (Subdomain Setup) só existe em Enterprise; VPS com proxy próprio
+  reintroduz o proxy compartilhado que o AD-10 cortou; e PaaS (Railway/Fly) foi descartada **para a
+  central** porque a base de configuração são os scripts Docker. O detalhamento dos sete caminhos
+  está em `docs/fase-4-premissas.md` §2.
+- **O que isto NÃO decide:** disponibilidade. Máquina de escritório cai por energia, internet e reboot
+  do Windows — e cada minuto fora do ar é buraco permanente no painel (AD-12). O tratamento é
+  `docs/plano-resiliencia.md`, não uma revisão deste AD.
+- **Reversível por construção:** como o `cloudflared` mora no compose e a stack é portável (AD-10),
+  mudar para VPS depois é mover o mesmo compose, não redesenhar a borda.
+- **Substitui, quando executado:** o túnel ngrok de dev e o `deploy/ngrok-policy.yml`. A
+  **especificação** da borda não muda — negar `/twilio/callback`, manter `/twilio/delivery_status`
+  alcançável (AD-11.1) e cobrar a identidade do relay na entrada — muda só a sintaxe em que ela é
+  escrita. Passo a passo em `docs/runbook-cloudflare.md`.
+- **Estado:** decidido e especificado; **não executado** — falta comprar o domínio e conferir os seis
+  limites do plano gratuito. Rastreio em `docs/fase-4-premissas.md` §6.
+
 ### Diagrama de direção de dependência (quem pode depender de quem)
 
 ```mermaid
@@ -221,9 +255,9 @@ Duas coisas que o desenho torna óbvias e que decidem o resto:
 | Concern | Convention |
 | --- | --- |
 | Naming (labels) | kebab-case, **dicionário fechado** de 7, semeadas: `promessa-pagamento`, `negociacao`, `contestacao`, `aguardando-comprovante`, `contato-errado`, `sem-retorno`, `escalar-alcada`. Descrevem o que a **conversa** apurou, nunca o estado do título (AD-1). Aplicação manual. Sem sinônimos. |
-| Naming (atributos custom) | snake_case: `cnpj`, `cpf`, `status_operacao`, `dias_atraso`, `valor_em_aberto`, `origem`, `link_twenty`, `link_supabase`, `source_twenty_id`, `source_supabase_id`. |
+| Naming (atributos custom) | snake_case, e o conjunto é **fechado em 8** (AD-13): `titulo_id`, `cnpj`, `cedente`, `numero_nf`, `data_vencimento`, `valor_em_aberto`, `dias_atraso`, `link_boleto`. A lista canônica vive em `api/integrations/chatwoot/atributos.py::CHAVES` (monorepo) e precisa bater com `scripts/seed/chatwoot_seed.rb` — chave sem definição é **gravada e invisível**. Não invente chave aqui. |
 | Naming (inboxes) | fixos: `WhatsApp Oficial`, `E-mail`. |
-| Data & formats | telefone E.164; documento = só dígitos para casar; timestamps UTC; ids de origem guardados como atributos `source_*_id` para link reverso. |
+| Data & formats | telefone E.164; documento = só dígitos para casar; timestamps UTC. |
 | State & cross-cutting | enriquecimento **idempotente** (upsert por identidade); retry com backoff exponencial em falha transitória; auth por token; toda config por env; logs estruturados por serviço. |
 
 ## Stack
@@ -277,7 +311,10 @@ e é assim que se quer, porque um Chatwoot sem as inboxes aceitaria o espelho e 
 **não** é alcançável de dentro de container.
 
 ### Ambientes
-- **staging** e **produção** com a mesma composição; upgrades de versão do Chatwoot validados em staging antes de produção (FR-2).
+- O desenho pede **staging** e **produção** com a mesma composição, e o upgrade do Chatwoot validado em
+  staging antes de produção (FR-2). ⚠️ **Staging ainda não existe** — hoje há só o ambiente de dev na
+  máquina do escritório, e o upgrade é feito nele. Dívida rastreada no `PROGRESS.md`; até fechá-la, o
+  risco do primeiro upgrade em produção é assumido, não coberto.
 - Segredos por ambiente em `.env` fora do repo (AD-8).
 
 ### Modelo de entidade da central
@@ -290,23 +327,32 @@ carimba tudo nos `custom_attributes` da conversa em `chatwoot_mirror.py::_carimb
 
 ```mermaid
 erDiagram
-  IDENTITY_MAP ||--o| CHATWOOT_CONTACT : referencia
-  IDENTITY_MAP {
-    string e164
-    string documento
-    string source_twenty_id
-    string source_supabase_id
-    int chatwoot_contact_id
-    string status "merged | suggested | unresolved"
+  CONTACT ||--o{ CONTACT_INBOX : "um por canal"
+  CONTACT_INBOX ||--o{ CONVERSATION : abre
+  CONVERSATION ||--o{ MESSAGE : contem
+  CONTACT {
+    string name
+    string email "casa a inbox de E-mail"
+    string phone_number "E.164 — casa a inbox Twilio"
   }
-  MERGE_SUGGESTION }o--|| IDENTITY_MAP : gera
-  MERGE_SUGGESTION {
-    int id
-    string matched_key "telefone | documento"
-    string payload
-    string status "pending | approved | rejected"
+  CONTACT_INBOX {
+    string source_id "whatsapp:+55... ou o e-mail"
+  }
+  CONVERSATION {
+    jsonb custom_attributes "os 8 do AD-13, carimbados pelo monorepo"
+    int status "open | pending | resolved"
+  }
+  MESSAGE {
+    int message_type "incoming | outgoing"
+    int status "sent | delivered | read | failed"
   }
 ```
+
+> **O que este diagrama deliberadamente não tem.** Não existe `IDENTITY_MAP` nem `MERGE_SUGGESTION`:
+> eram o store do Serviço de Sync, cancelado pelo **AD-13**. Um `CONTACT` ganha um `CONTACT_INBOX` por
+> canal, e o Chatwoot só os junta quando há **chave em comum** — o canal de e-mail conhece o e-mail, o
+> Twilio conhece o telefone. Sem chave compartilhada **não há merge automático**; o merge é manual, na
+> tela. Ver o requisito retirado em `docs/prd.md` §4.4.
 
 ### Árvore de fonte (repo `inbox-flash-capital`)
 

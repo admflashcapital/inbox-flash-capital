@@ -13,12 +13,6 @@
       "skillPath": "skills/chatwoot-cli/SKILL.md",
       "computedHash": "59c31a0af46bcca0d2cb267c489358b8fc57568ef47f95ce34f4f395ab5af414"
     },
-    "fastapi-templates": {
-      "source": "wshobson/agents",
-      "sourceType": "github",
-      "skillPath": "plugins/api-scaffolding/skills/fastapi-templates/SKILL.md",
-      "computedHash": "629e7e404a3627790138127508b889bf38de3e7fad3647f2bb4367e5bfd19bd1"
-    },
     "find-skills": {
       "source": "vercel-labs/skills",
       "sourceType": "github",
@@ -30,12 +24,6 @@
       "sourceType": "github",
       "skillPath": "plugins/hr-legal-compliance/skills/gdpr-data-handling/SKILL.md",
       "computedHash": "53afd76f2b23fdec92034bf4d4df209a3fe7d7bf187e27dbbf051d08635c612c"
-    },
-    "python-testing-patterns": {
-      "source": "wshobson/agents",
-      "sourceType": "github",
-      "skillPath": "plugins/python-development/skills/python-testing-patterns/SKILL.md",
-      "computedHash": "1306eea409e7eff2288d7658806cb508f18339a0ee9a686d324a0fd2570eae55"
     },
     "secrets-management": {
       "source": "wshobson/agents",

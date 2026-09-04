@@ -1,7 +1,7 @@
 ---
 title: Inbox Flash Capital
 created: 2026-07-13
-updated: 2026-07-13
+updated: 2026-09-04
 phase: 2-planning
 skill: bmad-prd
 ---
@@ -128,7 +128,7 @@ Cobrança pode ver, na conversa do contato, os disparos de cobrança que saíram
 
 ### 4.4 Canal E-mail (Gmail)
 
-**Description:** Conecta uma caixa Gmail de atendimento como inbox de e-mail; cada thread de e-mail vira uma conversa, casada ao mesmo contato dos canais de WhatsApp. Realiza UJ-4. `[ASSUMPTION: conexão via IMAP/SMTP da conta Gmail de atendimento; modelo "caixa de suporte", não cliente de e-mail completo.]`
+**Description:** Conecta uma caixa Gmail de atendimento como inbox de e-mail; cada thread de e-mail vira uma conversa. O casamento com o contato do WhatsApp **não é automático** — ver o requisito retirado abaixo. Realiza UJ-4. `[ASSUMPTION: conexão via IMAP/SMTP da conta Gmail de atendimento; modelo "caixa de suporte", não cliente de e-mail completo.]`
 
 **Functional Requirements:**
 
@@ -138,10 +138,19 @@ Atendente pode receber e responder e-mails de dentro da central.
 - E-mail recebido na caixa configurada vira conversa na inbox "E-mail".
 - Resposta enviada pela central chega ao remetente por e-mail, na mesma thread.
 
-#### FR-10: Unificação sob o mesmo contato
-Conversas de e-mail e de WhatsApp do mesmo cliente aparecem sob o mesmo Contato quando o e-mail/documento casa.
-**Consequences (testable):**
-- Um contato com e-mail conhecido e telefone conhecido não é duplicado entre a inbox de e-mail e as de WhatsApp.
+#### ~~Unificação automática sob o mesmo contato~~ `[RETIRADO 2026-09-02 — AD-13]`
+> **Sem número de propósito.** Este requisito foi escrito como um **segundo "FR-10"** — o mesmo
+> identificador do contexto carimbado da §4.5 —, e o mapa de cobertura de `epics-and-stories.md` só
+> registrou um dos dois. Não recebe número novo: FR-11..FR-14 pertencem ao EPIC-5 (também anulados) e
+> reaproveitar um deles criaria a mesma colisão de novo.
+Prometia que conversas de e-mail e de WhatsApp do mesmo cliente cairiam sozinhas sob o mesmo Contato.
+**Quem faria isso era o Serviço de Sync, e ele foi cancelado.** O Chatwoot casa contato por chave
+compartilhada (e-mail, `identifier`) dentro do que cada canal lhe entrega: o canal de e-mail conhece
+o e-mail, o canal Twilio conhece o telefone. **Sem chave em comum não há merge automático** — e a
+*sugestão* de merge era função do Sync (AD-3, AD-13).
+**O que existe de verdade:** merge **manual** na tela do Chatwoot, feito pela atendente quando ela
+reconhece o mesmo cliente. É o custo aceito do AD-13, e está registrado para ninguém prometer
+unificação automática a quem for operar.
 
 ### 4.5 Contexto de domínio na conversa (AD-13)
 
@@ -174,7 +183,11 @@ Operador pode atender todas as inboxes em escopo numa interface única, e gestã
 #### FR-16: Atribuição, labels e respostas rápidas
 Operador pode assumir/atribuir conversas, aplicar labels manualmente e usar respostas rápidas.
 **Consequences (testable):**
-- Atribuição manual e automática (por inbox) funcionam.
+- Atribuição **manual** funciona (assumir e reatribuir pelo dropdown).
+- A automática fica **desligada por decisão**, nas duas inboxes: `available_agents` é
+  `inbox_members` ∩ agentes online, e com uma pessoa atendendo ela distribuiria de si para si.
+  Ligá-la é uma linha quando houver 2+ atendentes — e o `periodic_assignment_job` roda `*/30`,
+  ou seja, até 30 min de atraso. `verificar-operacao.sh` cobra `enable_auto_assignment = false`.
 - Respostas rápidas configuradas ficam disponíveis na composição.
 
 ## 5. Non-Goals (Explicit)
@@ -241,8 +254,15 @@ Operador pode assumir/atribuir conversas, aplicar labels manualmente e usar resp
 1. ✅ **Espelho dos disparos em massa:** o **monorepo empurra o outbound** para a conversa via API do Chatwoot (não depende só do inbound nativo). Ver AD-6.
 
 **Em aberto (defaults assumidos, ajustáveis):**
-2. ~~**Retenção de conversas (LGPD)**~~ **DECIDIDA.** 1825 dias (5 anos, prescrição civil comum de dívida) aprovados por escrito pelo operador em 2026-09-02; `scripts/retencao-conversas.sh` está no cron do host (domingo 04:10, com `flock`). Procedimento completo, incluindo o direito de exclusão do titular, em `docs/runbook-lgpd.md`. **Resíduo:** esta máquina não fica ligada às 4h de domingo — o cron existe, a execução não é garantida.
-3. Onde a central executa e como se acessa — decisão de diretoria, fora do escopo das fases de simplificação. Hoje: localhost, sem ingresso.
+2. ~~**Retenção de conversas (LGPD)**~~ **DECIDIDA.** 1825 dias (5 anos, prescrição civil comum de dívida) aprovados por escrito pelo operador em 2026-09-02; `scripts/retencao-conversas.sh` está no cron do host (domingo 04:10, com `flock`). Procedimento completo, incluindo o direito de exclusão do titular, em `docs/runbook-lgpd.md`. **Resíduo:** a máquina agora sobe sozinha com o Windows (`docs/runbook-wsl-autostart.md`, item R1 do
+   plano de resiliência), mas isso ainda não sobreviveu a um reboot real sem ninguém abrir terminal —
+   até essa prova, trate o expurgo como passo que **pode** não disparar. Quem prova execução é o
+   `backups/retencao.log`, não o cron registrado.
+3. ~~Onde a central executa e como se acessa~~ **DECIDIDA em 2026-09-03 — ver AD-15.** A central roda
+   na **máquina do escritório**, ligada 24h, alcançada por **Cloudflare Tunnel** num **domínio novo**
+   (plano gratuito); `flashcapital.com.br` não é tocado. E ela **já tem URL pública hoje** — um túnel
+   de dev —, porque responder pelo WhatsApp exige `FRONTEND_URL` pública (AD-11.1). **Resíduo:** falta
+   comprar o domínio e conferir os seis limites do plano gratuito (`docs/runbook-cloudflare.md`).
 
 ## 11. Assumptions Index
 

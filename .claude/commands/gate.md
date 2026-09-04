@@ -1,9 +1,8 @@
-
-> **Escopo: 19 stories** no inventário, das quais **11 vivas** (épicos 1, 3, 4 e 6) — os épicos 2 e 5 foram cancelados. `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-13).
-
 ---
 description: Verifica o gate de saída de um épico. Uso: /gate EPIC-1
 ---
+
+> **Escopo: 19 stories** no inventário, das quais **11 vivas** (épicos 1, 3, 4 e 6) — os épicos 2 e 5 foram cancelados. `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-15).
 
 Verifique o gate do épico $ARGUMENTS conforme a linha **Gate** dele em `PROGRESS.md`.
 
@@ -15,10 +14,15 @@ Verifique o gate do épico $ARGUMENTS conforme a linha **Gate** dele em `PROGRES
      ambiente limpo recompõe conversas + anexos.
    - **EPIC-3:** inbound no número oficial cai na inbox; resposta dentro da janela de 24h sai;
      disparo do monorepo aparece como outbound na thread correta.
-   - **EPIC-4:** e-mail vira conversa; resposta volta na mesma thread; contato não duplica; a
-     conversa carrega os `custom_attributes` carimbados pelo monorepo no disparo (AD-13), inclusive
-     quando a thread foi **reusada**, não só quando foi criada.
-   - **EPIC-6:** papéis negam acesso indevido; retenção configurada; alerta de conexão dispara.
+   - **EPIC-4:** e-mail vira conversa; resposta volta na mesma thread; a conversa carrega os
+     `custom_attributes` carimbados pelo monorepo no disparo (AD-13), inclusive quando a thread foi
+     **reusada**, não só quando foi criada. ⚠️ **Não** cobre "contato não duplica": a unificação
+     automática entre e-mail e WhatsApp era do Sync e caiu com ele (AD-13) — o merge é manual.
+     `bash scripts/verificar-canal-email.sh`.
+   - **EPIC-6:** o escopo do agente é negado **pela inbox, não pelo papel** (AD-14); atribuição
+     automática desligada; labels e respostas rápidas semeadas; retenção **agendada** no cron do
+     host; e a sonda de saúde falha de verdade quando o canal cai.
+     `bash scripts/verificar-operacao.sh` e `bash scripts/monitorar-canais.sh --simular`.
 3. Reporte **PASS** ou **FAIL** com a **evidência** (saída do comando, print do estado, id da
    mensagem que chegou). Gate sem evidência é FAIL.
 4. **Coerência de docs (no PASS):** o fechamento de épico é o checkpoint para alinhar os `docs/` à
