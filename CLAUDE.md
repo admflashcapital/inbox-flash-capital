@@ -66,7 +66,7 @@ O compose, o `.env` e os `scripts/` estão na raiz, então `docker compose` acha
 | `bash scripts/conectar-twilio.sh [--status\|--templates]` | canal oficial (a inbox já nasce do seed) |
 | `bash scripts/conectar-gmail.sh [--status\|--url]` | canal de e-mail — o consent é clique humano |
 | `docker compose run --rm chatwoot-init` | migrações do upgrade (one-shot idempotente) |
-| `docker compose run --rm chatwoot-seed` | re-semeia canais, locale, configs e a conta de máquina do espelho (idempotente) |
+| `docker compose run --rm chatwoot-seed` | re-semeia canais, locale, configs e o token do espelho (idempotente) |
 | `bash scripts/verificar-operacao.sh` | invariantes da operação (EPIC-6): papéis, labels, janela de 24h, crons |
 | `bash scripts/criar-agente.sh --nome N --email E --inbox "E-mail"` · `--listar` | põe alguém para atender (pede a senha sem ecoar) |
 | `bash scripts/monitorar-canais.sh --simular` | sonda de saúde dos canais; no cron avisa no sino do Nexus |

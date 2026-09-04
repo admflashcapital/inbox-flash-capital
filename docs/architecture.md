@@ -98,8 +98,23 @@ Mapa de camadas → responsabilidade:
   que `verificar-invariantes.sh` cobra.
   **Não substituir por `host.docker.internal`:** medido em 2026-09-02, um bind em `127.0.0.1` recusa
   pacote vindo da bridge do Docker (`172.17.0.1`). E o espelho falha em silêncio (AD-12), então essa
-  troca não daria erro — daria um painel com buracos. É também o mesmo formato na VPS e no Railway
-  (`chatwoot.railway.internal`).
+  troca não daria erro — daria um painel com buracos.
+- 🚨 **A `flash-espelho` só funciona enquanto os DOIS processos estiverem na mesma máquina — e em
+  produção eles não estão.** O monorepo roda no **Railway**; a central, na máquina do escritório
+  (AD-15). Railway não entra numa rede Docker local, então `CHATWOOT_URL=http://chatwoot-web:3000`
+  **não resolve lá**. Em produção essa perna sai pela **URL pública** da central, atravessando a
+  internet — e o `env.example` do monorepo ainda ensina o nome do container, que é o valor de **dev**.
+  Consequências, todas rastreadas em `docs/fase-4-premissas.md` §6 bloco 2:
+  1. `CHATWOOT_URL` vira `https://inbox.<dominio>` (item 2.2), e a `flash-espelho` fica com **um
+     membro** — perde a razão de existir e vira artefato de dev;
+  2. a invariante "máquina-a-máquina é sempre rede privada" **deixa de valer para essa perna**, e
+     isso é mudança de arquitetura, não de `.env` (item 2.3);
+  3. com `/api/*` atrás do Access, o espelho passa a precisar mandar `CF-Access-Client-Id`/`Secret` —
+     hoje o `_headers()` manda só o `api_access_token` (item 2.2c). **Sem isso o espelho para, e para
+     calado.**
+- **Onde o nome de container CONTINUA certo:** dentro do compose deste repo. O `cloudflared` da
+  Fase 4 mora aqui e alcança `http://chatwoot-web:3000` pela rede do próprio compose — esse salto
+  não atravessa máquina nenhuma. São dois saltos diferentes, e só o de fora quebra.
 
 ### AD-11 — A central nunca é site público `[ACCEPTED 2026-09-02]`
 - **Binds:** FR-4, FR-6, AD-8

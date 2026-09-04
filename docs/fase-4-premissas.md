@@ -250,6 +250,8 @@ Ordem por dependência, não por dificuldade. Nada disto está iniciado.
 |---|---|---|---|
 | 2.1 | ⬜ `CENTRAL_URL_PUBLICA` → `inbox.<novodominio>` | inbox | vira `FRONTEND_URL` do Chatwoot |
 | 2.2 | ⬜ **`CHATWOOT_URL` deixa de ser `http://chatwoot-web:3000`** e passa a `https://inbox.<novodominio>` | monorepo | consequência do §2.1. A rede `flash-espelho` fica com um membro e perde a razão de existir |
+| 2.2b | ⬜ **o `env.example` do monorepo ensina `http://chatwoot-web:3000`** — nome de container, que em Railway não resolve. Quem copiar esse template para produção monta um espelho que falha **em silêncio** (AD-12). Precisa de aviso no arquivo, não só no rastreio | monorepo | achado em 2026-09-04 |
+| 2.2c | ⬜ **o espelho não sabe mandar os headers do Access.** `chatwoot_mirror.py::_headers()` manda só `api_access_token` + `Content-Type` (verificado em 2026-09-04). Com `/api/*` sob Service Auth (1.5b), toda chamada leva 302 e **nenhum disparo é espelhado** — em silêncio, porque o `raise_for_status()` passa na página de login. É a armadilha 1 do §4, aqui virada trabalho: **`CF-Access-Client-Id` + `CF-Access-Client-Secret` no `_headers()`, e asserção de `content-type`** | monorepo | **1.5b · bloqueia o go-live da Fase 4** |
 | 2.3 | ⬜ **ADR: o espelho atravessa a internet.** O AD-10 diz "máquina-a-máquina é sempre rede privada" — deixa de valer para essa perna | inbox | é mudança de arquitetura, não de `.env` |
 | 2.4 | ⬜ `PUBLIC_BOLETO_BASE_URL` → `api.flashcapital.com.br` (CNAME para o Railway na zona antiga) | monorepo | **as três cópias** (env, DNS, console Twilio) têm de bater. Não depende do domínio novo |
 | 2.5 | ⬜ conferir que `SUPABASE_PUBLIC_URL` está **ausente** (ou igual a `SUPABASE_URL`) no Railway | monorepo | com Supabase Cloud o `make_public_url` tem de virar no-op. Herdar o valor de dev reescreveria a URL da mídia para um `localhost:54321` — e a Twilio devolveria **63019** |
@@ -263,7 +265,7 @@ Ordem por dependência, não por dificuldade. Nada disto está iniciado.
 | 3.1 | ⬜ asserção anti-"login HTML 200" no espelho | monorepo | **bloqueante**: entra ANTES de o Access ir para a frente da central. Detalhe em `plano-resiliencia.md` §F3 |
 | 3.2 | ⬜ notificação de **Tunnel Health** da Cloudflare | — | o único vigia que vem de fora — `plano-resiliencia.md` §V1 |
 | 3.3 | ⬜ revisar o horário dos 4 crons para a janela do host definitivo | inbox | o `04:10` foi escolhido para uma máquina de expediente |
-| 3.4 | ⬜ rotacionar o `CENTRAL_ACCESS_TOKEN` para a conta de máquina | inbox + monorepo | dívida aberta; o deploy novo é a hora natural |
+| 3.4 | ✅ **sem objeto** — decidido em 2026-09-04 que o seed não inventa usuário; o token é o do administrador | inbox + monorepo | a consequência (revogar derruba a pessoa junto) fica registrada no `PROGRESS.md` |
 | 3.5 | ⬜ reavaliar o teto do AD-12 e o texto "painel amostral" do README | inbox | depende da **fila de reenvio** (`plano-resiliencia.md` §F1), não do domínio |
 | 3.6 | ⬜ **asserção do caminho POSITIVO** no `verificar-canal-oficial.sh` | inbox | hoje ele só prova que `/twilio/callback` **sem** header dá 403 (`:151-155`). Com a regra condicional, um token errado na Cloudflare mantém o 403, o verificador segue verde e **todo relay morre em silêncio** |
 | 3.7 | ⬜ atualizar `runbook-deploy.md` §Antes de expor: o título ainda diz "ainda não decidida" e o requisito 1 ainda é "negar de fora", incondicional | inbox | é a seção que este doc cita como fonte verificada |

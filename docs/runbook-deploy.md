@@ -16,7 +16,7 @@
 | `postgres` | `pgvector/pgvector:0.8.5-pg16` | banco **exclusivo** da central (AD-9) | — |
 | `redis` | `redis:7.4.9-alpine` | fila do Sidekiq | — |
 | `chatwoot-init` | `chatwoot/chatwoot:v4.15.1-ce` | one-shot: `rails db:chatwoot_prepare` | — |
-| `chatwoot-seed` | idem | one-shot: inboxes, locale, atributos, labels, respostas rápidas, `installation_configs`, conta de máquina do espelho | — |
+| `chatwoot-seed` | idem | one-shot: inboxes, locale, atributos, labels, respostas rápidas, `installation_configs`, token do espelho | — |
 | `chatwoot-web` | idem | UI e API da central | **`127.0.0.1:${CHATWOOT_HOST_PORT}`** |
 | `chatwoot-sidekiq` | idem | jobs: webhooks, e-mail, automações | — |
 
@@ -41,7 +41,7 @@ central está de fato utilizável.
   migração do upgrade (`docker compose run --rm chatwoot-init`).
 - **`chatwoot-seed`** deixa a central **pronta para uso**: as duas inboxes, o locale pt_BR, os 8
   atributos de conversa, as 7 labels, as 5 respostas rápidas, a atribuição manual, o white-label, as
-  credenciais OAuth e a conta de máquina do espelho. Na instalação nova ainda sincroniza os Content
+  credenciais OAuth e o token do espelho. Na instalação nova ainda sincroniza os Content
   Templates da Twilio, uma única vez. Tudo idempotente. Se ele falhar, web e sidekiq **não sobem** —
   e é assim que se quer: um Chatwoot sem as inboxes aceitaria o espelho do monorepo e o jogaria fora,
   em silêncio (AD-12).
@@ -72,17 +72,21 @@ Chaves obrigatórias: `SECRET_KEY_BASE`, `POSTGRES_PASSWORD`, `POSTGRES_SUPERUSE
 diferentes. Trocar `SECRET_KEY_BASE` depois de subir invalida todas as sessões dos agentes.
 
 **`CENTRAL_ACCESS_TOKEN` você INVENTA, não busca.** É o token com que o espelho do monorepo fala com
-a central. Gere um valor, ponha o **mesmo** no `.env` dos dois repos, e o seed o materializa numa
-conta de máquina (`espelho@flashcapital.com.br`) no primeiro boot:
+a central. Gere um valor, ponha o **mesmo** no `.env` dos dois repos, e o seed o grava no token do
+**administrador da conta** no primeiro boot — ninguém precisa copiar nada da UI:
 
 ```bash
 openssl rand -hex 32                                         # → CENTRAL_ACCESS_TOKEN (nos DOIS .env)
 ```
 
-> Não pegue esse token na UI do Chatwoot. Um token da tela pertence a **uma pessoa**: revogar o
-> acesso da máquina derrubaria o acesso dela, e mexer no usuário dela quebraria o espelho em silêncio
-> (AD-12 — cada minuto mudo é buraco permanente no painel, não atraso). Foi assim que esta instalação
-> nasceu, e o seed avisa quando detecta esse caso.
+> **O seed não cria usuário, e isso é decisão (2026-09-04).** O único e-mail root é o do
+> administrador — `adm@flashcapital.com.br` nesta instalação. Conta de máquina inventada por seed
+> vira usuário fantasma que ninguém sabe de onde veio nem consegue auditar.
+>
+> **A consequência é aceita, não é dívida:** como o token é de uma pessoa, revogá-lo derruba o acesso
+> dela junto, e apagar esse usuário quebra o espelho **em silêncio** (AD-12 — cada minuto mudo é
+> buraco permanente no painel, não atraso). Quem for mexer no usuário admin precisa saber disso.
+> `verificar-operacao.sh` cobra que exista um administrador com `access_token`.
 
 `bash scripts/verificar-invariantes.sh` compara `.env` e `.env.example` **nos dois sentidos**: chave
 a mais ou a menos derruba o check. É de propósito — chave não documentada é chave que ninguém sabe
@@ -150,7 +154,7 @@ uma senha, um clique de consentimento e a criação da conta.
 | 3 | o seed não acha conta, imprime o passo 4 e **sai com 0** (não é erro) | automático |
 | 4 | criar conta + admin em `/installation/onboarding` | **navegador** |
 | 5 | pôr `CENTRAL_ACCOUNT_ID` no `.env` | shell |
-| 6 | `docker compose up -d` de novo → o seed monta **tudo**: inboxes, locale, templates, atributos, labels, respostas rápidas, atribuição manual, white-label, conta de máquina do espelho | automático |
+| 6 | `docker compose up -d` de novo → o seed monta **tudo**: inboxes, locale, templates, atributos, labels, respostas rápidas, atribuição manual, white-label, e o token do espelho no admin | automático |
 | 7 | `bash scripts/conectar-gmail.sh` e clicar no consent | shell + **navegador** |
 | 8 | `bash scripts/criar-agente.sh …` (ou o convite pela tela, se houver SMTP) | shell **interativo** |
 | 9 | `bash scripts/backfill-email.sh 90` (opcional, uma vez) | shell |
@@ -221,7 +225,7 @@ Por isso o plano B é plano B: pela tela sozinha a instalação **não fecha**.
 | `docker compose logs -f chatwoot-web` | logs de um serviço |
 | `docker compose down` | para a stack (**mantém** os volumes/dados) |
 | `docker compose restart` | reinicia (os dados persistem — é o critério da 1.1) |
-| `docker compose run --rm chatwoot-seed` | re-semeia canais, locale, configs e a conta de máquina do espelho (idempotente) |
+| `docker compose run --rm chatwoot-seed` | re-semeia canais, locale, configs e o token do espelho (idempotente) |
 | `bash scripts/verificar-invariantes.sh` | AD-7/8/9/10 não violados |
 | `bash scripts/backup.sh` | banco + anexos (STORY-1.4) |
 

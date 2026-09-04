@@ -291,64 +291,49 @@ RESPOSTAS_RAPIDAS.each do |r|
   log("resposta rápida '/#{r[:atalho]}' #{novo_registro ? 'criada' : 'já existia'}")
 end
 
-# ── Identidade própria para o espelho do monorepo ──────────────────
-# MEDIDO em 2026-09-03: o `CENTRAL_ACCESS_TOKEN` em uso pertencia ao ADMIN
-# HUMANO — o oposto do que `.claude/memory/security.md` exige. Consequências
-# reais: não dá para revogar o acesso da máquina sem derrubar o acesso da
-# pessoa, e mexer no usuário do admin quebra o espelho em silêncio (AD-12: cada
-# minuto mudo é buraco permanente no painel, não atraso).
+# ── O token com que o monorepo fala com a central ──────────────────
+# DECISÃO DO VITOR (2026-09-04): **não se inventa conta de máquina.** O único
+# e-mail root é `adm@flashcapital.com.br`, e o espelho usa o token DELE.
 #
-# Aqui o token deixa de ser algo que alguém pega na UI e cola no `.env`: o valor
-# NASCE no `.env` (`openssl rand -hex 32`, nos dois repos) e o seed o materializa
-# numa conta de máquina. Isso apaga da instalação um passo manual que hoje nem
-# está documentado.
+# Regra: o seed NÃO cria usuário. Identidade inventada em seed vira conta
+# fantasma que ninguém sabe de onde veio nem consegue auditar.
 #
-# `has_secure_token` só gera valor quando o campo vem em branco — atribuir
-# explicitamente funciona. E `access_tokens.token` tem índice ÚNICO: por isso um
-# token já existente NUNCA é tocado. Erro aqui impediria web e sidekiq de subir.
-EMAIL_ESPELHO = "espelho@flashcapital.com.br"
+# O que o bloco faz: garante que o valor de `CENTRAL_ACCESS_TOKEN` seja um token
+# VÁLIDO de um administrador da conta, para que a instalação nova não precise de
+# ninguém copiando token da UI.
+#
+# `AccessTokenable` declara `has_one :access_token, as: :owner` — um usuário tem
+# UM token. Por isso o caminho é ATUALIZAR o token do admin, nunca criar um
+# segundo: duas linhas para o mesmo dono deixariam `user.access_token`
+# ambíguo. E `access_tokens.token` tem índice ÚNICO, então só se grava um valor
+# que comprovadamente ainda não existe — erro aqui impediria web e sidekiq de
+# subir.
+#
+# CONSEQUÊNCIA ACEITA, não dívida: como o token é de uma pessoa, revogá-lo
+# derruba o acesso dela junto, e apagar esse usuário quebra o espelho em
+# silêncio (AD-12). É o preço de não ter identidade inventada.
 token_espelho = env("CENTRAL_ACCESS_TOKEN")
+admin_conta = AccountUser.where(account_id: conta.id, role: :administrator).first&.user
 
 if token_espelho.nil?
   log("CENTRAL_ACCESS_TOKEN vazio — o espelho do monorepo não tem como falar com a central")
 elsif (ja_existe = AccessToken.find_by(token: token_espelho))
   dono = ja_existe.owner
-  if dono.is_a?(User) && dono.email == EMAIL_ESPELHO
-    log("espelho já usa a conta de máquina #{EMAIL_ESPELHO}")
+  eh_admin = dono.is_a?(User) &&
+             AccountUser.exists?(account_id: conta.id, user_id: dono.id, role: :administrator)
+  if eh_admin
+    log("CENTRAL_ACCESS_TOKEN é o token de #{dono.email} (administrator) — como decidido")
   else
-    log("⚠ o CENTRAL_ACCESS_TOKEN pertence a #{dono.try(:email) || dono.class} — não é conta de máquina.")
-    log("  não mexo: o índice do token é único e o espelho quebraria no meio.")
-    log("  para separar: gere um valor novo, ponha nos .env dos DOIS repos e rode o seed de novo.")
+    log("⚠ o CENTRAL_ACCESS_TOKEN não pertence a um administrator desta conta.")
+    log("  o espelho pode não ter poder para criar conversa e carimbar atributo.")
   end
+elsif admin_conta.nil?
+  log("⚠ sem administrador na conta — nada a que vincular o CENTRAL_ACCESS_TOKEN")
 else
-  admin = AccountUser.where(account_id: conta.id, role: :administrator).first&.user
-  if admin.nil?
-    log("⚠ sem administrador na conta — não dá para criar a conta de máquina (o AgentBuilder exige um inviter)")
-  else
-    usuario = User.from_email(EMAIL_ESPELHO)
-    if usuario.nil?
-      usuario = AgentBuilder.new(
-        email: EMAIL_ESPELHO, name: "Espelho (monorepo)",
-        inviter: admin, account: conta, role: :administrator
-      ).perform
-      # Senha aleatória e descartada: esta conta NUNCA loga pela tela, só usa o
-      # token. `confirmed_at` porque não há SMTP para confirmar convite.
-      secreta = "#{SecureRandom.alphanumeric(28)}aA1!"
-      usuario.update!(password: secreta, password_confirmation: secreta, confirmed_at: Time.current)
-      secreta = nil
-      log("conta de máquina #{EMAIL_ESPELHO} criada")
-    end
-    # `administrator` de propósito: é EXATAMENTE o poder que o espelho já
-    # exercia com o token do admin humano. Rebaixar para `agent` aqui mudaria o
-    # comportamento do espelho só na instalação nova — e a falha apareceria lá,
-    # não aqui.
-    vinculo = AccountUser.find_or_initialize_by(account_id: conta.id, user_id: usuario.id)
-    vinculo.inviter_id = admin.id if vinculo.new_record?
-    vinculo.role = :administrator
-    vinculo.save!
-    AccessToken.create!(owner: usuario, token: token_espelho)
-    log("token do espelho materializado na conta de máquina — nada a copiar da UI")
-  end
+  # Valor novo e inédito: materializa no admin para a instalação não depender da UI.
+  atual = admin_conta.access_token || AccessToken.create!(owner: admin_conta, token: token_espelho)
+  atual.update!(token: token_espelho) if atual.token != token_espelho
+  log("CENTRAL_ACCESS_TOKEN materializado no token de #{admin_conta.email} — nada a copiar da UI")
 end
 
 log("pronto.")

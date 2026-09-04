@@ -49,15 +49,14 @@ Webhook público sem verificação = ingestão forjada (mensagem falsa na conver
 
 - **Gmail:** conta/app password dedicada à caixa de atendimento — não a conta pessoal de ninguém
 - **Twilio:** credencial já existente no monorepo; a central **não** ganha permissão de disparo em massa
-- **Chatwoot:** o `CENTRAL_ACCESS_TOKEN` do espelho tem de ser de uma **conta de máquina**
-  (`espelho@flashcapital.com.br`), nunca o token de uma pessoa. O seed materializa esse token a partir
-  do `.env` — o valor é inventado (`openssl rand -hex 32`) e vai igual nos dois repos; não se pega
-  token na UI. **⚠️ Nesta instalação isso ainda NÃO vale**: medido em 2026-09-03, o token em uso
-  pertence a `adm@flashcapital.com.br` (administrator). Enquanto for assim, revogar o acesso da
-  máquina derruba o acesso da pessoa, e mexer no usuário dela quebra o espelho **em silêncio**
-  (AD-12). Para separar: gere um valor novo, ponha nos `.env` dos dois repos e rode o seed — ele
-  cria a conta de máquina. O seed **não** troca sozinho: `access_tokens.token` tem índice único e
-  falhar ali impediria web e sidekiq de subirem.
+- **Chatwoot:** o `CENTRAL_ACCESS_TOKEN` do espelho é o token do **administrador da conta**
+  (`adm@flashcapital.com.br`). **O seed NÃO cria usuário** — decisão de 2026-09-04: identidade
+  inventada em seed vira conta fantasma, sem dono e sem auditoria. O valor nasce no `.env`
+  (`openssl rand -hex 32`, igual nos dois repos) e o seed o grava no token do admin; não se pega
+  token na UI. **Consequência aceita, não dívida:** revogar esse token derruba o acesso da pessoa
+  junto, e apagar o usuário admin quebra o espelho **em silêncio** (AD-12). Quem mexer no usuário
+  admin precisa saber disso. `access_tokens.token` tem índice único, então o seed só grava valor
+  inédito — falhar ali impediria web e sidekiq de subirem.
 
 ## LGPD (Story 6.3)
 

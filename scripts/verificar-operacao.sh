@@ -97,17 +97,18 @@ else
   falha "locale da conta = ${LOCALE:-vazio} (pt_BR = 16): o e-mail enviado ao cliente sai com envelope em inglês. Rode: docker compose run --rm chatwoot-seed"
 fi
 
-# O espelho do monorepo deve falar pela conta de MÁQUINA, não pelo token de uma
-# pessoa. Checagem estrutural de propósito: comparar o valor do token exigiria
-# passá-lo no argv do psql, e argv é legível por qualquer usuário via /proc.
-ESPELHO="$(consultar "
+# O espelho fala pelo token de um ADMINISTRADOR da conta — decidido em
+# 2026-09-04: não se inventa conta de máquina; o e-mail root é o do admin.
+# Checagem estrutural de propósito: comparar o VALOR do token exigiria passá-lo
+# no argv do psql, e argv é legível por qualquer usuário via /proc.
+ADMIN_COM_TOKEN="$(consultar "
   SELECT count(*) FROM users u
-    JOIN access_tokens t ON t.owner_type='User' AND t.owner_id=u.id
-   WHERE u.email='espelho@flashcapital.com.br';")"
-if [ "${ESPELHO:-0}" -ge 1 ]; then
-  ok "o espelho do monorepo tem conta de máquina própria (revogável sem afetar ninguém)"
+    JOIN account_users au ON au.user_id=u.id AND au.account_id=${CONTA} AND au.role=1
+    JOIN access_tokens t  ON t.owner_type='User' AND t.owner_id=u.id;")"
+if [ "${ADMIN_COM_TOKEN:-0}" -ge 1 ]; then
+  ok "há administrador com access_token — é por ele que o espelho entra (consequência aceita: revogá-lo derruba o acesso da pessoa junto)"
 else
-  aviso "não há conta de máquina para o espelho: o CENTRAL_ACCESS_TOKEN é de uma pessoa. Revogá-lo derruba o acesso dela, e mexer no usuário dela quebra o espelho em silêncio. Ver a dívida no PROGRESS.md"
+  falha "nenhum administrator desta conta tem access_token: o espelho do monorepo não tem por onde entrar. Rode: docker compose run --rm chatwoot-seed"
 fi
 
 echo
