@@ -104,7 +104,7 @@ storage e incapaz de tocar o banco. Por isso o prefixo no `.env` é `BACKUP_S3_`
 |---|---|
 | bucket **privado** (ex.: `central-backups`) | Storage → New bucket, **Public = off** |
 | par de chaves S3 | Storage → S3 Access Keys → New access key |
-| `rclone` no host | `curl https://rclone.org/install.sh \| sudo bash` |
+| `rclone` no host | **sem sudo:** baixar o zip de `downloads.rclone.org` e `install -m0755 rclone ~/.local/bin/` · **com sudo:** `curl https://rclone.org/install.sh \| sudo bash`. O script resolve o binário por caminho, então `~/.local/bin` funciona **no cron também** — `command -v` sozinho não funcionaria, porque o cron roda com PATH mínimo |
 
 Depois preencha no `.env`: `BACKUP_S3_ENDPOINT`, `BACKUP_S3_REGION`, `BACKUP_S3_BUCKET`,
 `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY` e `BACKUP_OFFSITE_PASSPHRASE`.
@@ -135,6 +135,13 @@ um dia que falhou é recuperado na rodada seguinte, porque o sync olha o conjunt
 
 Depois de subir, o script **pergunta ao bucket** quantos objetos existem e falha se o número não
 bater com o que subiu: "sync OK" é a palavra do cliente; o que vale é o que o outro lado devolve.
+
+### Provado em 2026-09-04, não só escrito
+
+Primeira execução real: 8 artefatos cifrados, 8 confirmados no bucket. E o que importa mais —
+**ensaio de restore a partir do BUCKET**, não do disco: as duas metades baixadas, decifradas e
+comparadas com `cmp` contra o original. **Byte-a-byte idênticas**, com o dump abrindo 90 tabelas e o
+tar listando os 19 anexos. Backup offsite que ninguém baixou de volta é esperança, igual ao local.
 
 ### No cron do host
 

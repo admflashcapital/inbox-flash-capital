@@ -76,11 +76,22 @@ fi
 # `gpg` é o que cifra. Ausente = falha, não silêncio: um offsite que sobe
 # em claro seria pior do que não subir.
 command -v gpg >/dev/null 2>&1 || { log "ERRO: gpg não instalado — não subo nada em claro."; exit 1; }
-command -v rclone >/dev/null 2>&1 || {
-  log "ERRO: rclone não instalado. É o cliente S3 deste fluxo."
-  log "  curl https://rclone.org/install.sh | sudo bash"
+# Resolver o rclone por CAMINHO, não só por `command -v`. O cron roda com um
+# PATH mínimo (tipicamente /usr/bin:/bin) e NÃO tem ~/.local/bin — então um
+# rclone instalado sem sudo funciona no terminal e some no cron. Esse é
+# exatamente o tipo de falha que só aparece semanas depois, no dia do incidente.
+RCLONE=""
+for c in "$(command -v rclone 2>/dev/null)" "$HOME/.local/bin/rclone" \
+         /usr/local/bin/rclone /usr/bin/rclone /snap/bin/rclone; do
+  [ -n "$c" ] && [ -x "$c" ] && { RCLONE="$c"; break; }
+done
+if [ -z "$RCLONE" ]; then
+  log "ERRO: rclone não encontrado. É o cliente S3 deste fluxo."
+  log "  sem sudo : curl -fsSL -o /tmp/r.zip https://downloads.rclone.org/rclone-current-linux-amd64.zip \\"
+  log "             && unzip -oq /tmp/r.zip -d /tmp && install -m0755 /tmp/rclone-v*/rclone ~/.local/bin/rclone"
+  log "  com sudo : curl https://rclone.org/install.sh | sudo bash"
   exit 1
-}
+fi
 
 ARTEFATOS=$(find "$BACKUP_DIR" -maxdepth 1 -type f \
               \( -name 'db_*.sql.gz' -o -name 'storage_*.tar.gz' \) | wc -l)
@@ -129,7 +140,7 @@ EXTRA=""
 [ "$MODO" = "simular" ] && EXTRA="--dry-run"
 
 log "sync ${STAGING} → ${DESTINO}${EXTRA:+ (SIMULAÇÃO)}"
-if ! rclone sync "$STAGING" "$DESTINO" $EXTRA --stats-one-line --stats 0 2>&1 | sed 's/^/[offsite] rclone: /'; then
+if ! "$RCLONE" sync "$STAGING" "$DESTINO" $EXTRA --stats-one-line --stats 0 2>&1 | sed 's/^/[offsite] rclone: /'; then
   log "ERRO: o sync falhou. O backup LOCAL está intacto; só a cópia offsite não subiu."
   exit 1
 fi
@@ -142,7 +153,7 @@ fi
 # ── 3. Conferir do outro lado ──────────────────────────────────────
 # Sem isto, "sync OK" é a palavra do cliente. O que vale é o que o bucket
 # devolve quando perguntado de novo.
-REMOTOS="$(rclone lsf "$DESTINO" 2>/dev/null | grep -c '\.gpg$' || true)"
+REMOTOS="$("$RCLONE" lsf "$DESTINO" 2>/dev/null | grep -c '\.gpg$' || true)"
 if [ "${REMOTOS:-0}" -eq "$CIFRADOS" ]; then
   log "✅ ${REMOTOS} objeto(s) confirmados no bucket, cifrados"
 else
