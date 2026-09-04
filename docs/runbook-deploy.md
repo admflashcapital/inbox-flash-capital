@@ -2,8 +2,9 @@
 
 > O `compose.yaml`, o `.env` e os `scripts/` moram na raiz, e `docker compose` acha tudo sozinho.
 > A central publica **uma** porta, em `127.0.0.1`, e **nunca** é site público (AD-11).
-> **Ingresso remoto está em aberto** — decisão de diretoria; até lá este runbook cobre o ciclo
-> inteiro em localhost.
+> **Ingresso remoto decidido em 2026-09-03**: Cloudflare Tunnel + domínio novo, com a stack na máquina
+> do escritório. Enquanto o domínio não chega, este runbook cobre o ciclo inteiro em localhost.
+> Execução em `docs/runbook-cloudflare.md`.
 
 > **Stories:** 1.1 (stack sobe com um comando) e 1.2 (banco isolado) · **FR-1** · **AD-8, AD-9, AD-10**
 > Este runbook é a fonte de verdade operacional do deploy. Arquitetura em `docs/architecture.md`.
@@ -233,7 +234,10 @@ sem um backup verificado na mão (`bash scripts/restore.sh --verificar`).
 
 ---
 
-## Antes de expor (Fase 4 — ainda não decidida)
+## Antes de expor (Fase 4 — **decidida em 2026-09-03**: Cloudflare Tunnel + domínio novo)
+
+> Esta seção continua sendo a **especificação**. O passo a passo de execução vive em
+> `docs/runbook-cloudflare.md`; o porquê e o rastreio, em `docs/fase-4-premissas.md`.
 
 **Nada disto vira código.** O Chatwoot é imagem oficial sem fork (AD-7), e as três primeiras
 lacunas abaixo são de coisas que ele não faz — não que ele faça errado. Quem as cobre é o
@@ -245,10 +249,10 @@ não vai para produção; **as regras vão**.
 
 | # | Requisito | Por que o Chatwoot não resolve | Verificado |
 |---|---|---|---|
-| 1 | **Negar `/twilio/callback` de fora** | O `Twilio::CallbackController` **não valida assinatura nenhuma**. Exposto sem gate, qualquer um forja um inbound na conversa de um cliente | ngrok policy → **403** (2026-09-02) |
+| 1 | **Só o espelho entra no `/twilio/callback`** — deixou de ser "negar de fora" | O `Twilio::CallbackController` **não valida assinatura nenhuma**. Exposto sem gate, qualquer um forja um inbound na conversa de um cliente. ⚠️ Com o monorepo no Railway, **o relay legítimo passou a vir de fora**: negar incondicionalmente mataria o espelho | ngrok policy → **403** (2026-09-02, quando o relay era interno) · na Fase 4: Access **Service Auth** |
 | 2 | **Deixar `/twilio/delivery_status` aberto** | É a própria Twilio que o chama, sem identidade. E o **21609** exige que ele seja alcançável, senão a central não consegue responder | ngrok → 404 (rota existe só em POST) |
 | 3 | **Headers de segurança** | O Chatwoot não emite `nosniff`, `Referrer-Policy` nem `X-Frame-Options` | ngrok `add-headers` |
-| 4 | **Teto de tamanho de corpo** | O Puma não impõe limite próprio | ⬜ não coberto hoje |
+| 4 | **Teto de tamanho de corpo** | O Puma não impõe limite próprio | ⬜ não coberto hoje · vem de graça no plano da Cloudflare |
 | 5 | Autenticação e anti-força-bruta | **Isto o Chatwoot JÁ FAZ**: login obrigatório, signup fechado, e o Rack::Attack bloqueia na 6ª tentativa (medido através do túnel: `401 ×5` → `429`) | ✅ nativo |
 
 **O que cada candidato cobre:**

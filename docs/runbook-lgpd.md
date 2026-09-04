@@ -27,10 +27,11 @@ bash scripts/retencao-conversas.sh --simular    # conta, não apaga
 bash scripts/retencao-conversas.sh --executar   # apaga
 ```
 
-> ⚠️ **Esta máquina não fica ligada às 4h de domingo.** O cron existe e está correto; o que não existe é
-> a garantia de que ele dispara. Trate como **passo que pode nunca rodar** até a central sair para um
-> host que fica de pé. O `verificar-operacao.sh` cobra o cron *registrado*, não o cron *executado* — o
-> `backups/retencao.log` é quem prova execução.
+> ⚠️ **A máquina precisa estar ligada às 4h de domingo.** O cron existe, está correto e **dispara de
+> verdade** (systemd + `cron.service` ativos, provado ao vivo em 2026-09-03). O que falta é a garantia de
+> que a máquina volta sozinha depois de um reboot do Windows — é o item **R1** de
+> `docs/plano-resiliencia.md`. Até lá, trate como **passo que pode não rodar**. O `verificar-operacao.sh`
+> cobra o cron *registrado*, não o *executado* — o `backups/retencao.log` é quem prova execução.
 
 ## Direito de exclusão do titular
 
@@ -93,6 +94,11 @@ O `backup.sh` mantém **7 diários + 4 semanais**. Um dado apagado hoje continua
 **~4 semanas**, e isso é aceitável e esperado — restaurar um backup antigo, porém, **ressuscita o dado
 apagado**. Se um restore acontecer depois de uma exclusão de titular, **refaça a exclusão**. Anote a
 data da exclusão junto ao registro da decisão, exatamente para permitir essa conferência.
+
+⚠️ **São DUAS janelas, e só esta está medida.** O lado do domínio vive no **Supabase Cloud**, que tem
+backup gerenciado com janela própria — **não apurada**. O aviso acima vale para as duas: uma exclusão
+de titular só está completa quando as duas janelas passarem, ou quando as duas forem refeitas após um
+restore. Apurar a retenção de backup do Supabase é o item **3.8** do rastreio em `docs/fase-4-premissas.md` §6.
 
 ## Quem alcança o quê — e o teto do Community Edition
 

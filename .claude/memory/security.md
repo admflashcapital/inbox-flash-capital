@@ -1,8 +1,8 @@
 # Segurança — Regras Invioláveis — Inbox Flash Capital
 
-> **Escopo: 19 stories** no inventário, das quais **11 vivas** (épicos 1, 3, 4 e 6) — os épicos 2 e 5 foram cancelados. `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-13).
+> **Escopo: 19 stories** no inventário, das quais **11 vivas** (épicos 1, 3, 4 e 6) — os épicos 2 e 5 foram cancelados. `compose.yaml`, `.env` e `scripts/` na raiz; `docker compose up -d --wait` é o comando único; a central escuta em `127.0.0.1:3001` e fala com o monorepo pela rede `flash-espelho`. Decisões em `docs/architecture.md` (AD-10..AD-14).
 >
-> A proteção do `/twilio/callback` vive na **borda**: `deploy/ngrok-policy.yml` devolve **403** na URL pública, e `verificar-canal-oficial.sh` bate nela ao vivo. Deixou de ser topológica quando a central passou a ter `CENTRAL_URL_PUBLICA` (AD-11.1). Todo ingresso novo tem de trazer esse gate — o `Twilio::CallbackController` não valida assinatura — e exigir o `X-Relay-Token` (que hoje viaja mas nada cobra na entrada). `/twilio/delivery_status` fica **aberto de propósito**: é a Twilio que o chama, e sem ele o envio pela tela morre com 21609. Medido: ela aceita que ele devolva 404.
+> A proteção do `/twilio/callback` vive na **borda**: `deploy/ngrok-policy.yml` devolve **403** na URL pública, e `verificar-canal-oficial.sh` bate nela ao vivo. Deixou de ser topológica quando a central passou a ter `CENTRAL_URL_PUBLICA` (AD-11.1). Todo ingresso novo tem de trazer esse gate — o `Twilio::CallbackController` não valida assinatura — e **cobrar a identidade do relay na entrada** (`X-Relay-Token` ou o Service Auth da Cloudflare). Com o monorepo no Railway o relay vem de fora, então isso deixou de ser pré-condição futura: sem ele, ou o espelho morre, ou o path fica aberto para forjar mensagem. `/twilio/delivery_status` fica **aberto de propósito**: é a Twilio que o chama, e sem ele o envio pela tela morre com 21609. Medido: ela aceita que ele devolva 404.
 
 
 > A central concentra conversa de cliente com **CPF/CNPJ, valor em aberto e situação de
@@ -31,7 +31,7 @@
 | Origem | Como validar |
 |---|---|
 | **Twilio** (inbound oficial) | assinatura `X-Twilio-Signature` — quem valida é o **monorepo**, dono do webhook (`api/routers/twilio_webhooks_router.py`) |
-| **Relay monorepo → central** (`/twilio/callback`) | ⚠️ o `Twilio::CallbackController` do Chatwoot **NÃO valida assinatura nenhuma**. Hoje quem protege é a **topologia**: a central só publica em `127.0.0.1` e só o `fastapi_api` a alcança, pela rede `flash-espelho`. O **`RELAY_TOKEN`** viaja no header `X-Relay-Token` e é o contrato com o monorepo, mas **nada o exige na borda** — passar a exigi-lo é pré-condição bloqueante de qualquer ingresso futuro |
+| **Relay monorepo → central** (`/twilio/callback`) | ⚠️ o `Twilio::CallbackController` do Chatwoot **NÃO valida assinatura nenhuma**. Enquanto os dois rodam na mesma máquina, quem protege é a **topologia** (a central só publica em `127.0.0.1`, e só o `fastapi_api` a alcança pela rede `flash-espelho`) mais o **403 da borda** no `deploy/ngrok-policy.yml`. ⚠️ **Com o monorepo no Railway isso acaba**: o relay passa a vir de fora, o 403 incondicional mataria o espelho, e a proteção passa a ser o **Access Service Auth** da Cloudflare. O `RELAY_TOKEN` viaja no header `X-Relay-Token` e é o contrato com o monorepo — exigi-lo (ou o equivalente do Access) na borda deixou de ser pré-condição futura e virou requisito. Ver `docs/fase-4-premissas.md` §2.1 |
 | **`/twilio/delivery_status`** | fica **aberto de propósito** — é a Twilio que o chama direto, para as mensagens que a própria central envia. Forjá-lo só altera status de entrega. Inalcançável hoje; com ingresso, precisa de allowlist de origem |
 
 ## Segredo que o Chatwoot NÃO criptografa (EPIC-4)

@@ -131,9 +131,14 @@ Telefone fora de E.164 = thread partida. O `bash scripts/verificar-canal-oficial
 só filtra os params e enfileira o job. Alcançável sem gate, qualquer um forja uma mensagem inbound na
 conversa de um cliente real — e a central tem PII de verdade.
 
-O inbound legítimo **não passa por esse caminho de fora**: ele chega ao monorepo (que valida
+**Hoje** o inbound legítimo não passa por esse caminho de fora: ele chega ao monorepo (que valida
 `X-Twilio-Signature`) e é relayado container-a-container pela rede `flash-espelho`, sem tocar em
-porta publicada nem em túnel. Negar o path na borda, portanto, não custa funcionalidade nenhuma.
+porta publicada nem em túnel. Por isso negar o path na borda não custa funcionalidade nenhuma.
+
+⚠️ **Isso muda com o monorepo no Railway.** Com a plataforma fora desta máquina, o relay passa a vir
+**de fora**, e um Block incondicional mataria o espelho do inbound. A regra vira "só o espelho passa",
+implementada como **Access Service Auth** — nunca como token literal numa expressão de WAF, que seria
+uma quarta cópia do segredo. Ver `docs/fase-4-premissas.md` §2.1 e `docs/runbook-cloudflare.md` §2.2.
 
 **Quem barra hoje:** o `deploy/ngrok-policy.yml`, na borda do túnel — `/twilio/callback` responde
 **403** para qualquer origem externa. Verificado no plano free em 2026-09-02. Enquanto a central só
@@ -299,7 +304,7 @@ conversa duplicada para o mesmo cliente, é aqui que se olha.
 |---|---|
 | Mensagem chega na Twilio (`status=received`) e **nada acontece**, sem log em lugar nenhum | erro **11200**: a Twilio não conseguiu chamar o webhook. Veja os Alerts — eles dizem a URL exata que ela tentou |
 | A confirmação de sacado parou de funcionar | o webhook do número foi repontado para o Chatwoot. Ele deve apontar para o **monorepo** |
-| Mensagem do cliente não aparece na central | o relay do monorepo não está entregando. Confira se `fastapi_api` e `chatwoot-web` estão os dois na rede `flash-espelho`, e se `CHATWOOT_MIRROR_ENABLED` está ligado — o espelho falha em silêncio (AD-12) |
+| Mensagem do cliente não aparece na central | o relay do monorepo não está entregando. Com os dois na mesma máquina: confira se `fastapi_api` e `chatwoot-web` estão ambos na rede `flash-espelho`. Com o monorepo no Railway: confira o `CHATWOOT_URL` público e se o Access deixa o espelho passar (uma página de login HTML com **200** engana o `raise_for_status()`). Nos dois casos, confira `CHATWOOT_MIRROR_ENABLED` — o espelho falha em silêncio (AD-12) |
 | O cliente recebeu a cobrança **duas vezes** | o push do monorepo foi feito **sem `source_id`** — a central reenviou. Ver § "O disparo não pode sair duas vezes" |
 | Fora das 24h a atendente escreve e a mensagem falha | a inbox foi criada com `medium: sms` — sem janela. Recrie com `whatsapp` |
 | A UI não oferece template nenhum | templates não sincronizados: `conectar-twilio.sh --templates` |

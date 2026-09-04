@@ -33,7 +33,7 @@ não decide nada.
 | **EPIC-5** Serviço de Sync | ❌ **CANCELADO** (AD-13) — não se constrói serviço de reconciliação |
 | **EPIC-6** Operação & Governança | ✅ fechado — papéis por inbox, 7 labels, 5 respostas rápidas, atribuição manual por decisão, log JSON, expurgo LGPD e sonda de saúde no cron. Cobrado por `verificar-operacao.sh` |
 
-O que **já está decidido e não se re-discute** está em `docs/architecture.md` (AD-1..AD-9) e
+O que **já está decidido e não se re-discute** está em `docs/architecture.md` (AD-1..AD-14) e
 condensado em `.claude/memory/decisions.md`.
 
 ### Comandos de operação
@@ -78,7 +78,9 @@ Todas as falhas caras deste projeto foram **silenciosas**. Nenhuma deu erro. Gua
    confere `X-Twilio-Signature`. Com a central atrás de um túnel a proteção deixou de ser
    topológica: quem barra é a borda (`deploy/ngrok-policy.yml` → 403). **Toda exposição nova tem de
    trazer esse gate junto** — e o `/twilio/delivery_status` tem de ficar aberto, senão volta o 21609.
-   A especificação está em `docs/runbook-deploy.md`.
+   ⚠️ **Com o monorepo no Railway o gate muda de forma:** o relay legítimo passa a vir de fora, então
+   é "só o espelho entra" (Access Service Auth), não "ninguém entra". Ver `docs/fase-4-premissas.md`
+   §2.1. A especificação está em `docs/runbook-deploy.md`.
 3. **O seed não cria conta nem admin, e isso é deliberado.** No Chatwoot os dois nascem juntos no
    `AccountBuilder` do onboarding; pré-criar a conta faria o onboarding criar uma SEGUNDA — e
    "existe exatamente uma conta" é invariante verificada.
@@ -129,8 +131,11 @@ Antes de implementar qualquer coisa, leia o doc relevante — eles são a fonte 
 |---|---|
 | `docs/product-brief.md` | Contexto de negócio, problema, usuários, escopo do MVP |
 | `docs/prd.md` | 16 requisitos funcionais (FR-1..16), glossário fechado, jornadas, NFRs, non-goals |
-| `docs/architecture.md` | **Arquitetura**: paradigma hub-and-spoke, AD-1..AD-9, diagramas, stack, convenções, árvore-alvo do repo |
+| `docs/architecture.md` | **Arquitetura**: paradigma hub-and-spoke, AD-1..AD-14, diagramas, stack, convenções, árvore-alvo do repo |
 | `docs/epics-and-stories.md` | 6 epics · 19 stories (1.1..6.3) com critérios de aceite Given/When/Then |
+| `docs/fase-4-premissas.md` | **previsão** da fronteira pública (não iniciada): decisões tomadas, a topologia Railway × escritório, o rastreio |
+| `docs/runbook-cloudflare.md` | Cloudflare passo a passo (primeira vez) — os 6 limites a conferir e o desenho alvo |
+| `docs/plano-resiliencia.md` | resiliência a queda: o que se perde por canal e o plano do que falta |
 
 Não duplique aqui o que esses docs já dizem — vá à fonte.
 
