@@ -103,15 +103,29 @@ Ordenado por retorno, não por dificuldade. **B0.1 e R1 concluídos em 2026-09-0
 >    **produção** trocaria o hostname estável da Cloudflare por uma URL de ngrok que morre no dia
 >    seguinte — levando junto o `status_callback` que ela anexa em todo envio (o 21609 do AD-11.1).
 
+> **📌 Medido no reboot de 2026-09-04, e é o argumento mais concreto deste bloco.** A máquina se
+> recompôs sozinha — VM, âncora, 25 containers, 5 crons — **mas voltou sem túnel**. Os túneis são
+> passo manual (`tuneis-manha.sh`), e enquanto o webhook de produção da Twilio apontar para cá, cada
+> minuto entre o boot e alguém rodar o script é inbound de cliente caindo numa URL morta — buraco
+> **permanente**, não atraso (AD-12). Um reboot às 3h vira 6 h de buraco.
+>
+> **Automatizar o túnel no boot NÃO é a saída**, e por dois motivos: o passo perigoso não é subir o
+> túnel, é **escrever o webhook na Twilio** — que depois do merge passaria a sequestrar o inbound de
+> produção em silêncio; e o AD-15 **apaga o mecanismo inteiro** (o `cloudflared` vira container com
+> política de restart e hostname estável, sem URL diária, sem reescrita de `.env`, sem escrita na
+> Twilio). Investir em automação aqui é investir no que já está marcado para demolição — item **2.8**
+> do rastreio da Fase 4. A saída é este bloco B0.
+
 ### Bloco R — retomada automática *(independe do domínio — pode começar hoje)*
 
 | # | Item | Repo | Esforço | Por que |
 |---|---|---|---|---|
-| **R1** | ✅ **FEITO em 2026-09-04** — **Autostart do WSL2** — tarefa `WSL-Always-On` no Agendador do Windows, ancorando a VM com `sleep infinity`. Procedimento completo, com o comando de reverter: **`docs/runbook-wsl-autostart.md`** | — | 15 min | é o elo que falta. Sem ele, "ligada 24h" é intenção, não disponibilidade |
+| **R1** | ✅ **FEITO em 2026-09-04**, em duas metades — a tarefa `WSL-Always-On` **acorda** a distro no logon, e a unidade **`wsl-ancora.service`** (`Restart=always`) a **mantém** viva. A tarefa sozinha não bastava: dispara `-AtLogOn` e só, então um `wsl --shutdown` no meio do dia derrubava a âncora sem volta. Procedimento e reversão: **`docs/runbook-wsl-autostart.md`** | — | 15 min | é o elo que falta. Sem ele, "ligada 24h" é intenção, não disponibilidade |
 | **R2** | ⬜ **Nobreak** | — | compra | o valor não é aguentar horas: é sobreviver a piscadas, que são a causa mais frequente. E dá tempo de desligamento limpo |
-| **R3** | ⬜ **Backup fora da máquina** — cópia cifrada (`age`/`gpg`) do `BACKUP_DIR` para storage externo, no fim do `backup.sh` | inbox | 2 h | hoje o backup grava **no mesmo disco**. Um `ext4.vhdx` corrompido leva backup e produção juntos. Já prometido em `runbook-backup.md`, nunca feito |
+| **R3** | ✅ **FEITO em 2026-09-04** — `scripts/backup-offsite.sh` cifra em AES256 (`gpg --symmetric`) e espelha no Supabase Storage por `rclone sync`, no cron das 05:30. Credencial **escopada a storage** (S3 Access Keys), nunca a `service_role` (AD-9). Provado com restore **a partir do bucket**: as duas metades byte-a-byte idênticas ao original | inbox | 2 h | hoje o backup gravava **no mesmo disco**. Um `ext4.vhdx` corrompido levaria backup e produção juntos |
 | **R4** | ⬜ **`scripts/retomar.sh`** — recebe a data da queda, roda `compose ps` + monitor + verificadores, dispara a reconciliação de status e o backfill de e-mail, e no fim **diz o que ficou irrecuperável** | inbox | 3 h | hoje a sequência existe na cabeça de quem lembra |
-| **R5** | ⬜ **Teste de queda real**: reiniciar o Windows e provar, sem logar em nada, que a central voltou e o cron disparou | — | 30 min | R1 sem teste é suposição |
+| **R5** | 🟡 **PARCIAL — testado em 2026-09-04, e o resultado tem uma ressalva que importa.** Reboot real do Windows: a VM subiu, `wsl-ancora.service` ativo com `NRestarts=0`, **25 containers de volta**, os 4 da central `healthy`, **5 crons** registrados, e invariantes/operação/e-mail verdes. **O que NÃO foi provado, e era o enunciado do item:** "sem logar em nada". O gatilho da tarefa é `MSFT_TaskLogonTrigger` e o `AutoAdminLogon` do Windows está **vazio** — sem logon, o WSL não sobe e nada disso acontece. **E os túneis não voltam**: são passo manual (ver B0). | — | 30 min | R1 sem teste é suposição |
+| **R5.1** | ⬜ **Fechar o "sem logar em nada"**: ligar login automático (`netplwiz`) **ou** trocar o gatilho da tarefa para `-AtStartup` com credencial armazenada. ⚠️ Login automático guarda a senha no registro — decisão de segurança física da sala, não só técnica | — | 15 min | hoje a retomada depende de **alguém logar**. Queda de luz às 3h com a máquina voltando sozinha ⇒ Windows na tela de login e **nada** de pé até de manhã |
 
 ### Bloco F — acabar com o buraco permanente *(o de maior retorno; independe do domínio)*
 
