@@ -12,12 +12,18 @@
 
 ## 1. O que uma queda custa — e a fronteira ainda NÃO se mudou
 
-> **MEDIDO em 2026-09-03, direto na API da Twilio.** O número de produção `+553123916846` tem
-> `sms_url` **e** `status_callback` apontando para `b021-…​.ngrok-free.app` — um túnel da **máquina do
-> escritório**. O monorepo tem deploy no Railway, mas **a fronteira pública continua aqui**.
+> **MEDIDO na API da Twilio (2026-09-03, reconfirmado em 2026-09-04).** O número de produção
+> `+553123916846` tem inbound **e** status callback apontando para um túnel ngrok da **máquina do
+> escritório** — o subdomínio muda todo dia, o destino não. O monorepo tem deploy no Railway e ele
+> **envia** de lá, mas **a fronteira pública de VOLTA continua aqui**.
 >
 > Isso inverte a conclusão. Enquanto o webhook não mudar, **uma queda do escritório derruba o caminho
 > do dinheiro**, não só o painel.
+>
+> ⚠️ São **dois** recursos na Twilio, e o do WhatsApp é o que decide: `IncomingPhoneNumber` governa
+> SMS/voz, e o **WhatsApp Sender** governa o `whatsapp:`. Em 2026-09-04 eles estavam divergentes — o
+> número no túnel do dia, o sender num de dois dias antes, morto. Ver
+> `docs/runbook-canal-oficial.md`.
 
 ### Hoje — o webhook termina na máquina do escritório
 
@@ -75,14 +81,14 @@ sinais de liveness — mas se a máquina morre, ele morre junto, e o silêncio f
 
 ## 4. O plano
 
-Ordenado por retorno, não por dificuldade. Nada iniciado.
+Ordenado por retorno, não por dificuldade. **B0.1 e R1 concluídos em 2026-09-04**; o resto não iniciado.
 
 ### Bloco B0 — tirar a receita da máquina do escritório *(o mais valioso; independe do domínio)*
 
 | # | Item | Repo | Esforço | Por que |
 |---|---|---|---|---|
-| **B0.1** | ⬜ **`api.flashcapital.com.br` → Railway** (CNAME na zona que já existe; `www.`/`app.`/`internal.` já moram lá — ADR-0002) | monorepo | 1 h | é o nome estável para onde o webhook vai apontar |
-| **B0.2** | ⬜ **Repontar `sms_url` e `status_callback`** do `+553123916846` para `api.flashcapital.com.br` no console da Twilio | monorepo | 15 min | **medido**: hoje apontam para o ngrok desta máquina. Enquanto não mudar, queda de escritório = confirmação de sacado quebrada |
+| **B0.1** | ✅ **FEITO — já estava.** `api.flashcapital.com.br` é CNAME para `bps2k9e9.up.railway.app`; `GET /health` devolve 200 e os cabeçalhos são `server: railway-hikari`. Verificado em 2026-09-04 | monorepo | — | o nome estável para onde o webhook vai apontar **já existe** |
+| **B0.2** | ⬜ **Repontar os DOIS recursos** do `+553123916846` para `api.flashcapital.com.br`: `IncomingPhoneNumber` (SMS/voz) **e o WhatsApp Sender** (`whatsapp:`, o que decide). ⚠️ **Bloqueado pelo merge**, não pela infra: a `main` tem a rota de inbound mas **não tem o espelho do Chatwoot** — repontar antes do merge pararia de popular o painel | monorepo | 15 min | **medido**: hoje apontam para o ngrok desta máquina. Enquanto não mudar, queda de escritório = confirmação de sacado quebrada |
 | **B0.3** | ⬜ Conferir que `SUPABASE_PUBLIC_URL` está **ausente** (ou igual a `SUPABASE_URL`) no Railway | monorepo | 15 min | herdar o valor de dev reescreve a URL da mídia para `localhost:54321` → Twilio **63019** |
 | **B0.4** | ⬜ Tirar do `tuneis-manha.sh` o `:8001`, o `:54321` **e o `:3001`** — os três do `ENV_MAP` (`:79-82`), mais a escrita no console da Twilio | monorepo | 30 min | depois de B0.2, deixar o script rodando **desfaz** o B0.2 toda manhã |
 
@@ -101,7 +107,7 @@ Ordenado por retorno, não por dificuldade. Nada iniciado.
 
 | # | Item | Repo | Esforço | Por que |
 |---|---|---|---|---|
-| **R1** | ⬜ **Autostart do WSL2** — tarefa `WSL-Always-On` no Agendador do Windows, ancorando a VM com `sleep infinity`. Procedimento completo, com o comando de reverter: **`docs/runbook-wsl-autostart.md`** | — | 15 min | é o elo que falta. Sem ele, "ligada 24h" é intenção, não disponibilidade |
+| **R1** | ✅ **FEITO em 2026-09-04** — **Autostart do WSL2** — tarefa `WSL-Always-On` no Agendador do Windows, ancorando a VM com `sleep infinity`. Procedimento completo, com o comando de reverter: **`docs/runbook-wsl-autostart.md`** | — | 15 min | é o elo que falta. Sem ele, "ligada 24h" é intenção, não disponibilidade |
 | **R2** | ⬜ **Nobreak** | — | compra | o valor não é aguentar horas: é sobreviver a piscadas, que são a causa mais frequente. E dá tempo de desligamento limpo |
 | **R3** | ⬜ **Backup fora da máquina** — cópia cifrada (`age`/`gpg`) do `BACKUP_DIR` para storage externo, no fim do `backup.sh` | inbox | 2 h | hoje o backup grava **no mesmo disco**. Um `ext4.vhdx` corrompido leva backup e produção juntos. Já prometido em `runbook-backup.md`, nunca feito |
 | **R4** | ⬜ **`scripts/retomar.sh`** — recebe a data da queda, roda `compose ps` + monitor + verificadores, dispara a reconciliação de status e o backfill de e-mail, e no fim **diz o que ficou irrecuperável** | inbox | 3 h | hoje a sequência existe na cabeça de quem lembra |

@@ -79,10 +79,11 @@ URL estável** — o ngrok é dev-only por decisão, então a Fase 4 é obrigat�
 
 ## 2.1 Topologia — a plataforma NÃO fica na mesma máquina `[DECIDIDO 2026-09-03]`
 
-> ⚠️ **Isto é o ALVO, não o estado atual.** Medido em 2026-09-03 na API da Twilio: o número de
-> produção `+553123916846` tem `sms_url` **e** `status_callback` apontando para
-> `b021-…​.ngrok-free.app` — a máquina do escritório. O monorepo **tem deploy no Railway**, mas a
-> **fronteira pública ainda não foi movida para lá**. Enquanto não for, uma queda do escritório derruba
+> ⚠️ **Isto é o ALVO, não o estado atual.** Medido na API da Twilio (2026-09-03, reconfirmado em
+> 2026-09-04): o número de produção `+553123916846` tem inbound **e** status callback apontando para um
+> túnel ngrok da máquina do escritório. O monorepo **tem deploy no Railway** — provado: o
+> `api.flashcapital.com.br` é CNAME para `bps2k9e9.up.railway.app`, responde e envia de lá — mas a
+> **fronteira pública de volta ainda não foi movida**. Enquanto não for, uma queda do escritório derruba
 > a confirmação de sacado, o link do boleto e a mídia — não só o painel.
 >
 > Mover essa fronteira é o item **B0** do `docs/plano-resiliencia.md`, **não depende do domínio novo** e
