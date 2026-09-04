@@ -226,6 +226,20 @@ verificar_cron "backup"            "backup.sh" \
 verificar_cron "ensaio de restore" "restore.sh --verificar" \
   "backup que ninguém testou não é backup, é esperança"
 
+# O 5º cron é CONDICIONAL, e é de propósito: a cópia offsite é opt-in. Cobrá-la
+# sempre daria vermelho em instalação que ainda não a ligou; não cobrá-la nunca
+# deixaria passar o modo de falha real — alguém preenche as chaves do bucket,
+# acha que está protegido, e nada nunca sobe porque ninguém agendou.
+# Então: só existe exigência depois que o .env diz que a intenção existe.
+if [ -n "$(env_get BACKUP_S3_BUCKET)" ] && [ -n "$(env_get BACKUP_S3_ACCESS_KEY_ID)" ]; then
+  verificar_cron "backup offsite" "backup-offsite.sh" \
+    "o bucket está configurado mas nada sobe — o backup segue morrendo junto com a máquina"
+  [ -n "$(env_get BACKUP_OFFSITE_PASSPHRASE)" ] \
+    || falha "BACKUP_S3_* preenchidas mas BACKUP_OFFSITE_PASSPHRASE vazia: o offsite recusa subir em claro (e faz bem)"
+else
+  ok "cópia offsite não configurada — opt-in; o backup LOCAL segue cobrado acima (docs/runbook-backup.md)"
+fi
+
 # Papel customizado não existe no CE: quem vê a conversa vê o CPF/CNPJ, porque
 # o atributo é da CONVERSA e a policy libera para administrator OU agent. O que
 # restringe é a inbox. Deixar isso explícito evita prometer o que não há.

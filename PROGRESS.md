@@ -32,6 +32,34 @@ escritório**. Enquanto for assim, uma queda daqui derruba a confirmação de sa
 mídia — não só o painel. É o bloco **B0** de `docs/plano-resiliencia.md`, não depende do domínio novo e
 vem antes de todo o resto.
 
+### 📊 Primeira medição de carga do espelho — 2026-09-04
+
+Surto real disparado pelo painel de dev. **É a primeira prova de que o AD-12 se comporta sob carga**,
+e não só na conversa avulsa.
+
+| Medido | Valor |
+|---|---|
+| Disparos WhatsApp | **50**, em 340,6 s |
+| Cadência | **8,8/min** — intervalo p50 de **7,34 s**, min 6,95 / máx 7,86. Regularidade dessas diz *throttle*, não capacidade |
+| **Espelhadas no Chatwoot** | **50 de 50 — zero perda**, e zero erro nas 54 linhas de log do espelho |
+| Destino | **1 conversa, 1 contato** — os 50 foram para o mesmo número. Isto mede **vazão**, não distribuição |
+| Falhas de entrega | 0 · todos com `whatsapp_message_sid` · status final `read` nos 50 |
+| Memória em repouso (pós-surto) | chatwoot-web 488 MB · sidekiq 309 MB · postgres 78 MB · fastapi_api 218 MB |
+
+**Duas coisas que a medição revelou, e que valem mais que os números:**
+
+1. **A latência de envio NÃO é medida.** `confirmacoes_disparos.enviado_em` é gravado igual a
+   `created_at` — os 50 deram `0,00 s`, que é ausência de instrumentação, não velocidade. Enquanto for
+   assim, não dá para responder "quanto demora um disparo".
+2. **O carimbo veio parcial, e por desenho:** a conversa ficou com `cnpj`, `cedente` e
+   `valor_em_aberto`, sem `titulo_id`, `dias_atraso` e `link_boleto`. É o esperado — o disparo cobria
+   um **lote** (e `titulo_id` de um título só descreveria parte dele) e `dias_atraso` só a régua
+   preenche. Confirma o AD-13: campo que o disparo não conhece é **omitido**, não gravado vazio.
+
+**O que este surto NÃO mede:** CPU durante o pico (não foi capturado — o surto já tinha terminado
+quando fomos olhar), comportamento com destinatários distintos, e o espelho **atravessando a
+internet**, que é como ele vai rodar do Railway.
+
 **A Fase 3.5 deixou de ser gate.** Ela existia para decidir *onde a central roda*, e essa decisão saiu
 em 2026-09-03: máquina do escritório 24h, VPS num segundo momento. O que resta dela — pico de disparo,
 CPU média, crescimento do volume — vira **janela de observação**, útil para dimensionar a VPS futura,
@@ -344,7 +372,7 @@ Cockpit, papéis, atribuição, labels manuais, respostas rápidas, LGPD e obser
 - **Sonda de saúde ponta a ponta:** com o túnel derrubado de propósito, o monitor pegou a falha (e **não** caiu na armadilha do 404 do ngrok morto) e postou o alerta; a notificação chegou ao perfil `nexus` no painel do monorepo. Com o estado inalterado, **não** repetiu o aviso.
 - **Seed idempotente:** segunda execução seguida = 0 objetos criados.
 
-**O que o gate NÃO exercitou:** envio por template **fora** da janela de 24h. O mecanismo está provado (o `can_reply?` fecha e reabre, e há 48 templates aprovados sincronizados), mas o envio real exige 24h de silêncio do cliente.
+**O que o gate NÃO exercitou:** envio por template **fora** da janela de 24h. O mecanismo está provado (o `can_reply?` fecha e reabre, e há **45** templates aprovados sincronizados), mas o envio real exige 24h de silêncio do cliente.
 
 ---
 
@@ -373,7 +401,7 @@ Itens levantados em code-review e desvios as-built. **Nenhum bloqueia o MVP** �
 | **O espelho do canal oficial não está na `main` do monorepo.** `mirror_outbound`/`relay_inbound`/`_carimbar_atributos` vivem na linhagem `feat/espelho-chatwoot`, hoje dentro de `feat/regua-comunicacao-v2` — entra na `main` junto com a régua. O gate do EPIC-3 foi provado ao vivo **rodando essa branch** — mas até **merge + deploy** no monorepo, a central **não recebe** o inbound relayado nem o espelho em produção. | o EPIC-3 parece fechado e não está, em produção | monorepo — antes do go-live |
 | **O Community Edition não tem trilha de auditoria.** `audit_logs` é `premium: true, enabled: false` e a tabela `audits` está vazia: **não é possível saber quem leu o CPF de quem**. O único controle de acesso é a inbox (`inbox_members`), porque o atributo é da conversa e `CustomAttributeDefinitionPolicy` libera para `administrator? || agent?`. Ligar exigiria fork (AD-7). | acesso a documento de terceiro sem rastro | limite conhecido do CE · registrado em `docs/runbook-lgpd.md` |
 | **`CannedResponsesController` do Chatwoot não tem authorization.** Ao contrário de labels e automações, o controller de respostas rápidas não chama `check_authorization` e não existe `CannedResponsePolicy`: **qualquer agente cria, edita e apaga as respostas rápidas de todos**, pela API. Upstream, sem conserto possível sem fork. Mitigação: o seed recria o conjunto a cada `up`, então o estrago é reversível. | agente apaga o repertório da equipe | limite do CE · monitorar |
-| **3 dos 48 Content Templates têm `friendly_name` duplicado** (`wa_cedente_lembrete_vencimento`, `wa_comissaria_lembrete_vencimento`, `wa_sacado_lembrete_vencimento`). O `Twilio::TemplateProcessorService` casa por nome+idioma+status e pega o **primeiro** do array: a escolha é não determinística quanto à ordem. Ainda não mordeu porque o envio fora da janela nunca foi exercitado. | template errado enviado fora da janela de 24h | revisar antes de exercitar o envio por template |
+| ~~**3 dos 48 Content Templates têm `friendly_name` duplicado**~~ **RESOLVIDO em 2026-09-04, e era pior do que estava escrito.** Não eram cópias: eram **duas versões aprovadas**, e a de 25/08 pede uma variável a mais (`prazo_vencimento`). O catálogo apontava para a **antiga** — a revisão nunca entrou em vigor, e o `sincronizar_espelho_twilio.py --check` acusava os três como *"enviam AMOSTRA no lugar do dado real"*. Repontado para os SIDs novos (JSON do Sensei → `provision_twilio_templates.py --no-submit`), e as 3 cópias antigas **apagadas na Twilio** depois de varredura provando zero referência em código, JSON e nas 320 colunas de texto/jsonb de `internal`+`public`. Definições arquivadas em `sensei-cobrancas/arquivo/` antes de apagar, porque reenvio à Meta tem histórico ruim. **Twilio: 48 → 45, zero nomes duplicados. Espelho × catálogo: 0 divergentes.** 915 testes verdes. | — | ✅ fechado |
 | **No painel do monorepo, `GET /notificacoes` e `mark-read` são globais.** Os dois recebem `current_user` e **não o usam**: todo usuário autenticado lê as notificações de todos, e "marcar lidas" marca as de todos. O sino já é um mural. Endereçar o alerta ao perfil `nexus` é, hoje, cosmético — funciona, mas não isola. *(achado ao ligar o alerta de saúde; anterior a este trabalho)* | notificação de operação visível a qualquer usuário do painel | monorepo — corrigir junto com a próxima mexida em notificações |
 | ~~**Cópia offsite do backup é manual**~~ **AUTOMATIZADA em 2026-09-04.** `scripts/backup-offsite.sh` cifra os artefatos em AES256 (`gpg --symmetric`, round-trip provado) e os espelha num bucket privado do Supabase Storage via `rclone sync` — a retenção 7+4 sai de graça, por ser espelho do `BACKUP_DIR` que o `backup.sh` já poda. **Credencial escopada a storage** (S3 Access Keys), nunca a `service_role`, que furaria RLS no projeto inteiro e daria à central acesso ao banco de domínio (AD-9). **Resíduo:** falta o Vitor criar o bucket + a chave, instalar o `rclone` e — o item que mais importa — **guardar a `BACKUP_OFFSITE_PASSPHRASE` fora desta máquina**, senão o offsite existe e é ilegível no dia do incêndio. | perda total em falha de host | ✅ construído · ⬜ ligar (bucket, chave, rclone, frase no cofre) |
 | **Staging não existe ainda.** O runbook de upgrade exige validar em staging antes de produção (FR-2); hoje só há o ambiente dev local. | upgrade sem rede de proteção | antes do 1º upgrade em prod |

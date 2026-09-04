@@ -158,7 +158,7 @@ uma senha, um clique de consentimento e a criação da conta.
 | 7 | `bash scripts/conectar-gmail.sh` e clicar no consent | shell + **navegador** |
 | 8 | `bash scripts/criar-agente.sh …` (ou o convite pela tela, se houver SMTP) | shell **interativo** |
 | 9 | `bash scripts/backfill-email.sh 90` (opcional, uma vez) | shell |
-| 10 | instalar as 4 linhas de cron (§ runbook-operacao) | shell |
+| 10 | instalar as linhas de cron (§ runbook-operacao) — 4 sempre, + a 5ª se a cópia offsite for ligada | shell |
 | 11 | os quatro `verificar-*.sh` verdes | shell |
 
 **Você não precisa abrir um shell NA VPS para isso.** O Compose fala com daemon remoto: exporte o

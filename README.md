@@ -109,7 +109,7 @@ Compose v2. **Só isso.** Imagem do Chatwoot **sempre com tag fixa** — `latest
 | `docs/runbook-canal-oficial.md` | WhatsApp oficial (Twilio), janela de 24h, templates, espelho |
 | `docs/runbook-canal-email.md` | caixa Gmail (OAuth), redirect URI, armadilhas do token |
 | `docs/runbook-lgpd.md` | retenção, direito de exclusão do titular, o teto do CE |
-| `docs/runbook-operacao.md` | agentes, labels, respostas rápidas, os 4 jobs do host |
+| `docs/runbook-operacao.md` | agentes, labels, respostas rápidas, os jobs do cron do host |
 | `docs/fase-4-premissas.md` | **previsão** da fronteira pública: decisões tomadas, topologia Railway × escritório, rastreio |
 | `docs/runbook-cloudflare.md` | passo a passo da Cloudflare, primeira vez — executar quando o domínio chegar |
 | `docs/plano-resiliencia.md` | queda de luz/internet/máquina: o que se perde, o que volta sozinho, o que falta construir |

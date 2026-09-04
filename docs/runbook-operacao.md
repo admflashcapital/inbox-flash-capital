@@ -102,13 +102,19 @@ responsável por checar antes.**
 Nota de operação: a atendente responde pelo WhatsApp apenas enquanto a central tiver **URL pública**
 (AD-11.1). Túnel caído ⇒ erro 21609 no envio. O monitor abaixo cobra isso.
 
-## Os quatro jobs do host
+## Os jobs do host
+
+Quatro sempre, e um quinto **condicional**:
 
 ```
 0  * * * *  … monitorar-canais.sh   --executar   >> backups/monitor-canais.log
 10 4 * * 0  … retencao-conversas.sh --executar   >> backups/retencao.log
 10 5 * * *  … backup.sh                          >> backups/backup.log
 40 5 * * 6  … restore.sh --verificar             >> backups/restore-verificar.log
+
+# 5º — só quando a cópia offsite estiver configurada (docs/runbook-backup.md).
+# 30 5, DEPOIS do backup das 05:10: o que não está em disco não sobe.
+30 5 * * *  … backup-offsite.sh     --executar   >> backups/backup-offsite.log
 ```
 
 Todos com `flock` (execução única) e `cd` para a raiz do repo — cron roda com `cwd=$HOME`, e sem o `cd`
@@ -121,8 +127,13 @@ feita pelo próprio `backup.sh`: sem o job, nada é gerado **e** nada é podado.
 O ensaio de restore não encosta na produção — sobe um Postgres efêmero, recompõe o último par
 banco+anexos, confere as contagens e destrói tudo. É o que separa backup de esperança.
 
-`verificar-operacao.sh` cobra as quatro entradas. A do restore casa a linha **com a flag**
+`verificar-operacao.sh` cobra as quatro primeiras sempre. A do restore casa a linha **com a flag**
 `--verificar`: um `restore.sh --producao` agendado seria um restore destrutivo automático toda semana.
+
+A **quinta é cobrada condicionalmente**, e a condição é o `.env`: preencheu `BACKUP_S3_BUCKET` e
+`BACKUP_S3_ACCESS_KEY_ID`, o verificador passa a exigir o cron **e** a `BACKUP_OFFSITE_PASSPHRASE`.
+É o modo de falha que interessa — alguém configura o bucket, acha que está protegido, e nada nunca
+sobe porque ninguém agendou. Enquanto não configurar, o verificador diz que é opt-in e segue verde.
 
 ### O que o monitor observa
 
