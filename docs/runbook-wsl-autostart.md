@@ -7,9 +7,13 @@
 > É o item **R1** de `docs/plano-resiliencia.md`. Tudo aqui é configuração **da máquina**, não do
 > repositório: nada disto entra em `compose.yaml` ou em `scripts/`.
 
+> ⚠️ **Leia primeiro a seção "Quem ancora é o systemd, não a tarefa", no fim.** A tarefa do Windows
+> sozinha **não** mantém a máquina de pé: ela dispara no logon e só. Quem ancora é
+> `wsl-ancora.service`.
+
 ## O que já está pronto do lado Linux
 
-Nada a fazer aqui — está medido e correto:
+Medido e correto:
 
 ```
 /etc/wsl.conf   → [boot] systemd=true
@@ -129,33 +133,53 @@ tail -3 backups/monitor-canais.log
 
 É o item **R5** do plano de resiliência: R1 sem esse teste é suposição, não disponibilidade.
 
-## ⚠️ A tarefa dispara no LOGON — e só
+## Quem ancora é o systemd, não a tarefa
 
-Esta é a limitação que mais importa saber, porque ela falha **em silêncio**.
+**A tarefa do Windows só SOBE a distro no logon. Quem a mantém viva é uma unidade do systemd**,
+`wsl-ancora.service`, com `Restart=always`. A divisão importa:
 
-O gatilho é `-AtLogOn`. Se a VM do WSL cair no meio do dia — um `wsl --shutdown`, um
-`docker` que trava, um upgrade —, a âncora morre junto e **não volta sozinha**: não há novo
-logon. A partir daí a máquina fica num estado enganoso — de pé, containers rodando, tudo
-verde — mas segurada apenas pelo terminal que estiver aberto. Fechou o terminal, cai tudo:
-os 25 containers e os cinco crons.
+| | Faz | Não faz |
+|---|---|---|
+| Tarefa `WSL-Always-On` (Windows) | acorda a distro quando você loga | não segura nada depois; dispara `-AtLogOn` e só |
+| `wsl-ancora.service` (systemd) | mantém a VM viva **em toda subida da distro**, com ou sem logon, e volta sozinha se morrer | não liga a máquina |
 
-**Medido em 2026-09-04.** A tarefa foi criada e provada de manhã; à tarde a VM tinha 5 h de
-uptime e **zero** âncora. Só apareceu porque alguém foi olhar.
+### Por que não bastava a tarefa
 
-**Por isso o `monitorar-canais.sh` ganhou o sinal 7**, que roda de hora em hora e avisa no
-sino do Nexus: `pgrep -x sleep` vazio ⇒ falha. Ele **não** cobre a VM já desligada — aí nada
-roda, inclusive ele. Cobre a janela em que ela está viva e frágil, que é quando ainda dá
-para agir.
+Medido em 2026-09-04: a tarefa foi criada e provada de manhã; à tarde a VM tinha **5 h de uptime,
+25 containers e zero âncora**. Um `wsl --shutdown` no meio do dia derrubou a âncora, e ela não
+voltou porque **não houve novo logon**. O estado engana — máquina de pé, tudo verde — mas segurada
+só pelo terminal que estivesse aberto.
 
-Para religar sem reiniciar o Windows, no PowerShell:
+E a tarefa, do jeito que está, **abre uma janela**: o `sleep` dela fica preso a um `pts`. Fechar a
+aba mataria aquela âncora. Com a unidade no lugar, **a aba pode ser fechada**.
 
-```powershell
-Start-ScheduledTask -TaskName "WSL-Always-On"
-```
+### Por que systemd, e não `setsid`/`nohup` disparado pela tarefa
 
-E para conferir de dentro do Linux:
+Testado no mesmo dia, três variantes: **o WSL mata a árvore de processos da invocação de interop
+quando o `wsl.exe` sai.**
+
+| Tentativa | Resultado |
+|---|---|
+| `sh -c 'setsid sleep infinity &'` | ✗ morreu junto |
+| `bash -c 'nohup ... & disown'` | ✗ morreu junto |
+| `systemd-run --unit=… sleep infinity` | ✓ **sobreviveu** |
+
+A unidade sobrevive porque quem a possui é o **PID 1**, não a invocação.
+
+### A unidade
+
+`/etc/systemd/system/wsl-ancora.service` — `ExecStart=/bin/sleep infinity`, `Restart=always`,
+`WantedBy=multi-user.target`. Custo: um processo dormindo, sem CPU.
 
 ```bash
-pgrep -x sleep && echo "ancorada" || echo "SEM ÂNCORA — a VM morre com o último terminal"
+systemctl status wsl-ancora              # conferir
+sudo systemctl disable --now wsl-ancora  # reverter (a VM volta a depender de terminal aberto)
+sudo systemctl enable  --now wsl-ancora  # religar
 ```
+
+**Provado ao vivo:** `kill -9` na âncora → `NRestarts=1` e pid novo em ~1 s.
+
+O `monitorar-canais.sh` cobra `systemctl is-active wsl-ancora` de hora em hora (sinal 7) e avisa no
+sino do Nexus. Ele **não** cobre a VM já desligada — aí nada roda, inclusive ele. Cobre a janela em
+que ela está viva e frágil, que é quando ainda dá para agir.
 

@@ -173,10 +173,13 @@ fi
 #
 # Ele NÃO cobre a VM já desligada — aí ninguém roda nada, inclusive isto. Cobre
 # a janela em que ela está viva e frágil, que é quando ainda dá para agir.
-if pgrep -x sleep >/dev/null 2>&1; then
-  ok "VM do WSL ancorada (a âncora do WSL-Always-On está viva)"
+# Cobra a UNIDADE, não um `pgrep sleep` solto: `pgrep` acharia também uma âncora
+# manual presa a um terminal, que é justamente o estado frágil que queremos
+# denunciar. Só a unidade tem Restart=always e volta em toda subida da distro.
+if systemctl is-active --quiet wsl-ancora.service 2>/dev/null; then
+  ok "VM do WSL ancorada (wsl-ancora.service ativo, Restart=always)"
 else
-  falha "a VM do WSL NÃO está ancorada: ela morre quando o último terminal fechar, e leva os 25 containers e todos os crons junto. No PowerShell: Start-ScheduledTask -TaskName 'WSL-Always-On' — ver docs/runbook-wsl-autostart.md"
+  falha "wsl-ancora.service não está ativo: a VM morre quando o último terminal fechar, e leva os containers e todos os crons junto. Religar: sudo systemctl enable --now wsl-ancora — ver docs/runbook-wsl-autostart.md"
 fi
 
 # ── Veredito, e o aviso só quando o estado MUDA ────────────────────
