@@ -49,15 +49,9 @@ rodada. Sem o job agendado, nada é gerado **e** nada é podado — os artefatos
 Ao mudar de host, reveja o `BACKUP_DIR`: fora do repo, e num disco que não seja o mesmo que morre com a
 máquina.
 
-**Passo manual, e é o que salva a empresa:** o backup local morre junto com o host. Copie
-`BACKUP_DIR` para fora da máquina (outro provedor, ou Drive/S3), **criptografado**:
-
-```bash
-age -r <chave-pública> -o backup.tar.gz.age backup.tar.gz     # ou gpg -c
-```
-
-Backup de conversa de cliente subindo sem criptografia para storage de terceiro é vazamento de PII
-por conta própria. A chave privada **não** mora no mesmo host do backup.
+**O backup local morre junto com o host** — quem resolve isso é o `backup-offsite.sh`, na seção
+*Cópia offsite* abaixo. Ele cifra em AES256 antes de subir, porque backup de conversa de cliente indo
+sem criptografia para storage de terceiro é vazamento de PII por conta própria.
 
 ## Restaurar
 
@@ -84,6 +78,72 @@ Pede confirmação digitada. Depois, confira a UI antes de liberar o atendimento
 
 Restaurando num host novo: leve junto o `.env` (o `SECRET_KEY_BASE` **tem** que ser o mesmo,
 senão as sessões e os tokens integrados quebram) e o par de backup.
+
+## Cópia offsite — o backup que sobrevive à morte da máquina
+
+O `backup.sh` grava **só em disco local**. Host morre, backup morre junto — e a central é o
+repositório de PII mais denso da Flash. O `backup-offsite.sh` fecha esse buraco: cifra os artefatos
+e os espelha num bucket S3-compatível (Supabase Storage).
+
+```bash
+bash scripts/backup-offsite.sh --simular    # default seguro: não sobe nada
+bash scripts/backup-offsite.sh --executar   # cifra e sobe
+```
+
+### A credencial NÃO é a `service_role` — e isso não é detalhe
+
+O `verificar-invariantes.sh` proíbe `SUPABASE_*` no `.env` desta central (**AD-9**, sem cross-DB).
+A regra está certa: a `service_role` **fura RLS no projeto inteiro**, então guardá-la aqui daria à
+central leitura e escrita no **banco de domínio**. Um backup não precisa disso.
+
+O que se usa é a chave de **S3 Access Keys** — no painel: **Storage → S3 Access Keys** —, escopada a
+storage e incapaz de tocar o banco. Por isso o prefixo no `.env` é `BACKUP_S3_`, não `SUPABASE_`: não
+é credencial do Supabase como banco, é credencial de um object store que por acaso é dele.
+
+| O que criar | Onde |
+|---|---|
+| bucket **privado** (ex.: `central-backups`) | Storage → New bucket, **Public = off** |
+| par de chaves S3 | Storage → S3 Access Keys → New access key |
+| `rclone` no host | `curl https://rclone.org/install.sh \| sudo bash` |
+
+Depois preencha no `.env`: `BACKUP_S3_ENDPOINT`, `BACKUP_S3_REGION`, `BACKUP_S3_BUCKET`,
+`BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY` e `BACKUP_OFFSITE_PASSPHRASE`.
+**Com qualquer uma vazia o script avisa e sai com 0** — é opt-in, não falha.
+
+### 🔑 A frase secreta tem de morar FORA desta máquina
+
+Os artefatos sobem cifrados em **AES256** (`gpg --symmetric`), porque o dump carrega CPF/CNPJ, valor
+em aberto, conteúdo de conversa **e o `refresh_token` do Gmail em texto puro**. Sem cifrar, o offsite
+moveria tudo isso para um bucket de terceiro em claro.
+
+A frase vive em `BACKUP_OFFSITE_PASSPHRASE`, no `.env` — **na mesma máquina que o backup existe para
+proteger**. Se a máquina morrer e a frase só existir nela, o offsite está lá e é **ilegível**.
+**Copie a frase para o gerenciador de senhas hoje**, não no dia do incêndio.
+
+Restaurar um artefato de lá:
+
+```bash
+gpg --decrypt --output db_2026-09-04.sql.gz db_2026-09-04.sql.gz.gpg
+# e daí em diante é o mesmo `restore.sh` da seção acima
+```
+
+### Por que `sync` e não `copy`
+
+O remoto vira **espelho** do `BACKUP_DIR`, que o `backup.sh` já poda em 7 diários + 4 semanais. A
+retenção offsite sai de graça e **idêntica** — sem uma segunda política para divergir em silêncio. E
+um dia que falhou é recuperado na rodada seguinte, porque o sync olha o conjunto, não o dia.
+
+Depois de subir, o script **pergunta ao bucket** quantos objetos existem e falha se o número não
+bater com o que subiu: "sync OK" é a palavra do cliente; o que vale é o que o outro lado devolve.
+
+### No cron do host
+
+Depois do backup local, nunca antes — o que não está em disco não sobe:
+
+```
+30 5 * * * /usr/bin/flock -n /tmp/backup-offsite.lock \
+  bash scripts/backup-offsite.sh --executar >> backups/backup-offsite.log 2>&1
+```
 
 ## Retenção de conversa (LGPD)
 
