@@ -136,6 +136,7 @@ Antes de implementar qualquer coisa, leia o doc relevante — eles são a fonte 
 | `docs/fase-4-premissas.md` | **previsão** da fronteira pública (não iniciada): decisões tomadas, a topologia Railway × escritório, o rastreio |
 | `docs/runbook-cloudflare.md` | Cloudflare passo a passo (primeira vez) — os 6 limites a conferir e o desenho alvo |
 | `docs/plano-resiliencia.md` | resiliência a queda: o que se perde por canal e o plano do que falta |
+| `docs/runbook-wsl-autostart.md` | tarefa do Windows que ancora a VM do WSL; inclui o comando de reverter |
 
 Não duplique aqui o que esses docs já dizem — vá à fonte.
 

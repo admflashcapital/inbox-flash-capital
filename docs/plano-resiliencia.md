@@ -87,8 +87,11 @@ Ordenado por retorno, não por dificuldade. Nada iniciado.
 | **B0.4** | ⬜ Tirar do `tuneis-manha.sh` o `:8001`, o `:54321` **e o `:3001`** — os três do `ENV_MAP` (`:79-82`), mais a escrita no console da Twilio | monorepo | 30 min | depois de B0.2, deixar o script rodando **desfaz** o B0.2 toda manhã |
 
 > ⚠️ **B0.4 não é limpeza, é correção — e o `:3001` é o mais perigoso dos três.**
-> 1. O `tuneis_twilio.py` **escreve** o `SmsUrl` no console da Twilio a cada rodada: sem removê-lo, o
->    próximo `tuneis-manha.sh` devolve o webhook para o ngrok, em silêncio.
+> 1. O `tuneis_twilio.py` **escreve** o webhook no console da Twilio a cada rodada — e desde
+>    2026-09-04 escreve nos **dois** recursos (`IncomingPhoneNumber` e o **WhatsApp Sender**, que é o
+>    que vale para `whatsapp:`). Sem desligá-lo, o próximo `tuneis-manha.sh` devolve o webhook de
+>    produção para o ngrok, em silêncio. O desligamento **já existe**: `TUNEIS_TWILIO=conferir` faz o
+>    script conferir e gritar sem escrever — é o modo a adotar quando a produção for dona do número.
 > 2. O `ENV_MAP` reescreve `CENTRAL_URL_PUBLICA` no `.env` do inbox **e recria `chatwoot-web` +
 >    `chatwoot-sidekiq`** (`:223-226`). Como esse valor vira o `FRONTEND_URL` do Chatwoot, a central de
 >    **produção** trocaria o hostname estável da Cloudflare por uma URL de ngrok que morre no dia
@@ -98,7 +101,7 @@ Ordenado por retorno, não por dificuldade. Nada iniciado.
 
 | # | Item | Repo | Esforço | Por que |
 |---|---|---|---|---|
-| **R1** | ⬜ **Autostart do WSL2**: tarefa no Agendador do Windows, gatilho *Ao iniciar o computador*, executando `wsl.exe -d <distro> -u root /bin/true`, com *"Executar mesmo se o usuário não estiver conectado"* | — | 15 min | é o elo que falta. Sem ele, "ligada 24h" é intenção, não disponibilidade |
+| **R1** | ⬜ **Autostart do WSL2** — tarefa `WSL-Always-On` no Agendador do Windows, ancorando a VM com `sleep infinity`. Procedimento completo, com o comando de reverter: **`docs/runbook-wsl-autostart.md`** | — | 15 min | é o elo que falta. Sem ele, "ligada 24h" é intenção, não disponibilidade |
 | **R2** | ⬜ **Nobreak** | — | compra | o valor não é aguentar horas: é sobreviver a piscadas, que são a causa mais frequente. E dá tempo de desligamento limpo |
 | **R3** | ⬜ **Backup fora da máquina** — cópia cifrada (`age`/`gpg`) do `BACKUP_DIR` para storage externo, no fim do `backup.sh` | inbox | 2 h | hoje o backup grava **no mesmo disco**. Um `ext4.vhdx` corrompido leva backup e produção juntos. Já prometido em `runbook-backup.md`, nunca feito |
 | **R4** | ⬜ **`scripts/retomar.sh`** — recebe a data da queda, roda `compose ps` + monitor + verificadores, dispara a reconciliação de status e o backfill de e-mail, e no fim **diz o que ficou irrecuperável** | inbox | 3 h | hoje a sequência existe na cabeça de quem lembra |

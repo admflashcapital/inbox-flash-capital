@@ -224,8 +224,29 @@ custom subdomains"), medido em 2026-09-02.
 
 O que fecha o laço hoje é o **`tuneis-manha.sh` do monorepo**: ele sobe os três túneis, grava a URL
 nos `.env` dos repos que a consomem, recria os containers que precisam reler o ambiente e **escreve
-o `SmsUrl` e o `StatusCallback` no console da Twilio** (`scripts/tuneis_twilio.py`). O modo de falha
-que custou 10 dias em silêncio deixou de depender de alguém lembrar.
+o webhook no console da Twilio** (`scripts/tuneis_twilio.py`). O modo de falha que custou 10 dias em
+silêncio deixou de depender de alguém lembrar.
+
+### São DOIS webhooks no mesmo número, e o do WhatsApp é o que decide
+
+O console da Twilio guarda **duas configurações independentes** para `+553123916846`:
+
+| Recurso | Campos | Governa | Onde no console |
+|---|---|---|---|
+| `IncomingPhoneNumber` (`PN…`) | `SmsUrl` · `StatusCallback` | **SMS e voz** | Phone Numbers → o número |
+| `Channels/Senders` (`XE…`) | `callback_url` · `status_callback_url` | **WhatsApp** | Messaging → Senders → WhatsApp senders |
+
+**Medido em 2026-09-04:** o script escrevia só o primeiro. O número mostrava o túnel do dia e o
+sender, um de dois dias antes — apontando para um ngrok morto. Como todo o tráfego da Flash é
+`whatsapp:`, **é o sender que decide se a resposta do cliente chega**. O script passou a escrever os
+dois e a **conferir por releitura**: sem reler, uma escrita que não pega vira um `✔` mentiroso, que
+foi exatamente como o defeito passou despercebido.
+
+Conferir a qualquer momento, sem escrever nada:
+
+```bash
+cd ../monorepo-flash-capital && TUNEIS_TWILIO=conferir python3 scripts/tuneis_twilio.py
+```
 
 Isso não elimina a causa, só a automatiza. O conserto de verdade é um **domínio estável** — o
 ingresso da Fase 4.

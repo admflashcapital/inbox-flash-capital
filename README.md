@@ -107,6 +107,7 @@ Compose v2. **Só isso.** Imagem do Chatwoot **sempre com tag fixa** — `latest
 | `docs/fase-4-premissas.md` | **previsão** da fronteira pública: decisões tomadas, topologia Railway × escritório, rastreio |
 | `docs/runbook-cloudflare.md` | passo a passo da Cloudflare, primeira vez — executar quando o domínio chegar |
 | `docs/plano-resiliencia.md` | queda de luz/internet/máquina: o que se perde, o que volta sozinho, o que falta construir |
+| `docs/runbook-wsl-autostart.md` | o WSL sobe com o Windows sem abrir terminal — criar, conferir e **reverter** |
 
 ## Operar
 
