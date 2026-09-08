@@ -264,7 +264,7 @@ Ordem por dependência, não por dificuldade. Nada disto está iniciado.
 |---|---|---|---|
 | 3.1 | ⬜ asserção anti-"login HTML 200" no espelho | monorepo | **bloqueante**: entra ANTES de o Access ir para a frente da central. Detalhe em `plano-resiliencia.md` §F3 |
 | 3.2 | ⬜ notificação de **Tunnel Health** da Cloudflare | — | o único vigia que vem de fora — `plano-resiliencia.md` §V1 |
-| 3.3 | ⬜ revisar o horário dos 4 crons para a janela do host definitivo | inbox | o `04:10` foi escolhido para uma máquina de expediente |
+| 3.3 | ✅ **sem objeto desde 08/09/2026** — os 4 jobs viraram timers do systemd com `Persistent=true`, que recuperam hora perdida. O horário deixou de ser aposta sobre quando a máquina está ligada, então mudar de host não exige revisá-lo | inbox | medido: no cron eles tinham **zero** execuções em três semanas |
 | 3.4 | ✅ **sem objeto** — decidido em 2026-09-04 que o seed não inventa usuário; o token é o do administrador | inbox + monorepo | a consequência (revogar derruba a pessoa junto) fica registrada no `PROGRESS.md` |
 | 3.5 | ⬜ reavaliar o teto do AD-12 e o texto "painel amostral" do README | inbox | depende da **fila de reenvio** (`plano-resiliencia.md` §F1), não do domínio |
 | 3.6 | ⬜ **asserção do caminho POSITIVO** no `verificar-canal-oficial.sh` | inbox | hoje ele só prova que `/twilio/callback` **sem** header dá 403 (`:151-155`). Com a regra condicional, um token errado na Cloudflare mantém o 403, o verificador segue verde e **todo relay morre em silêncio** |

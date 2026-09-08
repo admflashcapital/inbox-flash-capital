@@ -1,0 +1,18 @@
+[Unit]
+Description=Cópia offsite cifrada (AES256) do backup da central
+Documentation=file:///home/flash/projects/inbox-flash-capital/docs/runbook-backup.md
+# Sem aguardar-stack.sh: este é o único job que não toca no Docker — lê os
+# artefatos do disco e conversa com o bucket. Exigir a stack de pé faria a
+# cópia offsite depender de justamente o que ela existe para substituir.
+After=central-backup.service
+
+[Service]
+Type=oneshot
+User=flash
+Group=flash
+SupplementaryGroups=docker
+WorkingDirectory=/home/flash/projects/inbox-flash-capital
+Environment=HOME=/home/flash
+Environment=PATH=/home/flash/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+TimeoutStartSec=45min
+ExecStart=/usr/bin/bash -c 'set -o pipefail; /usr/bin/flock -n /tmp/backup-offsite.lock bash scripts/backup-offsite.sh --executar 2>&1 | tee -a backups/backup-offsite.log'

@@ -8,7 +8,8 @@
 # Um dump sem os anexos restaura conversas com anexo quebrado. Por isso os
 # dois artefatos são gerados no mesmo par, com o mesmo timestamp.
 #
-# Uso (cron do host, ex.: 3h da manhã):
+# Uso (agendado pelo central-backup.timer do systemd, diário 12:10 — ver
+# scripts/systemd/ e docs/runbook-backup.md):
 #   cd /caminho/inbox-flash-capital && scripts/backup.sh
 #
 # Retenção: 7 diários + 4 semanais (domingo → sufixo _weekly), por artefato.

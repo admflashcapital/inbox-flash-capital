@@ -104,51 +104,138 @@ Nota de operação: a atendente responde pelo WhatsApp apenas enquanto a central
 
 ## Os jobs do host
 
-Quatro sempre, e um quinto **condicional**:
+São de **dois tipos**, e a diferença é deliberada.
+
+### Sonda de liveness — no cron
 
 ```
-0  * * * *  … monitorar-canais.sh   --executar   >> backups/monitor-canais.log
-10 4 * * 0  … retencao-conversas.sh --executar   >> backups/retencao.log
-10 5 * * *  … backup.sh                          >> backups/backup.log
-40 5 * * 6  … restore.sh --verificar             >> backups/restore-verificar.log
-
-# 5º — só quando a cópia offsite estiver configurada (docs/runbook-backup.md).
-# 30 5, DEPOIS do backup das 05:10: o que não está em disco não sobe.
-30 5 * * *  … backup-offsite.sh     --executar   >> backups/backup-offsite.log
+0 * * * *  … monitorar-canais.sh --executar  >> backups/monitor-canais.log
 ```
 
-Todos com `flock` (execução única) e `cd` para a raiz do repo — cron roda com `cwd=$HOME`, e sem o `cd`
-o `docker compose` não acha o `compose.yaml`.
+Com `flock` (execução única) e `cd` para a raiz do repo — cron roda com `cwd=$HOME`, e sem o `cd` o
+`docker compose` não acha o `compose.yaml`. Fica no cron **porque é sonda de saúde**: recuperar uma
+verificação atrasada não faz sentido, só interessa o estado de agora, e a próxima virada de hora já
+traz. É também o único agendamento que comprovadamente rodava antes de 08/09/2026.
 
-A ordem no domingo não é acaso: **expurgo 04:10, backup 05:10**. Invertida, o snapshot semanal
-guardaria por quatro semanas a conversa que a política acabou de apagar. E a poda 7+4 dos artefatos é
-feita pelo próprio `backup.sh`: sem o job, nada é gerado **e** nada é podado.
+### Jobs de dado — timers do systemd
 
+```
+central-backup.timer          diário  12:10  → backup.sh  →(Wants)→ backup-offsite.sh
+central-retencao.timer        dom     12:00  → retencao-conversas.sh --executar
+central-restore-check.timer   sáb     12:40  → restore.sh --verificar
+```
+
+Unidades versionadas em `scripts/systemd/`; instala com `sudo bash scripts/systemd/instalar.sh`.
+
+**Por que timer, e não cron.** Esta máquina é de expediente — liga ~11h, desliga ~19h, e passa o fim de
+semana desligada. Cron não recupera hora perdida, e cron de usuário não é coberto por anacron. Medido em
+08/09/2026 no `syslog`: `monitorar-canais` tinha **10 execuções** e os outros quatro tinham **zero**, em
+três semanas. Os logs `backup.log`, `backup-offsite.log` e `restore-verificar.log` sequer existiam. Todo
+timer tem `Persistent=true`: hora que passou com a máquina desligada é executada na próxima subida.
+
+**A ordem é da unidade, não do relógio.** `central-retencao.service` declara
+`Before=central-backup.service`; `central-offsite.service` e `central-restore-check.service` declaram
+`After=central-backup.service`. Numa segunda-feira que recupera o fim de semana inteiro, sai
+**expurgo → backup → offsite → ensaio**. Invertida, o snapshot semanal guardaria por quatro semanas a
+conversa que a política acabou de apagar — no cron essa ordem dependia de 04:10 vir antes de 05:10, o
+que não sobrevive a uma recuperação.
+
+**Antes de rodar, espera a stack.** Na recuperação o job dispara com o Docker Desktop ainda subindo do
+lado do Windows. `scripts/lib/aguardar-stack.sh` segura até o daemon responder e o Postgres da central
+ficar `healthy`, com teto de 5 min; estourou, o job **não** roda — melhor isso do que um dump truncado.
+O offsite é o único sem essa espera: ele só lê arquivo e fala com o bucket, e exigir a stack de pé o
+faria depender justamente do que ele existe para substituir.
+
+A poda 7+4 dos artefatos é feita pelo próprio `backup.sh`: sem o job, nada é gerado **e** nada é podado.
 O ensaio de restore não encosta na produção — sobe um Postgres efêmero, recompõe o último par
 banco+anexos, confere as contagens e destrói tudo. É o que separa backup de esperança.
 
-`verificar-operacao.sh` cobra as quatro primeiras sempre. A do restore casa a linha **com a flag**
-`--verificar`: um `restore.sh --producao` agendado seria um restore destrutivo automático toda semana.
+### O que o verificador cobra
 
-A **quinta é cobrada condicionalmente**, e a condição é o `.env`: preencheu `BACKUP_S3_BUCKET` e
-`BACKUP_S3_ACCESS_KEY_ID`, o verificador passa a exigir o cron **e** a `BACKUP_OFFSITE_PASSPHRASE`.
-É o modo de falha que interessa — alguém configura o bucket, acha que está protegido, e nada nunca
-sobe porque ninguém agendou. Enquanto não configurar, o verificador diz que é opt-in e segue verde.
+`verificar-operacao.sh` faz **três** perguntas por job de dado, e a terceira é a que faltava:
+
+1. o timer está habilitado e ativo;
+2. tem `Persistent=true` — sem isso ele é cron com outro nome;
+3. **quando foi a última execução** (5 dias para os diários, 10 para os semanais).
+
+A asserção nova é a (3). Entre 17/08 e 08/09 este verificador ficou verde enquanto quatro jobs nunca
+rodaram, porque a pergunta era *"a linha existe?"* — e existia. Evidência **inexistente** agora é
+falha dura.
+
+E a evidência é escolhida por job, o que não é detalhe. Para o **backup** ela é o artefato mais novo
+(`backups/db_*.sql.gz`), não o log: quem redireciona para o log é a unidade, então um
+`bash scripts/backup.sh` rodado à mão produziria o par banco+anexos **sem** tocar no log — e o
+verificador diria "nunca executou" com o dump ali do lado. A pergunta que interessa é *"existe backup
+recente?"*, e quem responde isso é o dump. Já o **expurgo** e o **ensaio de restore** não deixam
+artefato — um apaga, o outro destrói o ambiente de teste no fim — então neles o log é a única
+evidência que sobra.
+
+A cópia offsite é cobrada **condicionalmente**, e a condição é o `.env`: preencheu `BACKUP_S3_BUCKET` e
+`BACKUP_S3_ACCESS_KEY_ID`, o verificador passa a exigir o encadeamento `Wants=` **e** a
+`BACKUP_OFFSITE_PASSPHRASE`. É o modo de falha que interessa — alguém configura o bucket, acha que está
+protegido, e nada nunca sobe. Enquanto não configurar, o verificador diz que é opt-in e segue verde.
+
+### Instalar, e como desfazer
+
+```bash
+sudo bash scripts/systemd/instalar.sh      # unidades + 3 timers + âncora + o cron do monitor
+```
+
+Cobre os **dois** mecanismos de propósito: os 3 timers e também a linha de cron do monitor. Deixar o
+cron de fora faria uma máquina nova subir com backup agendado e **nenhuma sonda** — e nada acusaria,
+porque a falta de um agendamento é silêncio, não erro.
+
+Idempotente: rodar de novo sobrescreve as unidades, reenlaça os timers e não duplica a linha de cron,
+sem derrubar a âncora no meio. Precisa de `sudo` porque `/etc/systemd/system/` é do sistema — não porque seja arriscado.
+Ele **não** apaga nada, não toca em banco, conversa ou backup, e não reinicia serviço nenhum.
+
+Desfazer:
+
+```bash
+sudo bash scripts/systemd/desinstalar.sh --pausar     # desliga os timers, mantém os arquivos
+sudo bash scripts/systemd/desinstalar.sh --remover    # desliga e apaga as unidades
+```
+
+Existe um script para isso, e não só três nomes de unidade para digitar, porque **um nome errado
+desliga metade dos jobs e deixa a outra metade rodando** — o pior dos dois mundos, e em silêncio.
+
+> ⚠️ **A `wsl-ancora.service` nunca é tocada**, nem no `--remover`. Ela é o que mantém a VM do WSL
+> viva: derrubá-la desliga o servidor inteiro — containers, cron e timers junto. Mexer nela é à mão
+> e de propósito (`docs/runbook-wsl-autostart.md`).
+
+**Desligar não é neutro.** Sem os timers, esta máquina para de gerar backup (e de podar os antigos,
+porque quem poda é o próprio `backup.sh` no fim da rodada), para de subir o offsite, para de testar
+se o backup abre, e para de aplicar o expurgo da LGPD — a central volta a guardar CPF/CNPJ e
+histórico de cobrança para sempre. O monitor de canais continua, porque ele está no cron.
+
+Enquanto estiver desligado, o que importa roda à mão — os scripts são os mesmos:
+
+```bash
+bash scripts/backup.sh
+bash scripts/backup-offsite.sh --executar
+bash scripts/restore.sh --verificar
+bash scripts/verificar-operacao.sh          # e ele vai acusar os timers ausentes
+```
+
+**Voltar para o cron não é a saída.** Foi medido em 08/09/2026: ali os quatro jobs tinham zero
+execuções. O cron não é pior por acaso — ele não tem onde anotar que a hora passou.
 
 ### O que o monitor observa
 
-Seis sinais de **liveness** — coisa que muda sozinha, ao contrário das invariantes de configuração que
+Sete sinais de **liveness** — coisa que muda sozinha, ao contrário das invariantes de configuração que
 os `verificar-*.sh` cobram:
 
 1. a central responde e o `/api` diz Postgres e Redis `ok`;
 2. a **URL pública chega na nossa central** — a prova é o `/api` devolver a mesma versão, não "respondeu
    alguma coisa": um ngrok morto devolve **404**, idêntico ao 404 legítimo do Rails;
-3. o cron do IMAP enfileirou há menos de 3 min — parado, a atendente **para de responder e-mail** em até
+3. o agendador do IMAP enfileirou há menos de 3 min — parado, a atendente **para de responder e-mail** em até
    1h, com falha dentro de um job e nada na tela;
 4. o canal de e-mail não pede reautorização;
 5. nenhuma mensagem `failed` nas últimas 24h (é o **único** sinal de saúde do canal WhatsApp: o
    `Channel::TwilioSms` não inclui `Reauthorizable`, então "canal desconectado" não existe para ele);
-6. o cron do expurgo LGPD continua registrado.
+6. o `central-retencao.timer` continua ativo — é o expurgo LGPD;
+7. a VM do WSL está ancorada (`wsl-ancora.service` ativo, com `Restart=always`): sem ela, fechar o
+   último terminal desliga o servidor inteiro, containers e agendamentos junto.
 
 Quando o estado **muda**, o monitor posta um alerta no **sino do Nexus**, no painel do monorepo
 (`POST /notificacoes/alerta`, header `X-Monitor-Token`). Notifica na transição, não a cada tick: uma

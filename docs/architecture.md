@@ -385,7 +385,7 @@ inbox-flash-capital/
     backup.sh  restore.sh    # [1.4] backup do par banco+anexos; restore em ambiente limpo
     smoke-test.sh            # [1.1] semeia, reinicia e prova a persistência (dev; exige opt-in)
     verificar-invariantes.sh # [1.x] falha se AD-7/8/9/10 forem violados
-    retencao-conversas.sh    # [6.3] expurgo LGPD de conversa resolvida antiga (cron: domingo 04:10)
+    retencao-conversas.sh    # [6.3] expurgo LGPD de conversa resolvida antiga (central-retencao.timer)
     monitorar-canais.sh      # [6.3] 6 sinais de liveness; avisa no sino do Nexus (cron: de hora em hora)
     criar-agente.sh          # [6.1] põe alguém para atender; a senha nunca passa por argv nem env
     verificar-operacao.sh    # [6.x] papéis, labels, respostas rápidas, janela de 24h, crons

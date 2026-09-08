@@ -109,7 +109,7 @@ Compose v2. **Só isso.** Imagem do Chatwoot **sempre com tag fixa** — `latest
 | `docs/runbook-canal-oficial.md` | WhatsApp oficial (Twilio), janela de 24h, templates, espelho |
 | `docs/runbook-canal-email.md` | caixa Gmail (OAuth), redirect URI, armadilhas do token |
 | `docs/runbook-lgpd.md` | retenção, direito de exclusão do titular, o teto do CE |
-| `docs/runbook-operacao.md` | agentes, labels, respostas rápidas, os jobs do cron do host |
+| `docs/runbook-operacao.md` | agentes, labels, respostas rápidas, os jobs agendados do host (1 cron + 3 timers) |
 | `docs/fase-4-premissas.md` | **previsão** da fronteira pública: decisões tomadas, topologia Railway × escritório, rastreio |
 | `docs/runbook-cloudflare.md` | passo a passo da Cloudflare, primeira vez — executar quando o domínio chegar |
 | `docs/plano-resiliencia.md` | queda de luz/internet/máquina: o que se perde, o que volta sozinho, o que falta construir |
@@ -128,11 +128,12 @@ Compose v2. **Só isso.** Imagem do Chatwoot **sempre com tag fixa** — `latest
 |---|---|
 | `docker compose up -d --wait` · `down` · `ps` · `logs -f <svc>` | ciclo de vida |
 | `bash scripts/verificar-invariantes.sh` | invariantes AD-7/8/9/10 — **antes de commitar** |
+| `sudo bash scripts/systemd/instalar.sh` · `… desinstalar.sh --pausar` | publica (ou desliga) a âncora do WSL e os 3 timers de backup/expurgo/restore. Desligar **para o backup inteiro** — ver `docs/runbook-operacao.md` |
 | `bash scripts/verificar-canal-oficial.sh` · `-canal-email.sh` | invariantes de cada canal |
 | `bash scripts/conectar-twilio.sh [--status\|--templates]` | canal oficial |
 | `bash scripts/conectar-gmail.sh [--status\|--url]` | canal de e-mail (o consent é clique humano) |
 | `bash scripts/backup-offsite.sh [--simular\|--executar]` | cópia cifrada do backup para fora da máquina |
-| `bash scripts/backup.sh` · `bash scripts/restore.sh --verificar` | backup e ensaio de restore — **os dois no cron** (05:10 diário / sáb 05:40) |
+| `bash scripts/backup.sh` · `bash scripts/restore.sh --verificar` | backup e ensaio de restore — **os dois em timer do systemd** (diário 12:10 / sáb 12:40, com recuperação) |
 | `docker compose run --rm chatwoot-seed` | re-semeia canais, locale, atributos, labels, respostas rápidas e o token do espelho (idempotente) |
 | `bash scripts/verificar-operacao.sh` | invariantes da operação (EPIC-6) |
 | `bash scripts/criar-agente.sh --nome N --email E --inbox "E-mail"` · `--listar` | põe alguém para atender |

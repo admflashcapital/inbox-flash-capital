@@ -23,7 +23,8 @@ número e caixa reais:
 | E-mail (Gmail) | recebe · responde na mesma thread · renova o token sozinho |
 
 E a operação está montada: **1 admin + agentes com escopo por inbox**, 7 labels manuais, 5 respostas
-rápidas, atribuição manual por decisão, log em JSON, expurgo LGPD e sonda de saúde no cron do host.
+rápidas, atribuição manual por decisão, log em JSON, sonda de saúde no cron do host e os quatro jobs
+de dado em timers do systemd com recuperação de hora perdida (`scripts/systemd/`).
 `bash scripts/verificar-operacao.sh` cobra tudo isso ao vivo — 15 asserções.
 
 **Próximo passo: mover a fronteira pública para o Railway.** Medido em 2026-09-03 na API da Twilio: o
@@ -31,6 +32,55 @@ rápidas, atribuição manual por decisão, log em JSON, expurgo LGPD e sonda de
 escritório**. Enquanto for assim, uma queda daqui derruba a confirmação de sacado, o link do boleto e a
 mídia — não só o painel. É o bloco **B0** de `docs/plano-resiliencia.md`, não depende do domínio novo e
 vem antes de todo o resto.
+
+### 🔌 Primeiro apagão real, e o que ele mediu — 2026-09-08
+
+A máquina caiu **sexta 04/09 às 17:50:27** e ficou parada **3 dias e 19 horas**. O Windows registrou
+evento 6008 (desligamento inesperado) e Kernel-Power 41 com `BugcheckCode = 0`, `PowerButtonTimestamp
+= 0`, **nenhum** dump de `WER-SystemErrorReporting`, e **nenhum** evento de sistema entre 17:30 e
+17:55 — o log simplesmente para. É assinatura de **corte de energia**: não foi suspensão, não foi
+atualização, não foi tela azul.
+
+**O que voltou sozinho e provou o desenho (R1/R5):**
+
+| Sinal | Medido |
+|---|---|
+| Tarefa `WSL-Always-On` | disparou **1 s depois do logon** (14:35:12 / 14:35:11) |
+| Código de saída da tarefa | `0xC000013A` — a janela do `wsl.exe` foi fechada, e era para ser |
+| `wsl-ancora.service` | `active`, `NRestarts=0` |
+| Containers | 25 de volta |
+| E-mail | **21 mensagens entraram de uma vez às 14:36**, um minuto depois do WSL — o IMAP drenou 3,5 dias de fila do Gmail. **Zero perdido** |
+| WhatsApp entrada | **zero mensagens** para o número oficial na janela — nada a perder, por sorte |
+| Verificadores | invariantes · operação · canal oficial · canal e-mail, todos verdes |
+
+**O achado que NÃO era do fim de semana — e é o maior desta sessão.** Contagem no `syslog`, das 5
+linhas de cron instaladas:
+
+```
+monitorar-canais  : 10 execuções
+backup.sh         :  0
+backup-offsite.sh :  0
+restore.sh        :  0
+retencao-conversas:  0
+```
+
+`backups/backup.log`, `backup-offsite.log` e `restore-verificar.log` **não existiam**. O log de
+energia do Windows desde 17/08 explica: a máquina liga ~11h, desliga ~19h e passa **todo** fim de
+semana desligada — em três semanas ela nunca esteve acordada às 04:10 ou 05:10. Cron não recupera
+hora perdida, e cron de usuário não é coberto por anacron. **O ensaio de restore de sábado e o
+expurgo de domingo eram impossíveis por construção.**
+
+E o verificador ficou verde o tempo todo, porque perguntava *"a linha existe?"* — e existia. A
+pergunta que pega o defeito é *"ela alguma vez rodou, e faz quanto tempo?"*. Corrigido: os quatro
+jobs viraram timers com `Persistent=true` (`plano-resiliencia.md` §R3.1) e o `verificar-operacao.sh`
+passou a cobrar **idade da última execução**, com log inexistente como falha dura.
+
+**O buraco B0 saiu do papel.** Hoje às 12:36, com esta máquina ainda desligada, a **produção**
+(`api.flashcapital.com.br`, que independe daqui) disparou um WhatsApp. O cliente **leu**. E os três
+*status callbacks* da Twilio bateram no túnel ngrok morto desta mesa — 11200 / HTTP 404, três
+tentativas. Nenhuma mensagem de entrada se perdeu, mas **o recibo de entrega de uma mensagem real de
+produção, sim**. É o custo do webhook de produção terminar numa máquina de expediente, agora com
+número em vez de hipótese.
 
 ### 📊 Primeira medição de carga do espelho — 2026-09-04
 
@@ -389,7 +439,7 @@ Itens levantados em code-review e desvios as-built. **Nenhum bloqueia o MVP** �
 | ~~**Handoff Agente ↔ humano não existe.**~~ **SEM OBJETO desde 2026-09-02**: o Agente N8N atendia no número de prospecção, que saiu junto com a Evolution (EPIC-2 cancelado). Não há mais conversa de lead na central para assumir. | — | ✅ sem objeto |
 | **O espelho PERDE, e não tem como recuperar.** A metade "duplicar" desta dívida morreu com a Evolution (era replay do Baileys). Sobra a metade cara, hoje elevada a **AD-12**: `chatwoot_mirror.py` não tem retry, fila nem backfill, e nenhum job reconcilia depois — a falha é logada e descartada. Central fora do ar = **buraco permanente** no painel, não atraso. Decidir onde a central roda **é** decidir a completude do painel. | painel amostral, sem aviso na UI | **`plano-resiliencia.md` §F1** (fila de reenvio no monorepo) — **não cai com o domínio**. A 3.5 deixou de ser gate; até o F1, "amostral" continua declarado por escrito |
 | ~~**Anti-SSRF do Chatwoot desligado para rede privada**~~ (`SAFE_FETCH_ALLOW_PRIVATE_NETWORK=true`). **FECHADA em 2026-09-02** (`eebbbb7`): o flag só existia para o Chatwoot alcançar a Evolution na rede privada; com a Evolution fora (AD-11), voltou a `false` e a proteção está ligada. | — | ✅ fechada |
-| ~~**Retenção de conversa sem aval jurídico**~~ **DECIDIDA E AGENDADA em 2026-09-02.** `RETENCAO_CONVERSAS_DIAS=1825` deixou de ser default técnico: o operador aprovou os **5 anos** por escrito. O expurgo (`retencao-conversas.sh`) entrou no cron do host (domingo 04:10, com `flock`, log em `backups/retencao.log`) e o dry-run foi validado. **Resíduo, hoje menor:** a tarefa `WSL-Always-On` do Windows ancora a VM no logon (`docs/runbook-wsl-autostart.md`, item **R1**) — a ação está provada, mas ainda **não** sobreviveu a um reboot real sem ninguém abrir terminal. Até essa prova, tratar como **passo que pode não disparar**, e cobrar execução no `backups/retencao.log`, não no cron registrado. | LGPD / prova em disputa de dívida | ✅ decidida · o resíduo virou **`plano-resiliencia.md` §R1**, hoje **implementado** (`docs/runbook-wsl-autostart.md`); falta só a prova num reboot real |
+| ~~**Retenção de conversa sem aval jurídico**~~ **DECIDIDA E AGENDADA em 2026-09-02.** `RETENCAO_CONVERSAS_DIAS=1825` deixou de ser default técnico: o operador aprovou os **5 anos** por escrito. O expurgo (`retencao-conversas.sh`) roda pelo `central-retencao.timer` (domingo 12:00, `Persistent=true`, log em `backups/retencao.log`) e o dry-run foi validado. **Ele nasceu no cron das 04:10 e ali teve ZERO execuções** — medido em 08/09/2026: esta máquina nunca esteve acordada num domingo de madrugada, e cron não recupera hora perdida. Daí o timer. **Resíduo:** a retomada ainda depende de **alguém logar** no Windows (`plano-resiliencia.md` §R5.1), então o expurgo pode **atrasar** até o próximo expediente — o que não pode é sumir. Cobrar execução no `backups/retencao.log`, nunca no agendamento registrado. | LGPD / prova em disputa de dívida | ✅ decidida · o resíduo virou **`plano-resiliencia.md` §R1**, hoje **implementado** (`docs/runbook-wsl-autostart.md`); falta só a prova num reboot real |
 | **Identidade dupla no canal Twilio: telefone e BSUID.** O inbound real criou **dois** `contact_inbox` para o mesmo contato: `whatsapp:+553182210297` (telefone) e `whatsapp:BR.4456758834604506` (o **BSUID**, identificador novo da Meta que a Twilio manda em `ExternalUserId`). Hoje o Chatwoot prefere o do telefone (`twilio_whatsapp_primary_source_id`) e é ele que o espelho do monorepo usa — então disparo e resposta casam. Mas a Meta está migrando para payloads **só com BSUID** (o próprio código do Chatwoot já trata esse caso). No dia em que o `From` vier sem telefone, o inbound resolveria o `contact_inbox` do BSUID e o espelho continuaria criando o do telefone: **mesmo contato, threads separadas**. | disparo e resposta em conversas diferentes (dado não se perde; a thread racha) | monitorar; revisar quando a Meta forçar BSUID |
 | ~~**Webhook do Twilio depende de URL de ngrok efêmera**~~ · ~~**Sem monitoramento do webhook**~~ **MITIGADOS em 2026-09-02.** O `tuneis-manha.sh` do monorepo fechou o laço: sobe os três túneis, grava as URLs nos `.env` dos repos que as consomem, recria os containers que precisam reler o ambiente e **escreve o `SmsUrl` e o `StatusCallback` no console da Twilio** (`scripts/tuneis_twilio.py`), provando a vida na URL pública ao final. O modo de falha que custou 10 dias em silêncio deixou de depender de alguém lembrar. **Não é conserto:** a causa (URL efêmera) continua, e o subdomínio fixo **não existe** no plano free (`ERR_NGROK_313`, medido). O conserto é o domínio estável da Fase 4. | apodrecimento automatizado, não eliminado | ✅ mitigado · conserto na Fase 4 |
 | ~~**Rota de disparo em massa do monorepo sem autenticação.**~~ **JÁ ESTAVA FECHADA — verificado em 2026-09-02.** O achado era de 2026-07-13 e o monorepo consertou em 16/07, sem que este repo soubesse: `api/routers/whatsapp_dispatch.py:26` declara `APIRouter(dependencies=[Depends(require_operational)])`, e `api/tests/test_rotas_protegidas.py` cobre as rotas. A dívida sobreviveu 7 semanas só porque ninguém releu. | — | ✅ fechada no monorepo |
@@ -403,7 +453,7 @@ Itens levantados em code-review e desvios as-built. **Nenhum bloqueia o MVP** �
 | **`CannedResponsesController` do Chatwoot não tem authorization.** Ao contrário de labels e automações, o controller de respostas rápidas não chama `check_authorization` e não existe `CannedResponsePolicy`: **qualquer agente cria, edita e apaga as respostas rápidas de todos**, pela API. Upstream, sem conserto possível sem fork. Mitigação: o seed recria o conjunto a cada `up`, então o estrago é reversível. | agente apaga o repertório da equipe | limite do CE · monitorar |
 | ~~**3 dos 48 Content Templates têm `friendly_name` duplicado**~~ **RESOLVIDO em 2026-09-04, e era pior do que estava escrito.** Não eram cópias: eram **duas versões aprovadas**, e a de 25/08 pede uma variável a mais (`prazo_vencimento`). O catálogo apontava para a **antiga** — a revisão nunca entrou em vigor, e o `sincronizar_espelho_twilio.py --check` acusava os três como *"enviam AMOSTRA no lugar do dado real"*. Repontado para os SIDs novos (JSON do Sensei → `provision_twilio_templates.py --no-submit`), e as 3 cópias antigas **apagadas na Twilio** depois de varredura provando zero referência em código, JSON e nas 320 colunas de texto/jsonb de `internal`+`public`. Definições arquivadas em `sensei-cobrancas/arquivo/` antes de apagar, porque reenvio à Meta tem histórico ruim. **Twilio: 48 → 45, zero nomes duplicados. Espelho × catálogo: 0 divergentes.** 915 testes verdes. | — | ✅ fechado |
 | **No painel do monorepo, `GET /notificacoes` e `mark-read` são globais.** Os dois recebem `current_user` e **não o usam**: todo usuário autenticado lê as notificações de todos, e "marcar lidas" marca as de todos. O sino já é um mural. Endereçar o alerta ao perfil `nexus` é, hoje, cosmético — funciona, mas não isola. *(achado ao ligar o alerta de saúde; anterior a este trabalho)* | notificação de operação visível a qualquer usuário do painel | monorepo — corrigir junto com a próxima mexida em notificações |
-| ~~**Cópia offsite do backup é manual**~~ **AUTOMATIZADA em 2026-09-04.** `scripts/backup-offsite.sh` cifra os artefatos em AES256 (`gpg --symmetric`, round-trip provado) e os espelha num bucket privado do Supabase Storage via `rclone sync` — a retenção 7+4 sai de graça, por ser espelho do `BACKUP_DIR` que o `backup.sh` já poda. **Credencial escopada a storage** (S3 Access Keys), nunca a `service_role`, que furaria RLS no projeto inteiro e daria à central acesso ao banco de domínio (AD-9). **LIGADO e provado no mesmo dia:** bucket `backups` criado, chave S3 no `.env`, `rclone` instalado em `~/.local/bin` (sem sudo), 8 artefatos cifrados e confirmados no bucket, e o 5º cron instalado (30 5, depois do backup das 05:10). **Ensaio de restore feito a partir do BUCKET, não do disco:** as duas metades baixadas, decifradas e **byte-a-byte idênticas** ao original — o dump com 90 tabelas e o tar com 19 anexos. **Resíduo, e é o único que sobra:** guardar a `BACKUP_OFFSITE_PASSPHRASE` no gerenciador de senhas. Ela mora no `.env` desta máquina; se a máquina morrer e a frase só existir nela, o offsite está lá e é ilegível. | perda total em falha de host | ✅ ligado e provado · ⬜ **frase no cofre** |
+| ~~**Cópia offsite do backup é manual**~~ **AUTOMATIZADA em 2026-09-04.** `scripts/backup-offsite.sh` cifra os artefatos em AES256 (`gpg --symmetric`, round-trip provado) e os espelha num bucket privado do Supabase Storage via `rclone sync` — a retenção 7+4 sai de graça, por ser espelho do `BACKUP_DIR` que o `backup.sh` já poda. **Credencial escopada a storage** (S3 Access Keys), nunca a `service_role`, que furaria RLS no projeto inteiro e daria à central acesso ao banco de domínio (AD-9). **LIGADO e provado no mesmo dia:** bucket `backups` criado, chave S3 no `.env`, `rclone` instalado em `~/.local/bin` (sem sudo), 8 artefatos cifrados e confirmados no bucket, e a cópia **encadeada no backup** (`Wants=central-offsite.service`), para que o remoto não possa divergir do dia que acabou de ser gerado. **Ensaio de restore feito a partir do BUCKET, não do disco:** as duas metades baixadas, decifradas e **byte-a-byte idênticas** ao original — o dump com 90 tabelas e o tar com 19 anexos. **Provado sob cron REAL em 08/09/2026** (antes só sob `env -i`, que *imita* cron): linha temporária agendada, daemon executou, `backup-offsite.log` criado, exit 0, 10 objetos confirmados no bucket. **Resíduo, e é o único que sobra:** guardar a `BACKUP_OFFSITE_PASSPHRASE` no gerenciador de senhas. Ela mora no `.env` desta máquina; se a máquina morrer e a frase só existir nela, o offsite está lá e é ilegível. | perda total em falha de host | ✅ ligado e provado · ⬜ **frase no cofre** |
 | **O Sidekiq da central grita `RedisClient::ReadTimeoutError` sem parar — ~24/min, 5.361 em 6 h.** Mecanismo provado por construção, não inferido: o `BasicFetch` do Sidekiq bloqueia em `brpop` por **2 s** (`fetch.rb:12`, `TIMEOUT = 2`), e o `lib/redis/config.rb` do Chatwoot fixa **`timeout: 1`** com `reconnect_attempts: 2` — 1 s × 3 tentativas = exatamente o *"Waited 3 seconds"* do log. Só dispara com a **fila vazia**: havendo job, o `brpop` retorna na hora. **Não há perda:** 3.808 processados, 0 enfileirados, 0 em retry, latência 0 nas 7 filas; o único job morto é o sendmail de ontem (não há SMTP, e isso é conhecido). ⚠️ **Não está provado** que foi isto que impediu o job de sincronizar templates hoje — foi o que me fez não conseguir *ver* se ele rodou, que é dano diferente. | log ilegível: 5 mil linhas de ruído por turno afogam o erro de verdade, e é o log que se abre no incidente | upstream, `timeout: 1` **hardcoded** sem env var — corrigir exigiria fork (AD-7). Registrado como limite; se um dia atrapalhar diagnóstico de novo, a saída é filtrar na leitura, não na origem |
 | **Staging não existe ainda.** O runbook de upgrade exige validar em staging antes de produção (FR-2); hoje só há o ambiente dev local. | upgrade sem rede de proteção | antes do 1º upgrade em prod |
 

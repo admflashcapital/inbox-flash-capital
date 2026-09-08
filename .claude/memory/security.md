@@ -60,9 +60,11 @@ Webhook público sem verificação = ingestão forjada (mensagem falsa na conver
 
 ## LGPD (Story 6.3)
 
-- Retenção **decidida e agendada**: 1825 dias (5 anos), aprovada por escrito em 2026-09-02, no cron
-  do host (domingo 04:10, com `flock`). `destroy_all`, nunca `delete_all` — são os callbacks que
-  removem os anexos do volume.
+- Retenção **decidida e agendada**: 1825 dias (5 anos), aprovada por escrito em 2026-09-02, no
+  `central-retencao.timer` do systemd (domingo 12:00, `Persistent=true`). `destroy_all`, nunca
+  `delete_all` — são os callbacks que removem os anexos do volume. Quem prova execução é o
+  `backups/retencao.log`, não o agendamento registrado: entre 17/08 e 08/09 a linha existia no cron
+  e teve **zero** execuções, porque a máquina nunca esteve acordada num domingo de madrugada.
 - Acesso a dado sensível (CPF/CNPJ, valor em aberto) **restrito por INBOX, não por papel** — ver
   AD-14. O CE não tem papel customizado, e o atributo é da conversa: quem a abre vê o documento.
   **Não há trilha de auditoria** (`audit_logs` é premium): não se sabe quem leu o quê.

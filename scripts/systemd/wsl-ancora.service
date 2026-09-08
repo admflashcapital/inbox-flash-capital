@@ -1,0 +1,28 @@
+[Unit]
+# Ancora a VM do WSL2. Ela desliga quando o ULTIMO processo dela termina, entao
+# "fechar o terminal" e desligar o servidor - com os containers, o cron do monitor
+# e os timers de backup/expurgo/restore junto.
+#
+# Por que systemd e nao a tarefa do Windows sozinha:
+# a tarefa WSL-Always-On dispara em -AtLogOn, e SO. Um `wsl --shutdown` no meio
+# do dia derrubava a ancora e ela nao voltava, porque nao havia novo logon.
+# Medido em 2026-09-04: VM com 5h de uptime, 25 containers, e zero ancora.
+# Uma unidade do systemd volta em TODA subida da distro, com ou sem logon.
+#
+# E por que nao um `setsid`/`nohup` disparado pela tarefa: medido no mesmo dia,
+# o WSL mata a arvore de processos da invocacao de interop quando o wsl.exe sai.
+# `setsid` e `nohup & disown` morreram junto; a unidade sobreviveu, porque quem
+# a possui e o PID 1.
+Description=Ancora da VM do WSL2 (mantem a distro viva sem terminal aberto)
+Documentation=file:///home/flash/projects/inbox-flash-capital/docs/runbook-wsl-autostart.md
+After=multi-user.target
+
+[Service]
+Type=exec
+ExecStart=/bin/sleep infinity
+Restart=always
+RestartSec=1
+# Custo real: um processo dormindo. Sem CPU, alguns KB de RSS.
+
+[Install]
+WantedBy=multi-user.target

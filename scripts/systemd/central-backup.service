@@ -1,0 +1,20 @@
+[Unit]
+Description=Backup da central (banco + anexos), poda 7 diários + 4 semanais
+Documentation=file:///home/flash/projects/inbox-flash-capital/docs/runbook-backup.md
+# Puxa a cópia offsite junto: Wants (não Requires) porque o offsite
+# espelha o que ESTÁ em disco — se o dump de hoje falhou, ainda vale
+# subir os dias anteriores que porventura não subiram.
+Wants=central-offsite.service
+After=central-retencao.service
+
+[Service]
+Type=oneshot
+User=flash
+Group=flash
+SupplementaryGroups=docker
+WorkingDirectory=/home/flash/projects/inbox-flash-capital
+Environment=HOME=/home/flash
+Environment=PATH=/home/flash/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+TimeoutStartSec=45min
+ExecStartPre=/usr/bin/bash scripts/lib/aguardar-stack.sh
+ExecStart=/usr/bin/bash -c 'set -o pipefail; /usr/bin/flock -n /tmp/backup-central.lock bash scripts/backup.sh 2>&1 | tee -a backups/backup.log'

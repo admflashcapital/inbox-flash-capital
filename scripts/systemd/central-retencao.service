@@ -1,0 +1,20 @@
+[Unit]
+Description=Expurgo LGPD da central (conversas resolvidas > 5 anos)
+Documentation=file:///home/flash/projects/inbox-flash-capital/docs/runbook-operacao.md
+# Roda ANTES do backup do dia, de propósito. Um snapshot tirado antes do
+# expurgo congelaria por 4 semanas exatamente a conversa que a política
+# acabou de mandar apagar. Era o que o par 04:10/05:10 do cron garantia
+# pelo relógio; aqui é garantido pela ordem, que é mais forte.
+Before=central-backup.service
+
+[Service]
+Type=oneshot
+User=flash
+Group=flash
+SupplementaryGroups=docker
+WorkingDirectory=/home/flash/projects/inbox-flash-capital
+Environment=HOME=/home/flash
+Environment=PATH=/home/flash/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+TimeoutStartSec=30min
+ExecStartPre=/usr/bin/bash scripts/lib/aguardar-stack.sh
+ExecStart=/usr/bin/bash -c 'set -o pipefail; /usr/bin/flock -n /tmp/retencao-central.lock bash scripts/retencao-conversas.sh --executar 2>&1 | tee -a backups/retencao.log'

@@ -17,7 +17,8 @@
 #                              Pede confirmação explícita.
 #
 # Um backup nunca testado não é backup — é esperança. O `--verificar` existe
-# para rodar sem medo (semanalmente, ou no cron), porque não encosta em prod.
+# para rodar sem medo (semanalmente pelo central-restore-check.timer, ou à mão),
+# porque não encosta em prod.
 # ═══════════════════════════════════════════════════════════════════
 set -euo pipefail
 

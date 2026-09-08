@@ -205,10 +205,13 @@ else
   falha "LOGRAGE_ENABLED=${LOGRAGE:-vazio} no container — o log é texto puro e ninguém filtra um incidente. Recrie: docker compose up -d --force-recreate chatwoot-web"
 fi
 
-# Os QUATRO jobs do host. Cron que some não dá erro: dá silêncio — e cada um
-# destes silêncios custa uma coisa diferente. O do restore casa a linha COM a
-# flag: `restore.sh` sozinho também casaria um `--producao` agendado, que seria
-# um restore destrutivo automático toda semana.
+# Os jobs do host. Agendamento que some não dá erro: dá silêncio — e cada um
+# destes silêncios custa uma coisa diferente. Desde 08/09/2026 há dois tipos,
+# e a diferença é deliberada: o monitor é sonda de LIVENESS e fica no cron
+# (recuperar uma verificação de saúde atrasada não faz sentido — só interessa
+# o estado de agora). Os quatro jobs de DADO viraram timers do systemd, porque
+# só o systemd recupera hora perdida, e esta máquina passa a madrugada e o fim
+# de semana desligada. Ver scripts/systemd/ e docs/runbook-operacao.md.
 verificar_cron() {
   local rotulo="$1" padrao="$2" dor="$3"
   if crontab -l 2>/dev/null | grep -q -- "$padrao"; then
@@ -217,23 +220,82 @@ verificar_cron() {
     falha "cron de ${rotulo} não registrado — ${dor}. Ver docs/runbook-operacao.md"
   fi
 }
-verificar_cron "expurgo LGPD"      "retencao-conversas.sh" \
-  "a central passa a guardar conversa de cobrança para sempre"
 verificar_cron "monitor de canais" "monitorar-canais.sh" \
   "um canal cai e ninguém fica sabendo"
-verificar_cron "backup"            "backup.sh" \
+
+# Três asserções por timer, e a terceira é a que dói: um timer sem Persistent
+# volta a ser cron com outro nome — perde toda hora em que a máquina estiver
+# desligada, que é exatamente o defeito que ele nasceu para corrigir.
+verificar_timer() {
+  local rotulo="$1" unidade="$2" dor="$3"
+  if ! systemctl is-enabled --quiet "$unidade" 2>/dev/null; then
+    falha "timer de ${rotulo} (${unidade}) não habilitado — ${dor}. Instale: sudo bash scripts/systemd/instalar.sh"
+  elif ! systemctl is-active --quiet "$unidade" 2>/dev/null; then
+    falha "timer de ${rotulo} (${unidade}) habilitado mas parado — nada dispara até o próximo boot"
+  elif ! systemctl show "$unidade" -p Persistent 2>/dev/null | grep -q "Persistent=yes"; then
+    falha "timer de ${rotulo} sem Persistent=true — perde de novo toda hora com a máquina desligada"
+  else
+    ok "timer de ${rotulo} ativo e com recuperação de hora perdida (${unidade})"
+  fi
+}
+verificar_timer "backup"           "central-backup.timer" \
   "o par banco+anexos para de ser gerado, e a poda 7+4 só acontece quando o script roda"
-verificar_cron "ensaio de restore" "restore.sh --verificar" \
+verificar_timer "expurgo LGPD"     "central-retencao.timer" \
+  "a central passa a guardar conversa de cobrança para sempre"
+verificar_timer "ensaio de restore" "central-restore-check.timer" \
   "backup que ninguém testou não é backup, é esperança"
 
-# O 5º cron é CONDICIONAL, e é de propósito: a cópia offsite é opt-in. Cobrá-la
-# sempre daria vermelho em instalação que ainda não a ligou; não cobrá-la nunca
+# ── A asserção que faltava: EXECUÇÃO, não registro ────────────────────────
+# Entre 17/08 e 08/09 este verificador ficou verde enquanto quatro jobs tinham
+# ZERO execuções. A pergunta era "a linha existe?" — e existia. A pergunta que
+# pega o defeito é "ela alguma vez rodou, e faz quanto tempo?".
+# Os limites são folgados de propósito: a máquina é de expediente e some no fim
+# de semana, então 5 dias cabem um feriado emendado sem dar falso vermelho. Mas
+# nenhum limite deixa passar o caso real, que era log INEXISTENTE.
+# Recebe um PADRÃO, não um arquivo: para o backup a evidência certa é o
+# artefato mais novo, não o log. Um `bash scripts/backup.sh` rodado à mão
+# produz o dump e NÃO escreve no log (quem redireciona é a unidade) — cobrar
+# o log diria "nunca executou" com o par banco+anexos ali, do lado. E a
+# pergunta que interessa não é "o log cresceu?", é "existe backup recente?".
+# Para expurgo e ensaio de restore não há artefato — eles apagam e destroem —
+# então nesses o log É a única evidência que sobra.
+verificar_execucao() {
+  local rotulo="$1" padrao="$2" limite="$3" dor="$4"
+  local arquivo
+  # sem aspas de propósito: o padrão pode ser um glob
+  arquivo="$(ls -1t $padrao 2>/dev/null | head -1)"
+  if [ -z "$arquivo" ] || [ ! -f "$arquivo" ]; then
+    falha "${rotulo}: nunca executou (nada casa ${padrao}) — ${dor}"
+    return
+  fi
+  local idade=$(( ( $(date +%s) - $(stat -c %Y "$arquivo") ) / 86400 ))
+  if [ "$idade" -gt "$limite" ]; then
+    falha "${rotulo}: última execução há ${idade} dias (limite ${limite}) — ${dor}"
+  else
+    ok "${rotulo}: executou há ${idade} dia(s) (${arquivo##*/})"
+  fi
+}
+verificar_execucao "backup"            "${RAIZ}/backups/db_*.sql.gz"          5 \
+  "não há par banco+anexos recente para restaurar"
+verificar_execucao "expurgo LGPD"      "${RAIZ}/backups/retencao.log"        10 \
+  "a política de 5 anos está escrita mas não está sendo aplicada"
+verificar_execucao "ensaio de restore" "${RAIZ}/backups/restore-verificar.log" 10 \
+  "ninguém sabe se o backup abre"
+
+# A cópia offsite é CONDICIONAL, e é de propósito: é opt-in. Cobrá-la sempre
+# daria vermelho em instalação que ainda não a ligou; não cobrá-la nunca
 # deixaria passar o modo de falha real — alguém preenche as chaves do bucket,
 # acha que está protegido, e nada nunca sobe porque ninguém agendou.
-# Então: só existe exigência depois que o .env diz que a intenção existe.
 if [ -n "$(env_get BACKUP_S3_BUCKET)" ] && [ -n "$(env_get BACKUP_S3_ACCESS_KEY_ID)" ]; then
-  verificar_cron "backup offsite" "backup-offsite.sh" \
-    "o bucket está configurado mas nada sobe — o backup segue morrendo junto com a máquina"
+  # Não tem timer próprio: é puxada pelo Wants= do central-backup.service, para
+  # que a cópia remota não possa divergir do dia que acabou de ser gerado.
+  if systemctl show central-backup.service -p Wants 2>/dev/null | grep -q "central-offsite.service"; then
+    ok "cópia offsite encadeada no backup (central-offsite.service)"
+  else
+    falha "central-backup.service não puxa central-offsite.service — o bucket está configurado mas nada sobe"
+  fi
+  verificar_execucao "cópia offsite" "${RAIZ}/backups/backup-offsite.log" 5 \
+    "o backup segue morrendo junto com a máquina"
   [ -n "$(env_get BACKUP_OFFSITE_PASSPHRASE)" ] \
     || falha "BACKUP_S3_* preenchidas mas BACKUP_OFFSITE_PASSPHRASE vazia: o offsite recusa subir em claro (e faz bem)"
 else

@@ -16,7 +16,7 @@
 #    E-mail ARQUIVADO no Gmail sai da INBOX e NUNCA será importado por aqui.
 #
 # ⚠️ Isto traz PII de cliente para a central. O expurgo (`retencao-conversas.sh`)
-#    roda no cron do host, domingo 04:10 — mas apaga só conversa RESOLVIDA mais
+#    roda pelo central-retencao.timer, domingo 12:00 — mas apaga só conversa RESOLVIDA mais
 #    velha que 5 anos. Histórico importado hoje fica. Ver docs/runbook-lgpd.md.
 #
 # Uso:

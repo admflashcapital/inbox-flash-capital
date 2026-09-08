@@ -1,0 +1,25 @@
+[Unit]
+Description=Dispara o expurgo LGPD semanal da central (com recuperação)
+
+[Timer]
+# ── Por que timer e não cron ──────────────────────────────────────
+# Medido em 08/09/2026: das 5 linhas de cron instaladas, só a do monitor
+# (de hora em hora) alguma vez rodou. As quatro da madrugada tiveram ZERO
+# execuções em três semanas, porque esta máquina vive das ~11h às ~19h e
+# passa todo fim de semana desligada. Cron não tem memória: hora perdida é
+# hora perdida, e cron de usuário não é coberto por anacron.
+#
+# `Persistent=true` é exatamente a memória que faltava — o systemd grava o
+# último disparo em /var/lib/systemd/timers e, se a hora marcada passou com
+# a máquina desligada, executa na próxima vez que ela subir. O horário deixa
+# de ser uma promessa sobre quando a máquina estará ligada e vira só uma
+# preferência.
+#
+# Domingo às 12:00 — e o Before= no .service garante que, quando o domingo
+# for recuperado numa segunda junto com o backup, o expurgo saia primeiro.
+OnCalendar=Sun *-*-* 12:00:00
+Persistent=true
+Unit=central-retencao.service
+
+[Install]
+WantedBy=timers.target

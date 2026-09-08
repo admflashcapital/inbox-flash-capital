@@ -156,10 +156,14 @@ else
 fi
 
 # ── 6. O expurgo da LGPD continua agendado ─────────────────────────
-if crontab -l 2>/dev/null | grep -q "retencao-conversas.sh"; then
-  ok "expurgo LGPD agendado no cron do host"
+# Virou timer do systemd em 08/09/2026 — no cron ele tinha zero execuções,
+# porque a máquina nunca esteve acordada num domingo às 04:10. Aqui o que se
+# cobra é o timer VIVO; a idade da última execução quem cobra é o
+# verificar-operacao.sh, que roda a mão e pode ser mais exigente.
+if systemctl is-active --quiet central-retencao.timer 2>/dev/null; then
+  ok "expurgo LGPD agendado (central-retencao.timer, com recuperação)"
 else
-  falha "o cron do expurgo LGPD sumiu — a central passa a guardar conversa de cobrança para sempre"
+  falha "central-retencao.timer não está ativo — a central passa a guardar conversa de cobrança para sempre. Instale: sudo bash scripts/systemd/instalar.sh"
 fi
 
 # ── 7. A VM do WSL está ancorada, ou depende de um terminal aberto? ─

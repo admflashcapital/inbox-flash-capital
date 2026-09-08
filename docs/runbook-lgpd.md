@@ -11,7 +11,7 @@
 |---|---|
 | Política | conversas **resolvidas** com mais de **1825 dias (5 anos)** são apagadas |
 | Onde vive | `RETENCAO_CONVERSAS_DIAS` no `.env` · `scripts/retencao-conversas.sh` |
-| Agendamento | cron do host, **domingo 04:10**, com `flock`, log em `backups/retencao.log` |
+| Agendamento | `central-retencao.timer` do systemd, **domingo 12:00**, com `Persistent=true` (recupera a semana em que a máquina ficou desligada), log em `backups/retencao.log` |
 | Aprovação | os 5 anos foram aprovados por escrito pelo operador em 2026-09-02 |
 
 O prazo segue a prescrição civil comum de dívida: apagar antes destrói a prova da negociação de um

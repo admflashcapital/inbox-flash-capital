@@ -27,24 +27,40 @@ bash scripts/backup.sh        # = scripts/backup.sh
 - O `pg_dump` roda **dentro** do container, pelo socket local — nenhuma senha trafega em linha de
   comando nem aparece em `ps`.
 
-### Agendamento (cron do host) — instalado
+### Agendamento (timers do systemd) — instalado
 
-```cron
-10 5 * * *  … backup.sh                >> backups/backup.log
-40 5 * * 6  … restore.sh --verificar   >> backups/restore-verificar.log
+```
+central-backup.timer          diário  12:10   → backup.sh, e puxa o offsite
+central-restore-check.timer   sáb     12:40   → restore.sh --verificar
+central-retencao.timer        dom     12:00   → retencao-conversas.sh --executar
 ```
 
-Ambos com `flock` e com `cd` para a raiz do repo (cron roda com `cwd=$HOME`; sem o `cd`, o
-`docker compose` não acha o `compose.yaml` e o log vai para o lugar errado). As quatro entradas
-completas estão em `docs/runbook-operacao.md`.
+Unidades versionadas em `scripts/systemd/`; instala com `sudo bash scripts/systemd/instalar.sh`.
 
-**Por que 05:10 e não 03:10:** no domingo o expurgo LGPD roda às 04:10. Um backup feito **antes** dele
-congelaria por quatro semanas exatamente a conversa que a política acabou de apagar. Rodando depois, o
-snapshot semanal já nasce expurgado.
+**Por que timer e não cron, e por que meio-dia.** Esta máquina é de expediente: liga por volta das 11h,
+desliga por volta das 19h, e passa o fim de semana desligada. Cron não recupera hora perdida (e cron de
+usuário não é coberto por anacron), então um job de madrugada aqui simplesmente **nunca roda** — medido
+em 08/09/2026, foram **zero execuções em três semanas** para backup, offsite, ensaio de restore e
+expurgo. Todo timer tem `Persistent=true`: se a hora marcada passou com a máquina desligada, ele executa
+na próxima vez que ela subir. O horário deixa de ser uma aposta sobre quando a máquina estará ligada.
 
-**Por que a poda depende do cron:** a retenção 7+4 é executada *pelo próprio* `backup.sh`, no fim da
-rodada. Sem o job agendado, nada é gerado **e** nada é podado — os artefatos antigos ficam para sempre.
-`verificar-operacao.sh` cobra as duas entradas.
+**Por que o ensaio de restore continua marcado no sábado** mesmo com a máquina sempre desligada no fim
+de semana: com `Persistent=true` ele roda na segunda, logo após o backup do dia. Uma vez por semana,
+como sempre foi a intenção — o que mudou é que agora acontece.
+
+**A ordem é garantida pela unidade, não pelo relógio.** `central-retencao.service` declara
+`Before=central-backup.service`, e `central-restore-check.service` declara `After=`. Assim, quando uma
+segunda-feira recupera os três de uma vez, sai expurgo → backup → offsite → ensaio. No cron essa ordem
+dependia de 04:10 vir antes de 05:10, o que não sobrevive a uma recuperação.
+
+**Por que a stack é esperada antes de rodar:** com recuperação no boot, o job dispara enquanto o Docker
+Desktop ainda está subindo do lado do Windows. `scripts/lib/aguardar-stack.sh` segura até o daemon
+responder e o Postgres da central ficar `healthy`, com teto de 5 min — melhor não rodar do que gravar
+um dump truncado.
+
+**Por que a poda depende do agendamento:** a retenção 7+4 é executada *pelo próprio* `backup.sh`, no fim
+da rodada. Sem o job, nada é gerado **e** nada é podado — os artefatos antigos ficam para sempre.
+`verificar-operacao.sh` cobra o timer **e a idade da última execução**, que é a asserção que faltava.
 
 Ao mudar de host, reveja o `BACKUP_DIR`: fora do repo, e num disco que não seja o mesmo que morre com a
 máquina.
@@ -143,14 +159,17 @@ Primeira execução real: 8 artefatos cifrados, 8 confirmados no bucket. E o que
 comparadas com `cmp` contra o original. **Byte-a-byte idênticas**, com o dump abrindo 90 tabelas e o
 tar listando os 19 anexos. Backup offsite que ninguém baixou de volta é esperança, igual ao local.
 
-### No cron do host
+### Encadeada no backup, não agendada à parte
 
-Depois do backup local, nunca antes — o que não está em disco não sobe:
+O offsite **não tem timer próprio**. `central-backup.service` declara
+`Wants=central-offsite.service`, e o offsite declara `After=central-backup.service`. Assim a cópia
+remota não pode divergir do dia que acabou de ser gerado — o que não está em disco não sobe, e o que
+acabou de entrar em disco sobe na mesma rodada.
 
-```
-30 5 * * * /usr/bin/flock -n /tmp/backup-offsite.lock \
-  bash scripts/backup-offsite.sh --executar >> backups/backup-offsite.log 2>&1
-```
+É `Wants` e não `Requires` de propósito: se o dump de hoje falhar, ainda vale subir os dias anteriores
+que porventura não subiram. E é o único job dos quatro **sem** `aguardar-stack.sh` — ele só lê arquivo
+e fala com o bucket. Exigir a stack de pé faria a cópia offsite depender justamente daquilo que ela
+existe para substituir.
 
 ## Retenção de conversa (LGPD)
 
@@ -166,7 +185,8 @@ Apaga conversas **resolvidas** mais velhas que `RETENCAO_CONVERSAS_DIAS` (defaul
 anos**), com mensagens e anexos. Conversa aberta ou pendente nunca é tocada.
 
 > **Decidido e agendado.** Os 5 anos foram aprovados por escrito pelo operador em 2026-09-02 e o
-> expurgo está no cron do host (domingo 04:10, com `flock`, log em `backups/retencao.log`). A tensão
+> expurgo roda pelo `central-retencao.timer` (domingo 12:00, com recuperação, log em
+> `backups/retencao.log`). A tensão
 > que motivou a decisão continua valendo como critério: apagar cedo demais destrói a prova da
 > negociação de uma dívida; tarde demais viola a minimização.
 

@@ -62,7 +62,7 @@ O compose, o `.env` e os `scripts/` estão na raiz, então `docker compose` acha
 | `bash scripts/verificar-invariantes.sh` | invariantes AD-7/8/9/10 — **rode antes de commitar** |
 | `bash scripts/verificar-canal-oficial.sh` · `-canal-email.sh` | invariantes de cada canal |
 | `SMOKE_EU_SEI_O_QUE_ESTOU_FAZENDO=1 bash scripts/smoke-test.sh` | semeia, reinicia, prova persistência (dev) |
-| `bash scripts/backup.sh` · `bash scripts/restore.sh --verificar` | backup do par banco+anexos e ensaio de restore — **os dois no cron** (05:10 diário / sáb 05:40) |
+| `bash scripts/backup.sh` · `bash scripts/restore.sh --verificar` | backup do par banco+anexos e ensaio de restore — **os dois em timer do systemd** (`central-backup.timer` diário 12:10 / `central-restore-check.timer` sáb 12:40, ambos com recuperação de hora perdida) |
 | `bash scripts/conectar-twilio.sh [--status\|--templates]` | canal oficial (a inbox já nasce do seed) |
 | `bash scripts/conectar-gmail.sh [--status\|--url]` | canal de e-mail — o consent é clique humano |
 | `docker compose run --rm chatwoot-init` | migrações do upgrade (one-shot idempotente) |

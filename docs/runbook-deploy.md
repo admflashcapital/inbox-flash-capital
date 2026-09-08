@@ -158,7 +158,7 @@ uma senha, um clique de consentimento e a criação da conta.
 | 7 | `bash scripts/conectar-gmail.sh` e clicar no consent | shell + **navegador** |
 | 8 | `bash scripts/criar-agente.sh …` (ou o convite pela tela, se houver SMTP) | shell **interativo** |
 | 9 | `bash scripts/backfill-email.sh 90` (opcional, uma vez) | shell |
-| 10 | instalar as linhas de cron (§ runbook-operacao) — 4 sempre, + a 5ª se a cópia offsite for ligada | shell |
+| 10 | **`sudo bash scripts/systemd/instalar.sh`** — publica a âncora do WSL e os 3 timers (backup, expurgo, ensaio de restore), todos com `Persistent=true`. Instala também a linha de cron do monitor (§ runbook-operacao). Sem este passo a central sobe e funciona, mas **não faz backup nenhum** — e nada avisa, porque a falta de um agendamento é silêncio, não erro | shell (**root**) |
 | 11 | os quatro `verificar-*.sh` verdes | shell |
 
 **Você não precisa abrir um shell NA VPS para isso.** O Compose fala com daemon remoto: exporte o
@@ -172,7 +172,8 @@ bash scripts/conectar-gmail.sh --status     # script local, exec remoto
 
 Vale para tudo que é `docker compose exec`: `conectar-*`, `criar-agente`, os quatro `verificar-*`,
 retenção e monitor. **Não vale limpo para `backup.sh`/`restore.sh`**: o `-v ${BACKUP_DIR}:/backup`
-resolveria caminho na VPS, não no seu disco — esses dois seguem sendo do cron do host.
+resolveria caminho na VPS, não no seu disco — esses dois seguem sendo agendados **no próprio host**,
+pelos timers de `scripts/systemd/`.
 
 `criar-agente.sh` continua exigindo **TTY** (ele lê a senha sem ecoar). `ssh vps "bash scripts/…"`
 não tem terminal: a senha sai vazia ou o comando pendura. Use sessão interativa ou `ssh -t`.

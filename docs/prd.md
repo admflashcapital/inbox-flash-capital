@@ -254,10 +254,8 @@ Operador pode assumir/atribuir conversas, aplicar labels manualmente e usar resp
 1. ✅ **Espelho dos disparos em massa:** o **monorepo empurra o outbound** para a conversa via API do Chatwoot (não depende só do inbound nativo). Ver AD-6.
 
 **Em aberto (defaults assumidos, ajustáveis):**
-2. ~~**Retenção de conversas (LGPD)**~~ **DECIDIDA.** 1825 dias (5 anos, prescrição civil comum de dívida) aprovados por escrito pelo operador em 2026-09-02; `scripts/retencao-conversas.sh` está no cron do host (domingo 04:10, com `flock`). Procedimento completo, incluindo o direito de exclusão do titular, em `docs/runbook-lgpd.md`. **Resíduo:** a máquina agora sobe sozinha com o Windows (`docs/runbook-wsl-autostart.md`, item R1 do
-   plano de resiliência), mas isso ainda não sobreviveu a um reboot real sem ninguém abrir terminal —
-   até essa prova, trate o expurgo como passo que **pode** não disparar. Quem prova execução é o
-   `backups/retencao.log`, não o cron registrado.
+2. ~~**Retenção de conversas (LGPD)**~~ **DECIDIDA.** 1825 dias (5 anos, prescrição civil comum de dívida) aprovados por escrito pelo operador em 2026-09-02; `scripts/retencao-conversas.sh` roda pelo `central-retencao.timer` do systemd (domingo 12:00, `Persistent=true`). Procedimento completo, incluindo o direito de exclusão do titular, em `docs/runbook-lgpd.md`. **Resíduo:** a retomada depende de **alguém logar** no Windows — a tarefa que acorda o WSL é `-AtLogOn` (`plano-resiliencia.md` §R5.1). Até isso fechar, trate o expurgo como passo que **pode** atrasar até o próximo expediente. Quem prova execução é o
+   `backups/retencao.log`, não o agendamento registrado.
 3. ~~Onde a central executa e como se acessa~~ **DECIDIDA em 2026-09-03 — ver AD-15.** A central roda
    na **máquina do escritório**, ligada 24h, alcançada por **Cloudflare Tunnel** num **domínio novo**
    (plano gratuito); `flashcapital.com.br` não é tocado. E ela **já tem URL pública hoje** — um túnel

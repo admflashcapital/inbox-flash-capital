@@ -1,0 +1,17 @@
+[Unit]
+Description=Ensaio de restore da central (Postgres efêmero, não toca produção)
+Documentation=file:///home/flash/projects/inbox-flash-capital/docs/runbook-backup.md
+# Depois do backup: o ensaio deve exercitar o par MAIS NOVO, não o de ontem.
+After=central-backup.service
+
+[Service]
+Type=oneshot
+User=flash
+Group=flash
+SupplementaryGroups=docker
+WorkingDirectory=/home/flash/projects/inbox-flash-capital
+Environment=HOME=/home/flash
+Environment=PATH=/home/flash/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+TimeoutStartSec=60min
+ExecStartPre=/usr/bin/bash scripts/lib/aguardar-stack.sh
+ExecStart=/usr/bin/bash -c 'set -o pipefail; /usr/bin/flock -n /tmp/restore-check.lock bash scripts/restore.sh --verificar 2>&1 | tee -a backups/restore-verificar.log'

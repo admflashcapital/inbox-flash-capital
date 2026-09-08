@@ -16,7 +16,8 @@
 # conversa de COBRANÇA. Apagar cedo demais destrói a prova da negociação de uma
 # dívida; tarde demais viola a minimização da LGPD. O default (1825 dias = 5
 # anos) segue a prescrição civil comum de dívida, foi APROVADO por escrito pelo
-# operador em 2026-09-02, e está no cron do host (domingo 04:10, com flock).
+# operador em 2026-09-02, e roda pelo central-retencao.timer (domingo 12:00,
+# com Persistent=true, que recupera a semana em que a máquina ficou desligada).
 # Procedimento completo, com o direito de exclusão do titular: docs/runbook-lgpd.md.
 #
 # Uso:
