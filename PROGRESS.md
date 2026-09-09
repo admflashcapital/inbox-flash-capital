@@ -33,6 +33,45 @@ escritório**. Enquanto for assim, uma queda daqui derruba a confirmação de sa
 mídia — não só o painel. É o bloco **B0** de `docs/plano-resiliencia.md`, não depende do domínio novo e
 vem antes de todo o resto.
 
+### 🔑 A máquina passou a voltar sozinha — 2026-09-09 (fim do dia)
+
+**R5.1 fechado.** Reboot real com login automático ligado:
+
+```
+17:18:17  6005  Windows subiu
+17:18:21  7001  LOGON            ← 4 segundos, ninguém tocou no teclado
+17:18:32        25 containers de pé
+17:18:36        wsl-ancora.service active, NRestarts=0
+```
+
+**Do boot frio à stack inteira: 19 segundos.** Verificadores 4/4, monitor 7/7, timers intactos e sem
+recuperação espúria (o backup do dia já tinha rodado às 12:23, e o timer não repetiu).
+
+Compare com o que era a régua deste mesmo dia: `02:42 → 12:23`, **9 h 41 min**. E com 08/09:
+`13:00 → 14:35`, 95 min. As duas causas de indisponibilidade — corte de energia e Windows Update —
+eram a mesma coisa vista de dois ângulos: **a máquina voltava, o Linux não.**
+
+**Quatro armadilhas no caminho, e três reboots para achá-las** (procedimento completo em
+`docs/runbook-wsl-autostart.md`, causas em `plano-resiliencia.md` §R5.1):
+
+1. `DevicePasswordLessBuildVersion = 2` **esconde** a caixa do `netplwiz` — tem de ir a `0`.
+2. O `netplwiz` com conta Microsoft grava `AutoAdminLogon=1` e deixa **`DefaultUserName` vazio**: o
+   Winlogon não sabe em qual conta logar. O diagnóstico que separa isso de senha errada é elegante —
+   **se a senha falha, o Windows zera o `AutoAdminLogon`**; continuar em `1` prova que nem tentou.
+3. **O PIN não é a senha.** `LastLoggedOnProvider` era o **NGC Credential Provider** (Windows Hello):
+   PIN é local do aparelho, guardado no TPM, e não se reproduz como senha. Quem só usa PIN há anos
+   normalmente não tem a senha real à mão.
+4. A combinação que funciona é a **explícita de conta Microsoft** (`<email>` + `MicrosoftAccount`),
+   não o nome local. E o Autologon **valida** — ele recusou a combinação errada, então
+   "successfully configured" significa aceita.
+
+**O que fica de dívida consciente:** a senha da conta vive cifrada nos LSA secrets, recuperável por
+quem tem admin na máquina. É decisão de segurança física da sala, tomada por escrito. Mitigada com
+bloqueio por ociosidade de 15 min (`ScreenSaverIsSecure=1`) — e **bloquear não desloga**, então a
+sessão segue viva com WSL, Docker e containers de pé.
+
+**Os túneis continuam manuais.** Não é pendência, é decisão (ver B0).
+
 ### ⏱️ Primeiro disparo automático, e o segundo modo de falha — 2026-09-09
 
 **O agendamento novo passou no primeiro teste real — e o teste veio de um cenário que não estava

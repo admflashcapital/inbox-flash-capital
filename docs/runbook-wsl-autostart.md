@@ -107,28 +107,84 @@ wsl --shutdown
 
 ## O que a tarefa NÃO resolve
 
-Ela cobre "o Windows reiniciou". Não cobre o resto da cadeia — e sem estes quatro, "ligada 24h"
-continua sendo intenção:
+Ela cobre "o Windows reiniciou". Não cobre o resto da cadeia:
 
 | Falha | O que fazer | Onde |
 |---|---|---|
 | Faltou luz e o PC não religou | **Restore on AC Power Loss = Power On** | BIOS/UEFI |
-| Religou e parou na tela de login | login automático (`netplwiz` → desmarcar *"Os usuários devem digitar…"*) | Windows |
-| Windows Update reiniciou de madrugada | definir **horário ativo** cobrindo a janela dos crons (04h–06h) | Windows Update |
+| Religou e parou na tela de login | **login automático** — ver a seção abaixo | Windows |
 | O PC dormiu sozinho | `powercfg /change standby-timeout-ac 0` e `powercfg /change hibernate-timeout-ac 0` | PowerShell admin |
 
-> O login automático guarda a senha da conta como segredo da LSA. É uma troca consciente: sem ele,
-> uma queda de luz de madrugada só se resolve com alguém indo até a máquina.
+**Windows Update não entra nessa lista, e é bom entender por quê.** Em 09/09/2026 ele reiniciou a
+máquina duas vezes às 02:39 e 02:41, e o Linux ficou **9 h 41 min** fora. A tentação é configurar
+"horário ativo" para adiar o reinício — **não resolve.** O reinício já foi às 02:39, fora de qualquer
+expediente: o horário ativo teria **aprovado** aquele reboot. O problema nunca foi *quando* a máquina
+reinicia; é que depois de reiniciar **ninguém loga**. Quem conserta isso é o login automático, e ele
+conserta a queda de luz junto. Adiar patch numa máquina que termina webhook de produção seria troca
+ruim de qualquer jeito.
+
+## Login automático — o procedimento que funciona
+
+Fechado em 09/09/2026 (item **R5.1** do plano de resiliência). Resultado medido: **4 segundos** entre
+o `6005` do Windows e o `7001` do logon, sem ninguém tocar no teclado; **19 segundos** do boot frio até
+os 25 containers de pé.
+
+⚠️ **Não remova o PIN antes de ter uma senha comprovadamente boa.** Enquanto só o PIN funciona, ele é
+a única chave da máquina que hospeda a central, o `.env` e o backup.
+
+1. *Contas → Opções de entrada* → **desligar** "Para maior segurança, permita apenas a entrada do
+   Windows Hello para contas da Microsoft" (põe `DevicePasswordLessBuildVersion` em `0`).
+2. Baixar o **Autologon** da Sysinternals e rodar como admin com a forma **explícita de conta
+   Microsoft** — o nome local **não** serve:
+   ```
+   Username : <email da conta Microsoft>
+   Domain   : MicrosoftAccount
+   Password : a senha da CONTA MICROSOFT (não o PIN)
+   ```
+3. Reiniciar. A área de trabalho tem de aparecer sem você encostar em nada.
+
+**Por que não `netplwiz`:** com conta Microsoft ele grava `AutoAdminLogon=1` e deixa o
+`DefaultUserName` **vazio** — o Winlogon não sabe em qual conta logar e cai na tela de login.
+
+**Por que a senha "certa" era recusada:** o que se digita no dia a dia é o **PIN**, não a senha.
+`LastLoggedOnProvider = {D6886603-9D2F-4EB2-B667-1971041FA96B}` é o **NGC Credential Provider**
+(Windows Hello). O PIN é local do aparelho, guardado no TPM, e não pode ser reproduzido como senha.
+Quem só usa PIN há anos costuma não ter a senha real à mão — redefina em `account.microsoft.com` e
+**entre uma vez com ela nesta máquina** (bloquear → *Opções de entrada* → senha) antes de configurar,
+senão o cache local segue com a antiga.
+
+**Dois diagnósticos que economizam reboots:**
+
+- Se a senha estivesse errada, o Windows **zera** o `AutoAdminLogon` para não entrar em loop.
+  Continuar em `1` depois de um boot que parou no login prova que ele **nem tentou** — é
+  `DefaultUserName` vazio, não senha.
+- O Autologon **valida** a credencial (foi ele que recusou a combinação com o nome local). Logo,
+  "successfully configured" quer dizer **aceita**, não apenas gravada.
+
+**Conferir depois:** `AutoLogonCount` tem de estar **ausente** no `Winlogon`. Se existir, o autologon
+vale só N vezes e para sozinho — funciona no teste e falha semanas depois.
+
+> **A senha fica cifrada nos LSA secrets** — recuperável por quem tem admin na máquina. É troca
+> consciente de segurança física da sala. Mitigação que não custa disponibilidade: bloqueio por
+> ociosidade (`control desk.cpl,,@screensaver` → 15 min → marcar *"Ao reiniciar, exibir tela de
+> logon"*). **Bloquear não desloga** — a sessão continua viva, com WSL, Docker e os containers de pé.
 
 ## Conferir que valeu
 
 Depois de um reboot **sem abrir terminal nenhum**, entre no WSL e confira:
 
 ```bash
-uptime                       # deve bater com o boot do Windows, não com a hora que você abriu
-systemctl is-active docker cron
-docker compose ps            # containers de pé
-tail -3 backups/monitor-canais.log
+uptime                                    # tem de bater com o boot do Windows
+systemctl is-active wsl-ancora.service    # a âncora, não o cron
+docker compose ps                         # containers de pé
+systemctl list-timers 'central-*'         # e a coluna LAST preenchida
+```
+
+E o número que fecha o item, do lado Windows — a diferença tem de ser de **segundos**:
+
+```powershell
+Get-WinEvent -FilterHashtable @{LogName='System'; Id=6005} -MaxEvents 1 | Select TimeCreated   # boot
+Get-WinEvent -FilterHashtable @{LogName='System'; Id=7001} -MaxEvents 1 | Select TimeCreated   # logon
 ```
 
 É o item **R5** do plano de resiliência: R1 sem esse teste é suposição, não disponibilidade.

@@ -125,8 +125,8 @@ Ordenado por retorno, não por dificuldade. **B0.1 e R1 concluídos em 2026-09-0
 | **R3** | ✅ **FEITO em 2026-09-04** — `scripts/backup-offsite.sh` cifra em AES256 (`gpg --symmetric`) e espelha no Supabase Storage por `rclone sync`, encadeado no backup (`Wants=central-offsite.service`). Credencial **escopada a storage** (S3 Access Keys), nunca a `service_role` (AD-9). Provado com restore **a partir do bucket**: as duas metades byte-a-byte idênticas ao original | inbox | 2 h | hoje o backup gravava **no mesmo disco**. Um `ext4.vhdx` corrompido levaria backup e produção juntos |
 | **R3.1** | ✅ **FEITO em 2026-09-08** — os 4 jobs de dado saíram do cron e viraram **timers do systemd com `Persistent=true`** (`scripts/systemd/`, instalados por `sudo bash scripts/systemd/instalar.sh`). Hora perdida com a máquina desligada é executada na próxima subida; a ordem expurgo → backup → offsite → ensaio passou a ser garantida por `Before=`/`After=`, não pelo relógio; e `scripts/lib/aguardar-stack.sh` segura o job até o Docker responder, porque a recuperação dispara com o Desktop ainda subindo. O monitor **fica no cron** de propósito: sonda de liveness não se recupera | inbox | 2 h | **o backup não existia.** Medido no `syslog`: em três semanas, `monitorar-canais` teve 10 execuções e os outros quatro tiveram **zero** — `backup.log`, `backup-offsite.log` e `restore-verificar.log` sequer existiam. Cron não recupera hora perdida, e esta máquina vive das ~11h às ~19h e some no fim de semana |
 | **R4** | ⬜ **`scripts/retomar.sh`** — recebe a data da queda, roda `compose ps` + monitor + verificadores, dispara a reconciliação de status e o backfill de e-mail, e no fim **diz o que ficou irrecuperável** | inbox | 3 h | hoje a sequência existe na cabeça de quem lembra |
-| **R5** | 🟡 **PARCIAL — testado em 2026-09-04, e o resultado tem uma ressalva que importa.** Reboot real do Windows: a VM subiu, `wsl-ancora.service` ativo com `NRestarts=0`, **25 containers de volta**, os 4 da central `healthy`, **5 crons** registrados, e invariantes/operação/e-mail verdes. **O que NÃO foi provado, e era o enunciado do item:** "sem logar em nada". O gatilho da tarefa é `MSFT_TaskLogonTrigger` e o `AutoAdminLogon` do Windows está **vazio** — sem logon, o WSL não sobe e nada disso acontece. **E os túneis não voltam**: são passo manual (ver B0). | — | 30 min | R1 sem teste é suposição |
-| **R5.1** | ⬜ **Fechar o "sem logar em nada"**: só o **login automático** resolve — ver abaixo por que a rota `-AtStartup` está descartada. ⚠️ Decisão de segurança física da sala, não técnica: a máquina guarda o `.env` com Twilio, `refresh_token` do Gmail, chave S3 e a frase do offsite | — | 15 min | **medido duas vezes, por duas causas diferentes.** (1) Corte de energia em 04/09 17:50 — 3 d 19 h parada, e o BIOS não tem *Restore on AC Power Loss*. (2) **Windows Update em 09/09 02:39 e 02:41** (`TrustedInstaller.exe` e `MoUsoCoreWorker.exe`, motivo "atualização (planejada)", com `6006` limpo nos dois) — o Windows voltou às 02:42 e o Linux só subiu às 12:23, no logon: **9 h 41 min com o PC ligado e o servidor morto**. Esta segunda causa é a que assusta: é mensal, e a máquina *parece* ligada |
+| **R5** | ✅ **COMPLETO em 2026-09-09.** Reboot real, com login automático ligado: `6005` às **17:18:17**, `7001` às **17:18:21** — **4 segundos**, e ninguém encostou no teclado. Âncora ativa às 17:18:36 (`NRestarts=0`), **25 containers** às 17:18:32, timers intactos, verificadores 4/4 e monitor 7/7. **Do boot frio à stack inteira: 19 segundos.** A prova em 2026-09-04 já cobria a metade de baixo; o que faltava era a porta abrir sozinha, e o R5.1 abriu. **Os túneis seguem manuais** — decisão, não pendência (ver B0). | — | 30 min | R1 sem teste é suposição |
+| **R5.1** | ✅ **FECHADO em 2026-09-09** — login automático via **Sysinternals Autologon**. Antes: corte de energia (04/09) deixou 3 d 19 h fora, e o Windows Update (09/09 02:39) deixou **9 h 41 min** com o PC ligado e o servidor morto. Depois: **4 s** entre boot e logon, sem humano. ⚠️ A senha da conta fica cifrada em LSA secrets — segurança física da sala. Mitigado com bloqueio por ociosidade (15 min, `ScreenSaverIsSecure=1`): **bloquear não desloga**, a sessão segue viva com WSL, Docker e containers de pé | — | 15 min | as duas causas de indisponibilidade eram a mesma coisa: a máquina voltava, o Linux não |
 
 > **Por que `-AtStartup` com credencial armazenada não serve** — medido em 09/09/2026. Uma tarefa
 > "executar estando o usuário conectado ou não" roda na **sessão 0**, que é não interativa: ela não
@@ -140,11 +140,30 @@ Ordenado por retorno, não por dificuldade. **B0.1 e R1 concluídos em 2026-09-0
 > teria **aprovado** esse reboot. O problema nunca foi *quando* a máquina reinicia; é que depois de
 > reiniciar **ninguém loga**.
 
-> **Nota prática, para não perder 20 min:** a conta desta máquina é **MicrosoftAccount** e
-> `HKLM\…\PasswordLess\Device\DevicePasswordLessBuildVersion = 2`, valor que **esconde** a caixa
-> "Os usuários devem digitar um nome de usuário e senha" do `netplwiz`. Tem de ir a **0** antes, ou a
-> caixa não aparece. E **bloquear a tela (`Win+L`) não desloga**: dá para ter login automático no boot
-> *e* tela bloqueada por ociosidade — a sessão continua viva, com WSL, Docker e containers de pé. |
+> **As quatro armadilhas do caminho, medidas em 09/09/2026** — juntas custaram três reboots:
+>
+> 1. **`DevicePasswordLessBuildVersion = 2` esconde a caixa do `netplwiz`.** Tem de ir a **0** em
+>    *Contas → Opções de entrada*, senão a opção "Os usuários devem digitar um nome de usuário e
+>    senha" simplesmente não existe na tela.
+> 2. **O `netplwiz` com conta Microsoft deixa `DefaultUserName` VAZIO.** Fica `AutoAdminLogon=1`
+>    sem usuário para logar, e o Winlogon cai na tela de login. O diagnóstico que separa isso de
+>    "senha errada": se a senha falha, o Windows **zera** o `AutoAdminLogon` para não entrar em
+>    loop. Continuar em `1` depois do boot prova que ele **nem tentou**.
+> 3. **O PIN não é a senha.** `LastLoggedOnProvider` apontava para
+>    `{D6886603-9D2F-4EB2-B667-1971041FA96B}` = **NGC Credential Provider** (Windows Hello). O PIN é
+>    local do aparelho, guardado no TPM, e não pode ser reproduzido como senha. Quem só usa PIN há
+>    anos costuma não ter a senha real da conta Microsoft à mão — e o campo de 4 caracteres denuncia.
+> 4. **A combinação que funciona é a explícita de conta Microsoft**, não o nome local:
+>    `Username = <email da conta>`, `Domain = MicrosoftAccount`. Com `flash` + nome da máquina o
+>    Autologon **recusa** — e isso é bom sinal: **ele valida a credencial**, então
+>    "successfully configured" significa aceita, não apenas gravada.
+>
+> **Conferir depois:** `AutoLogonCount` tem de estar **ausente**. Se existir, o autologon vale só N
+> vezes e para sozinho — funciona no teste e falha semanas depois.
+>
+> **E bloquear a tela não desloga:** dá para ter login automático no boot *e* bloqueio por ociosidade
+> (protetor de tela com "exibir tela de logon", 15 min). A sessão continua viva, com WSL, Docker e os
+> 25 containers de pé. |
 
 ### Bloco F — acabar com o buraco permanente *(o de maior retorno; independe do domínio)*
 
