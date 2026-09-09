@@ -123,6 +123,55 @@ reinicia; é que depois de reiniciar **ninguém loga**. Quem conserta isso é o 
 conserta a queda de luz junto. Adiar patch numa máquina que termina webhook de produção seria troca
 ruim de qualquer jeito.
 
+## Orçamento da máquina — memória e disco do WSL
+
+Enquanto a máquina era desligada todo dia, um vazamento de memória se resolvia sozinho no
+desligamento. **Ela agora fica de pé 24/7 e volta sozinha em 19 s — esse conserto deixou de existir.**
+O que segura o ecossistema passou a ser o orçamento, e ele mora no `.wslconfig` do Windows
+(`C:\Users\<user>\.wslconfig`), não neste repo.
+
+Medido em 09/09/2026, com os 25 containers dos quatro projetos de pé:
+
+| | |
+|---|---|
+| RAM do host | 15,9 GB |
+| Soma dos 25 containers | 4,1 GB |
+| VM inteira (containers + kernel + processos) | 5,5 GB |
+| Windows + Docker Desktop | ~3,9 GB |
+
+**`memory=` é teto, não reserva — mas o WSL2 não devolve sozinho.** A VM cresce até o teto,
+segura o cache e não solta. Com `memory=12GB` num host de 16 GB isso deixaria ~3,9 GB para o
+Windows: exatamente o que ele consome, sem folga nenhuma. Por isso o teto generoso só é seguro
+acompanhado de `autoMemoryReclaim=gradual`, que devolve ao Windows o que a VM parou de usar:
+
+```ini
+[wsl2]
+memory=12GB
+processors=8
+swap=4GB
+
+[experimental]
+autoMemoryReclaim=gradual
+sparseVhd=true
+```
+
+Vale depois de `wsl --shutdown` (derruba Docker, containers e túneis — refaça os túneis depois).
+
+**Nenhum container tem limite de memória.** É aceitável enquanto a soma é 4,1 GB de 12, e deixa de
+ser no dia em que um vazamento levar a VM ao teto: o kernel mata **quem ele escolher**, que pode ser
+o Postgres de um projeto por culpa de outro. Se acontecer, o remédio é `mem_limit` no serviço
+culpado, não subir o teto.
+
+**Disco: liberar espaço dentro do WSL não devolve espaço ao Windows.** Em 09/09/2026, depois de um
+`docker builder prune` que liberou 35 GB, o Linux via 41 GB usados e o `ext4.vhdx` no Windows
+continuava com **81,3 GB**. O arquivo virtual só cresce. `sparseVhd=true` vale para disco novo; para
+o atual, com a distro parada:
+
+```powershell
+wsl --shutdown
+wsl --manage Ubuntu-24.04 --set-sparse true
+```
+
 ## Login automático — o procedimento que funciona
 
 Fechado em 09/09/2026 (item **R5.1** do plano de resiliência). Resultado medido: **4 segundos** entre

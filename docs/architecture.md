@@ -99,6 +99,13 @@ Mapa de camadas → responsabilidade:
   **Não substituir por `host.docker.internal`:** medido em 2026-09-02, um bind em `127.0.0.1` recusa
   pacote vindo da bridge do Docker (`172.17.0.1`). E o espelho falha em silêncio (AD-12), então essa
   troca não daria erro — daria um painel com buracos.
+- ⚠️ **Quem está na `flash-espelho` é o `chatwoot-web`, não o `chatwoot-sidekiq`.** Isso está certo
+  para o desenho de hoje: o espelho é de **mão única** — o monorepo escreve na central, e o alvo do
+  salto é o `web`. Medido em 2026-09-09: `Webhook.count = 0`, o `sidekiq` não resolve `fastapi_api`,
+  e nada quebra por causa disso. **A armadilha é para depois:** quem entregaria webhook do Chatwoot é
+  o Sidekiq, então um webhook apontando para `http://fastapi_api:8000` falharia **dentro de um job**,
+  sem erro em tela. Se a central algum dia precisar **avisar** o monorepo, a saída é acrescentar o
+  `chatwoot-sidekiq` à rede — não trocar o nome de container pela URL pública.
 - 🚨 **A `flash-espelho` só funciona enquanto os DOIS processos estiverem na mesma máquina — e em
   produção eles não estão.** O monorepo roda no **Railway**; a central, na máquina do escritório
   (AD-15). Railway não entra numa rede Docker local, então `CHATWOOT_URL=http://chatwoot-web:3000`
