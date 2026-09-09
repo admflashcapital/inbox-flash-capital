@@ -126,7 +126,25 @@ Ordenado por retorno, não por dificuldade. **B0.1 e R1 concluídos em 2026-09-0
 | **R3.1** | ✅ **FEITO em 2026-09-08** — os 4 jobs de dado saíram do cron e viraram **timers do systemd com `Persistent=true`** (`scripts/systemd/`, instalados por `sudo bash scripts/systemd/instalar.sh`). Hora perdida com a máquina desligada é executada na próxima subida; a ordem expurgo → backup → offsite → ensaio passou a ser garantida por `Before=`/`After=`, não pelo relógio; e `scripts/lib/aguardar-stack.sh` segura o job até o Docker responder, porque a recuperação dispara com o Desktop ainda subindo. O monitor **fica no cron** de propósito: sonda de liveness não se recupera | inbox | 2 h | **o backup não existia.** Medido no `syslog`: em três semanas, `monitorar-canais` teve 10 execuções e os outros quatro tiveram **zero** — `backup.log`, `backup-offsite.log` e `restore-verificar.log` sequer existiam. Cron não recupera hora perdida, e esta máquina vive das ~11h às ~19h e some no fim de semana |
 | **R4** | ⬜ **`scripts/retomar.sh`** — recebe a data da queda, roda `compose ps` + monitor + verificadores, dispara a reconciliação de status e o backfill de e-mail, e no fim **diz o que ficou irrecuperável** | inbox | 3 h | hoje a sequência existe na cabeça de quem lembra |
 | **R5** | 🟡 **PARCIAL — testado em 2026-09-04, e o resultado tem uma ressalva que importa.** Reboot real do Windows: a VM subiu, `wsl-ancora.service` ativo com `NRestarts=0`, **25 containers de volta**, os 4 da central `healthy`, **5 crons** registrados, e invariantes/operação/e-mail verdes. **O que NÃO foi provado, e era o enunciado do item:** "sem logar em nada". O gatilho da tarefa é `MSFT_TaskLogonTrigger` e o `AutoAdminLogon` do Windows está **vazio** — sem logon, o WSL não sobe e nada disso acontece. **E os túneis não voltam**: são passo manual (ver B0). | — | 30 min | R1 sem teste é suposição |
-| **R5.1** | ⬜ **Fechar o "sem logar em nada"**: ligar login automático (`netplwiz`) **ou** trocar o gatilho da tarefa para `-AtStartup` com credencial armazenada. ⚠️ Login automático guarda a senha no registro — decisão de segurança física da sala, não só técnica | — | 15 min | **deixou de ser hipótese em 08/09/2026.** Corte de energia em 04/09 17:50 (evento 6008 + Kernel-Power 41 com `BugcheckCode=0` e nenhum dump). A máquina ficou **3 dias e 19 horas** parada, e só voltou quando alguém apertou o botão. Ainda por cima o Windows subiu 13:00 e o logon só veio 14:35 — **95 min** com a máquina ligada e nada de pé. E o BIOS não tem *Restore on AC Power Loss*: se tivesse, teria voltado sozinho na sexta |
+| **R5.1** | ⬜ **Fechar o "sem logar em nada"**: só o **login automático** resolve — ver abaixo por que a rota `-AtStartup` está descartada. ⚠️ Decisão de segurança física da sala, não técnica: a máquina guarda o `.env` com Twilio, `refresh_token` do Gmail, chave S3 e a frase do offsite | — | 15 min | **medido duas vezes, por duas causas diferentes.** (1) Corte de energia em 04/09 17:50 — 3 d 19 h parada, e o BIOS não tem *Restore on AC Power Loss*. (2) **Windows Update em 09/09 02:39 e 02:41** (`TrustedInstaller.exe` e `MoUsoCoreWorker.exe`, motivo "atualização (planejada)", com `6006` limpo nos dois) — o Windows voltou às 02:42 e o Linux só subiu às 12:23, no logon: **9 h 41 min com o PC ligado e o servidor morto**. Esta segunda causa é a que assusta: é mensal, e a máquina *parece* ligada |
+
+> **Por que `-AtStartup` com credencial armazenada não serve** — medido em 09/09/2026. Uma tarefa
+> "executar estando o usuário conectado ou não" roda na **sessão 0**, que é não interativa: ela não
+> loga ninguém. E o **Docker Desktop é aplicativo de sessão de usuário** — não existe modo headless.
+> A prova está no relógio do dia: o Windows subiu **02:42** e os containers só nasceram **12:32**,
+> logo depois do logon das 12:23. Ou seja, essa rota levantaria o WSL e **não** levantaria os 25
+> containers — resolveria a metade que não importa. Sobra o login automático.
+
+> **E "horário ativo" do Windows Update também não serve.** Ele adia o *reboot*, não a atualização —
+> mas o reboot de 09/09 já foi às **02:39**, fora de qualquer horário de trabalho. O horário ativo
+> teria **aprovado** esse reboot. O problema nunca foi *quando* a máquina reinicia; é que depois de
+> reiniciar **ninguém loga**.
+
+> **Nota prática, para não perder 20 min:** a conta desta máquina é **MicrosoftAccount** e
+> `HKLM\…\PasswordLess\Device\DevicePasswordLessBuildVersion = 2`, valor que **esconde** a caixa
+> "Os usuários devem digitar um nome de usuário e senha" do `netplwiz`. Tem de ir a **0** antes, ou a
+> caixa não aparece. E **bloquear a tela (`Win+L`) não desloga**: dá para ter login automático no boot
+> *e* tela bloqueada por ociosidade — a sessão continua viva, com WSL, Docker e containers de pé. |
 
 ### Bloco F — acabar com o buraco permanente *(o de maior retorno; independe do domínio)*
 

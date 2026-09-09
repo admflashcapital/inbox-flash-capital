@@ -33,6 +33,54 @@ escritório**. Enquanto for assim, uma queda daqui derruba a confirmação de sa
 mídia — não só o painel. É o bloco **B0** de `docs/plano-resiliencia.md`, não depende do domínio novo e
 vem antes de todo o resto.
 
+### ⏱️ Primeiro disparo automático, e o segundo modo de falha — 2026-09-09
+
+**O agendamento novo passou no primeiro teste real — e o teste veio de um cenário que não estava
+previsto.** O `central-backup.timer` estava marcado para 12:10. Às 12:10 o Linux não existia. O
+journal mostra o que o `Persistent=true` faz:
+
+```
+12:23:07  Starting central-backup.service…
+12:23:15  [aguardar] daemon do Docker respondeu em 8s
+12:23:20  [aguardar] stack pronta em 13s
+12:23:22  [backup] OK — 2026-09-09
+```
+
+Três provas de uma vez: a hora perdida foi recuperada 13 s depois da VM subir (no cron seria mais um
+dia sem backup, em silêncio); o **`aguardar-stack.sh` não era paranoia** — o Docker levou **8 s** para
+responder, e sem a espera o backup teria estourado com "cannot connect to the Docker daemon"
+justamente no dia em que ele importa; e o `Wants=` puxou o offsite atrás, 12 objetos cifrados no
+bucket. Os artefatos contam a história sozinhos: `09-02 09-03 09-04 [05 06 07 ausentes: apagão]
+09-08 09-09`.
+
+**O segundo modo de falha: Windows Update.** Às 02:39 e 02:41 o Windows se reiniciou duas vezes
+(`TrustedInstaller.exe` e `MoUsoCoreWorker.exe`, motivo "Sistema operacional: atualização
+(planejada)"), com `6006` limpo nos dois — não foi queda de energia. O Windows voltou às **02:42**;
+o Linux só subiu às **12:23**, no logon. **9 h 41 min com o PC ligado e o servidor morto.**
+
+É pior que o apagão de 04/09, e não por durar mais: o apagão era **óbvio** — tela preta. Este não.
+Quem passasse na sala às 8h veria o PC ligado, ventilando, na tela de login, com a central fora do ar
+havia cinco horas. E enquanto o corte de energia é evento raro, **Windows Update é mensal**.
+
+**O custo da janela, medido:**
+
+| | |
+|---|---|
+| E-mail | 6 entraram às 12:24, um minuto depois do WSL. **Zero perdido** — o Gmail segurou a fila |
+| WhatsApp entrada | nada chegou |
+| WhatsApp saída | **11 mensagens** disparadas pela produção entre 10:02 e 11:44, **todas lidas** pelo cliente |
+| Recibos de entrega | **33 alertas 11200** na Twilio, 11 mensagens distintas. Nenhum recibo chegou na central |
+
+O B0 não é estável: em 08/09 custou **1** mensagem, em 09/09 custou **11**. Ele escala com o volume
+da régua.
+
+**Duas rotas de conserto caíram ao serem medidas** (detalhe em `plano-resiliencia.md` §R5.1): a tarefa
+`-AtStartup` com credencial armazenada roda na **sessão 0**, não interativa, e o **Docker Desktop é
+aplicativo de sessão de usuário** — a prova está no relógio do dia, Windows de pé às 02:42 e
+containers só às 12:32, logo após o logon. E o "horário ativo" do Windows Update adia o reboot, mas o
+reboot de hoje já foi às 02:39, fora de qualquer expediente — ele teria **aprovado** esse reboot.
+Sobra o **login automático**.
+
 ### 🔌 Primeiro apagão real, e o que ele mediu — 2026-09-08
 
 A máquina caiu **sexta 04/09 às 17:50:27** e ficou parada **3 dias e 19 horas**. O Windows registrou
