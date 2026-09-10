@@ -120,6 +120,11 @@ containers só às 12:32, logo após o logon. E o "horário ativo" do Windows Up
 reboot de hoje já foi às 02:39, fora de qualquer expediente — ele teria **aprovado** esse reboot.
 Sobra o **login automático**.
 
+> **Correção (2026-09-10):** a premissa do Docker Desktop acima é falsa — o Docker desta máquina é o
+> Engine nativo, dentro da VM (`docker info` → Ubuntu 24.04; nada de Docker instalado no Windows). A
+> rota `-AtStartup` não foi medida; o login automático segue sendo a rota provada. Ver
+> `docs/plano-resiliencia.md`, nota logo abaixo do Bloco R.
+
 ### 🔌 Primeiro apagão real, e o que ele mediu — 2026-09-08
 
 A máquina caiu **sexta 04/09 às 17:50:27** e ficou parada **3 dias e 19 horas**. O Windows registrou

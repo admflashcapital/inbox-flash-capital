@@ -54,7 +54,7 @@ segunda-feira recupera os três de uma vez, sai expurgo → backup → offsite �
 dependia de 04:10 vir antes de 05:10, o que não sobrevive a uma recuperação.
 
 **Por que a stack é esperada antes de rodar:** com recuperação no boot, o job dispara enquanto o Docker
-Desktop ainda está subindo do lado do Windows. `scripts/lib/aguardar-stack.sh` segura até o daemon
+ainda está subindo — os timers entram no ar antes do `docker.service`. `scripts/lib/aguardar-stack.sh` segura até o daemon
 responder e o Postgres da central ficar `healthy`, com teto de 5 min — melhor não rodar do que gravar
 um dump truncado.
 

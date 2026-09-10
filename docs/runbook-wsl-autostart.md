@@ -141,7 +141,7 @@ Medido em 09/09/2026, com os 25 containers dos quatro projetos de pé:
 | RAM do host | 15,9 GB |
 | Soma dos 25 containers | 4,1 GB |
 | VM inteira (containers + kernel + processos) | 5,5 GB |
-| Windows + Docker Desktop | ~3,9 GB |
+| Windows (o Docker roda dentro da VM) | ~3,9 GB |
 
 **`memory=` é teto, não reserva — mas o WSL2 não devolve sozinho.** A VM cresce até o teto,
 segura o cache e não solta. Com `memory=12GB` num host de 16 GB isso deixaria ~3,9 GB para o

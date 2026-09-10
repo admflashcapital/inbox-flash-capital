@@ -140,8 +140,8 @@ timer tem `Persistent=true`: hora que passou com a máquina desligada é executa
 conversa que a política acabou de apagar — no cron essa ordem dependia de 04:10 vir antes de 05:10, o
 que não sobrevive a uma recuperação.
 
-**Antes de rodar, espera a stack.** Na recuperação o job dispara com o Docker Desktop ainda subindo do
-lado do Windows. `scripts/lib/aguardar-stack.sh` segura até o daemon responder e o Postgres da central
+**Antes de rodar, espera a stack.** Na recuperação o job dispara com o Docker ainda subindo — os
+timers entram no ar antes do `docker.service`. `scripts/lib/aguardar-stack.sh` segura até o daemon responder e o Postgres da central
 ficar `healthy`, com teto de 5 min; estourou, o job **não** roda — melhor isso do que um dump truncado.
 O offsite é o único sem essa espera: ele só lê arquivo e fala com o bucket, e exigir a stack de pé o
 faria depender justamente do que ele existe para substituir.

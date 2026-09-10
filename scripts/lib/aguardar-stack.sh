@@ -4,8 +4,8 @@
 # ═══════════════════════════════════════════════════════════════════
 # Existe por causa do `Persistent=true` dos timers. Quando a máquina passa
 # a noite (ou o fim de semana) desligada, o timer que perdeu a hora dispara
-# LOGO no boot — e nessa hora o Docker Desktop, que roda do lado do Windows
-# e chega aqui pela integração WSL, ainda está subindo.
+# LOGO no boot — e nessa hora o Docker (o docker.service, aqui dentro da VM)
+# ainda está subindo: os timers entram no ar antes dele.
 #
 # Sem esta espera o backup falharia com "cannot connect to the Docker
 # daemon" exatamente nos dias em que ele é mais necessário: os que vieram
