@@ -4,8 +4,8 @@
 # ═══════════════════════════════════════════════════════════════════
 # Estas unidades vivem em /etc/systemd/system, que não é versionado. Sem
 # este diretório, a receita da máquina existiria só em prosa no runbook —
-# e quem reinstalasse a central montaria a âncora e os timers de memória,
-# ou não montaria.
+# e quem reinstalasse a central montaria os timers de memória, ou não
+# montaria.
 #
 #   sudo bash scripts/systemd/instalar.sh
 #
@@ -39,10 +39,8 @@ done
 systemctl daemon-reload
 
 echo "── habilitando ──────────────────────────────────────────────"
-# A âncora segura a VM; os timers seguram o calendário. Os .service não são
-# habilitados: quem os dispara são os timers (e a mão, quando se quer forçar).
-systemctl enable --now wsl-ancora.service >/dev/null
-echo "  ✓ wsl-ancora.service"
+# Os timers seguram o calendário. Os .service não são habilitados: quem os
+# dispara são os timers (e a mão, quando se quer forçar).
 for t in "${TIMERS[@]}"; do
   systemctl enable --now "$t" >/dev/null
   echo "  ✓ $t"
@@ -76,7 +74,6 @@ fi
 echo "── estado ───────────────────────────────────────────────────"
 systemctl list-timers --no-pager "${TIMERS[@]}" 2>/dev/null | head -6
 echo
-echo "âncora: $(systemctl is-active wsl-ancora.service)"
 echo "cron do monitor: $(crontab -u "$DONO" -l 2>/dev/null | grep -c monitorar-canais.sh) linha(s)"
 echo
 echo "Pronto. Confira com: bash scripts/verificar-operacao.sh"

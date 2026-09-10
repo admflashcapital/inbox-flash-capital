@@ -9,10 +9,8 @@
 #   sudo bash scripts/systemd/desinstalar.sh --pausar    # desliga, mantém os arquivos
 #   sudo bash scripts/systemd/desinstalar.sh --remover   # desliga e apaga as unidades
 #
-# ⚠️ A `wsl-ancora.service` NUNCA é tocada por este script, nem no --remover.
-#    Ela é o que mantém a VM do WSL viva; derrubá-la desliga o servidor
-#    inteiro — containers, cron e timers junto. Para mexer nela, é à mão e
-#    de propósito (docs/runbook-wsl-autostart.md).
+# Não mexe na âncora da VM: ela é a janela da tarefa WSL-Always-On do Windows,
+# não uma unidade daqui (docs/runbook-wsl-autostart.md).
 set -euo pipefail
 
 MODO="${1:-}"
@@ -39,7 +37,6 @@ if [ "$MODO" = "--remover" ]; then
     echo "  ✓ ${u} removida"
   done
   systemctl daemon-reload
-  echo "  (wsl-ancora.service preservada de propósito)"
 fi
 
 cat <<'AVISO'
