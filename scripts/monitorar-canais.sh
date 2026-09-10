@@ -166,24 +166,32 @@ else
   falha "central-retencao.timer não está ativo — a central passa a guardar conversa de cobrança para sempre. Instale: sudo bash scripts/systemd/instalar.sh"
 fi
 
-# ── 7. A VM do WSL está ancorada, ou depende de um terminal aberto? ─
-# A VM do WSL2 desliga quando o ÚLTIMO processo dela termina: fechar o terminal
-# é desligar o servidor. A tarefa WSL-Always-On do Windows segura isso com um
-# `sleep infinity` — mas ela dispara **no logon**, e só. Um `wsl --shutdown` no
-# meio do dia derruba a âncora e ela NÃO volta sozinha: a máquina segue de pé
-# enquanto houver um terminal aberto e morre silenciosamente quando ele fechar.
-# Medido em 2026-09-04: foi exatamente o que aconteceu, e só apareceu porque
-# alguém foi olhar. Este sinal é o "alguém foi olhar" virando automático.
+# ── 7. A âncora da VM está conectada, ou ela depende de um terminal? ─
+# A VM do WSL fica de pé enquanto houver um cliente do Windows conectado (um
+# wsl.exe vivo) e cai 15 s depois que o último sai. Nada dentro do Linux conta
+# como cliente, nem unidade do systemd — medido em 2026-09-10, em A/B isolado.
+# A âncora é a janela da tarefa WSL-Always-On, que roda `exec sleep infinity`
+# como root, pendurado numa sessão de interop (pai `Relay(…)` ou `init`). A
+# tarefa só dispara no logon: fechada a janela, ou depois de um `wsl --shutdown`,
+# ela NÃO volta sozinha, e a VM segue de pé só enquanto houver terminal ou VS
+# Code aberto — o estado frágil que este sinal denuncia.
 #
 # Ele NÃO cobre a VM já desligada — aí ninguém roda nada, inclusive isto. Cobre
 # a janela em que ela está viva e frágil, que é quando ainda dá para agir.
-# Cobra a UNIDADE, não um `pgrep sleep` solto: `pgrep` acharia também uma âncora
-# manual presa a um terminal, que é justamente o estado frágil que queremos
-# denunciar. Só a unidade tem Restart=always e volta em toda subida da distro.
-if systemctl is-active --quiet wsl-ancora.service 2>/dev/null; then
-  ok "VM do WSL ancorada (wsl-ancora.service ativo, Restart=always)"
+# O pai é conferido porque um container rodando `sleep infinity` como root
+# também aparece no `pgrep` do host, e não segura VM nenhuma.
+ancora_da_tarefa() {
+  local p pai
+  for p in $(pgrep -u root -fx 'sleep infinity'); do
+    pai="$(ps -o comm= -p "$(ps -o ppid= -p "$p" | tr -d ' ')" 2>/dev/null)"
+    case "$pai" in Relay\(*|init) return 0 ;; esac
+  done
+  return 1
+}
+if ancora_da_tarefa; then
+  ok "VM do WSL ancorada (janela da tarefa WSL-Always-On conectada)"
 else
-  falha "wsl-ancora.service não está ativo: a VM morre quando o último terminal fechar, e leva os containers e todos os crons junto. Religar: sudo systemctl enable --now wsl-ancora — ver docs/runbook-wsl-autostart.md"
+  falha "a janela da tarefa WSL-Always-On não está conectada: a VM depende de um terminal ou do VS Code aberto e cai 15 s depois que o último fechar, levando containers, cron e timers. Religar no PowerShell: Start-ScheduledTask -TaskName \"WSL-Always-On\" — ver docs/runbook-wsl-autostart.md"
 fi
 
 # ── Veredito, e o aviso só quando o estado MUDA ────────────────────
