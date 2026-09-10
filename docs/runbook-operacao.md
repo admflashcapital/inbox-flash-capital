@@ -178,15 +178,15 @@ protegido, e nada nunca sobe. Enquanto não configurar, o verificador diz que é
 ### Instalar, e como desfazer
 
 ```bash
-sudo bash scripts/systemd/instalar.sh      # unidades + 3 timers + âncora + o cron do monitor
+sudo bash scripts/systemd/instalar.sh      # unidades + 3 timers + o cron do monitor
 ```
 
 Cobre os **dois** mecanismos de propósito: os 3 timers e também a linha de cron do monitor. Deixar o
 cron de fora faria uma máquina nova subir com backup agendado e **nenhuma sonda** — e nada acusaria,
 porque a falta de um agendamento é silêncio, não erro.
 
-Idempotente: rodar de novo sobrescreve as unidades, reenlaça os timers e não duplica a linha de cron,
-sem derrubar a âncora no meio. Precisa de `sudo` porque `/etc/systemd/system/` é do sistema — não porque seja arriscado.
+Idempotente: rodar de novo sobrescreve as unidades, reenlaça os timers e não duplica a linha de cron.
+Precisa de `sudo` porque `/etc/systemd/system/` é do sistema — não porque seja arriscado.
 Ele **não** apaga nada, não toca em banco, conversa ou backup, e não reinicia serviço nenhum.
 
 Desfazer:
@@ -199,9 +199,8 @@ sudo bash scripts/systemd/desinstalar.sh --remover    # desliga e apaga as unida
 Existe um script para isso, e não só três nomes de unidade para digitar, porque **um nome errado
 desliga metade dos jobs e deixa a outra metade rodando** — o pior dos dois mundos, e em silêncio.
 
-> ⚠️ **A `wsl-ancora.service` nunca é tocada**, nem no `--remover`. Ela é o que mantém a VM do WSL
-> viva: derrubá-la desliga o servidor inteiro — containers, cron e timers junto. Mexer nela é à mão
-> e de propósito (`docs/runbook-wsl-autostart.md`).
+> A âncora da VM **não** é unidade do systemd: é a janela da tarefa `WSL-Always-On` do Windows
+> (`docs/runbook-wsl-autostart.md`). Instalar ou desinstalar estas unidades não mexe nela.
 
 **Desligar não é neutro.** Sem os timers, esta máquina para de gerar backup (e de podar os antigos,
 porque quem poda é o próprio `backup.sh` no fim da rodada), para de subir o offsite, para de testar
@@ -234,8 +233,9 @@ os `verificar-*.sh` cobram:
 5. nenhuma mensagem `failed` nas últimas 24h (é o **único** sinal de saúde do canal WhatsApp: o
    `Channel::TwilioSms` não inclui `Reauthorizable`, então "canal desconectado" não existe para ele);
 6. o `central-retencao.timer` continua ativo — é o expurgo LGPD;
-7. a VM do WSL está ancorada (`wsl-ancora.service` ativo, com `Restart=always`): sem ela, fechar o
-   último terminal desliga o servidor inteiro, containers e agendamentos junto.
+7. a âncora da VM está conectada — o `sleep infinity` da janela da tarefa `WSL-Always-On`. Sem ela, a
+   VM fica segura só por algum terminal ou pelo VS Code, e cai 15 s depois que o último fechar,
+   containers e agendamentos junto. Religa-se com `Start-ScheduledTask -TaskName "WSL-Always-On"`.
 
 Quando o estado **muda**, o monitor posta um alerta no **sino do Nexus**, no painel do monorepo
 (`POST /notificacoes/alerta`, header `X-Monitor-Token`). Notifica na transição, não a cada tick: uma

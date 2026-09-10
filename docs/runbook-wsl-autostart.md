@@ -1,15 +1,16 @@
 # Runbook — o WSL sobe com o Windows, sem ninguém abrir terminal
 
-> **O que este documento resolve:** a stack roda dentro do WSL2. A VM do WSL **desliga quando o
-> último processo dela termina** — fechar o terminal é desligar o servidor. Este runbook ancora a VM
-> no boot do Windows, e diz como desfazer.
+> **O que este documento resolve:** a stack roda dentro do WSL2. A VM do WSL **fica de pé enquanto
+> houver pelo menos um cliente do Windows conectado a ela** e desliga ~15 s depois que o último sai —
+> fechar o último terminal é desligar o servidor. Este runbook ancora a VM no logon do Windows, e diz
+> como desfazer.
 >
 > É o item **R1** de `docs/plano-resiliencia.md`. Tudo aqui é configuração **da máquina**, não do
 > repositório: nada disto entra em `compose.yaml` ou em `scripts/`.
 
-> ⚠️ **Leia primeiro a seção "Quem ancora é o systemd, não a tarefa", no fim.** A tarefa do Windows
-> sozinha **não** mantém a máquina de pé: ela dispara no logon e só. Quem ancora é
-> `wsl-ancora.service`.
+> ⚠️ **A âncora é a janela `C:\Windows\System32\wsl.exe` que a tarefa abre no logon. Ela fica
+> aberta — minimize, nunca feche.** Nada dentro do Linux segura a VM. Leia a seção "Quem ancora é a
+> janela da tarefa", no fim.
 
 ## O que já está pronto do lado Linux
 
@@ -56,9 +57,11 @@ Confira o nome da distro antes com `wsl -l -v` — o argumento `-d` tem de bater
 | Escolha | Por quê |
 |---|---|
 | `-AtLogOn` do usuário `flash` | é a colmeia onde a distro existe; dispensa guardar senha |
-| `-LogonType Interactive` | sessão do usuário, onde o WSL funciona sem surpresa |
+| `-LogonType Interactive` | sessão do usuário, onde o WSL funciona sem surpresa — é também o que faz a janela aparecer |
 | `-ExecutionTimeLimit Zero` | sem isto o Windows mata a tarefa em 3 dias, e a VM cai junto |
 | `-AllowStartIfOnBatteries` | o padrão **não roda na bateria** — num nobreak isso derruba tudo |
+
+O único gatilho é o de logon, de propósito (ver "O que não se usa", no fim).
 
 Testar sem reiniciar:
 
@@ -71,10 +74,10 @@ Get-ScheduledTaskInfo -TaskName "WSL-Always-On" | Select-Object LastRunTime, Las
 não termina de propósito. Um **0** aqui seria a má notícia — significaria que o comando saiu, e a VM
 vai cair junto.
 
-A prova que vale mais que o código de retorno é a âncora existir dentro do WSL:
+A prova que vale mais que o código de retorno é o `sleep` da tarefa existir dentro do WSL:
 
 ```bash
-pgrep -x sleep    # tem de devolver um PID
+pgrep -u root -fx 'sleep infinity'    # tem de devolver um PID
 ```
 
 Medido em 2026-09-04: `LastTaskResult 267009` + `sleep infinity` vivo no PID do WSL.
@@ -114,6 +117,7 @@ Ela cobre "o Windows reiniciou". Não cobre o resto da cadeia:
 | Faltou luz e o PC não religou | **Restore on AC Power Loss = Power On** | BIOS/UEFI |
 | Religou e parou na tela de login | **login automático** — ver a seção abaixo | Windows |
 | O PC dormiu sozinho | `powercfg /change standby-timeout-ac 0` e `powercfg /change hibernate-timeout-ac 0` | PowerShell admin |
+| Alguém fechou a janela da tarefa, ou rodou `wsl --shutdown` | `Start-ScheduledTask -TaskName "WSL-Always-On"` | PowerShell |
 
 **Windows Update não entra nessa lista, e é bom entender por quê.** Em 09/09/2026 ele reiniciou a
 máquina duas vezes às 02:39 e 02:41, e o Linux ficou **9 h 41 min** fora. A tentação é configurar
@@ -155,7 +159,8 @@ autoMemoryReclaim=gradual
 sparseVhd=true
 ```
 
-Vale depois de `wsl --shutdown` (derruba Docker, containers e túneis — refaça os túneis depois).
+Vale depois de `wsl --shutdown` — que derruba Docker, containers, túneis **e a âncora**: religue a
+tarefa (`Start-ScheduledTask -TaskName "WSL-Always-On"`) e refaça os túneis.
 
 **Nenhum container tem limite de memória.** É aceitável enquanto a soma é 4,1 GB de 12, e deixa de
 ser no dia em que um vazamento levar a VM ao teto: o kernel mata **quem ele escolher**, que pode ser
@@ -164,13 +169,11 @@ culpado, não subir o teto.
 
 **Disco: liberar espaço dentro do WSL não devolve espaço ao Windows.** Em 09/09/2026, depois de um
 `docker builder prune` que liberou 35 GB, o Linux via 41 GB usados e o `ext4.vhdx` no Windows
-continuava com **81,3 GB**. O arquivo virtual só cresce. `sparseVhd=true` vale para disco novo; para
-o atual, com a distro parada:
-
-```powershell
-wsl --shutdown
-wsl --manage Ubuntu-24.04 --set-sparse true
-```
+continuava com **81,3 GB**. O arquivo virtual só cresce, e hoje não há conversão segura: o WSL 2.7.8
+recusa `wsl --manage Ubuntu-24.04 --set-sparse true` com *"O suporte a VHD esparso está atualmente
+desativado devido a possível corrupção de dados"* (`Wsl/Service/E_INVALIDARG`, medido em 2026-09-10
+com a distro parada). **Não use o `--allow-unsafe` que ele sugere** — é o disco de produção. O
+`sparseVhd=true` do `.wslconfig` não mexe no disco atual.
 
 ## Login automático — o procedimento que funciona
 
@@ -216,7 +219,8 @@ vale só N vezes e para sozinho — funciona no teste e falha semanas depois.
 > **A senha fica cifrada nos LSA secrets** — recuperável por quem tem admin na máquina. É troca
 > consciente de segurança física da sala. Mitigação que não custa disponibilidade: bloqueio por
 > ociosidade (`control desk.cpl,,@screensaver` → 15 min → marcar *"Ao reiniciar, exibir tela de
-> logon"*). **Bloquear não desloga** — a sessão continua viva, com WSL, Docker e os containers de pé.
+> logon"*). **Bloquear não desloga** — a sessão continua viva, com a janela da tarefa, o WSL, o
+> Docker e os containers de pé. O PIN que se digita ao voltar é desbloqueio, não logon.
 
 ## Conferir que valeu
 
@@ -224,7 +228,7 @@ Depois de um reboot **sem abrir terminal nenhum**, entre no WSL e confira:
 
 ```bash
 uptime                                    # tem de bater com o boot do Windows
-systemctl is-active wsl-ancora.service    # a âncora, não o cron
+pgrep -u root -fx 'sleep infinity'        # o sleep da tarefa: a âncora
 docker compose ps                         # containers de pé
 systemctl list-timers 'central-*'         # e a coluna LAST preenchida
 ```
@@ -238,53 +242,56 @@ Get-WinEvent -FilterHashtable @{LogName='System'; Id=7001} -MaxEvents 1 | Select
 
 É o item **R5** do plano de resiliência: R1 sem esse teste é suposição, não disponibilidade.
 
-## Quem ancora é o systemd, não a tarefa
+## Quem ancora é a janela da tarefa
 
-**A tarefa do Windows só SOBE a distro no logon. Quem a mantém viva é uma unidade do systemd**,
-`wsl-ancora.service`, com `Restart=always`. A divisão importa:
+**A VM fica de pé enquanto houver pelo menos um cliente do Windows conectado a ela — e só isso.**
+Cliente é qualquer `wsl.exe` vivo no Windows:
 
-| | Faz | Não faz |
-|---|---|---|
-| Tarefa `WSL-Always-On` (Windows) | acorda a distro quando você loga | não segura nada depois; dispara `-AtLogOn` e só |
-| `wsl-ancora.service` (systemd) | mantém a VM viva **em toda subida da distro**, com ou sem logon, e volta sozinha se morrer | não liga a máquina |
-
-### Por que não bastava a tarefa
-
-Medido em 2026-09-04: a tarefa foi criada e provada de manhã; à tarde a VM tinha **5 h de uptime,
-25 containers e zero âncora**. Um `wsl --shutdown` no meio do dia derrubou a âncora, e ela não
-voltou porque **não houve novo logon**. O estado engana — máquina de pé, tudo verde — mas segurada
-só pelo terminal que estivesse aberto.
-
-E a tarefa, do jeito que está, **abre uma janela**: o `sleep` dela fica preso a um `pts`. Fechar a
-aba mataria aquela âncora. Com a unidade no lugar, **a aba pode ser fechada**.
-
-### Por que systemd, e não `setsid`/`nohup` disparado pela tarefa
-
-Testado no mesmo dia, três variantes: **o WSL mata a árvore de processos da invocação de interop
-quando o `wsl.exe` sai.**
-
-| Tentativa | Resultado |
+| Cliente | Existe enquanto |
 |---|---|
-| `sh -c 'setsid sleep infinity &'` | ✗ morreu junto |
-| `bash -c 'nohup ... & disown'` | ✗ morreu junto |
-| `systemd-run --unit=… sleep infinity` | ✓ **sobreviveu** |
+| a janela `C:\Windows\System32\wsl.exe` da tarefa `WSL-Always-On` | ninguém a fechar, do logon em diante — **é a âncora** |
+| uma aba Ubuntu do Windows Terminal (inclusive a do Claude Code) | a aba estiver aberta |
+| o VS Code com Remote-WSL | a janela estiver conectada |
 
-A unidade sobrevive porque quem a possui é o **PID 1**, não a invocação.
+Quando o último sai, o WSL encerra a instância **15 s depois** — com containers, cron e timers junto.
+**Nada dentro do Linux conta como cliente**: nem unidade do systemd, nem Docker, nem os containers.
 
-### A unidade
+**Medido em 2026-09-10, em A/B isolado:** distro subida por `wsl -u root -e true` (a sessão sai na
+hora), nenhum terminal nem VS Code, e uma unidade do systemd rodando `sleep infinity` com
+`Restart=always` ativa → `The system will power off now!` exatamente 15 s depois. Foi assim a queda
+de 09/09: das 18:57 às 15:27 do dia seguinte, com o Windows de pé. É o comportamento do WSL desde a
+2.6.1 (microsoft/WSL#13416); esta máquina roda a 2.7.8.
 
-`/etc/systemd/system/wsl-ancora.service` — `ExecStart=/bin/sleep infinity`, `Restart=always`,
-`WantedBy=multi-user.target`. Custo: um processo dormindo, sem CPU.
+### A regra
 
-```bash
-systemctl status wsl-ancora              # conferir
-sudo systemctl disable --now wsl-ancora  # reverter (a VM volta a depender de terminal aberto)
-sudo systemctl enable  --now wsl-ancora  # religar
-```
+- **A janela da tarefa fica aberta.** Minimize; não feche. Terminal e VS Code fecham à vontade.
+- **Fechou a janela, ou rodou `wsl --shutdown`:** a âncora não volta sozinha — a tarefa só dispara
+  no logon. Religue na hora:
 
-**Provado ao vivo:** `kill -9` na âncora → `NRestarts=1` e pid novo em ~1 s.
+  ```powershell
+  Start-ScheduledTask -TaskName "WSL-Always-On"
+  ```
 
-O `monitorar-canais.sh` cobra `systemctl is-active wsl-ancora` de hora em hora (sinal 7) e avisa no
-sino do Nexus. Ele **não** cobre a VM já desligada — aí nada roda, inclusive ele. Cobre a janela em
-que ela está viva e frágil, que é quando ainda dá para agir.
+- **Reinício do Windows** não pede nada: o login automático dispara a tarefa. Medido em 2026-09-10:
+  logon 4 s depois do boot, e a janela abriu no mesmo segundo.
 
+`LastTaskResult` não diz **quem** encerrou a tarefa: `3221225786` (`0xC000013A`) sai tanto quando
+alguém fecha a janela quanto quando ela é encerrada por fora. Com a tarefa já rodando, um segundo
+`Start-ScheduledTask` é recusado com `0x800710E0` — é o `MultipleInstances=IgnoreNew`, inofensivo.
+A prova é o processo, não o código (`pgrep`, na seção "Criar a tarefa").
+
+### O que não se usa
+
+- **Gatilho periódico na tarefa** (religar a cada N minutos): decisão — com a regra da janela aberta
+  ele é redundante.
+- **`[general] instanceIdleTimeout=-1` no `.wslconfig`**: faria a VM sobreviver com zero cliente.
+  Redundante com a janela aberta, e também não religaria uma VM já parada.
+- **Âncora dentro do Linux** (unidade do systemd, `setsid`, `nohup`): não conta como cliente. E o WSL
+  mata a árvore de processos de uma invocação de interop quando o `wsl.exe` dela sai — por isso o
+  `sleep` é o próprio processo da tarefa (`exec sleep infinity`), preso à janela.
+
+### Onde isso é cobrado
+
+O `monitorar-canais.sh` confere de hora em hora (sinal 7) que o `sleep` da tarefa está vivo e avisa
+no sino do Nexus quando ele some — o estado frágil em que a VM ainda está de pé, segura só por algum
+terminal ou pelo VS Code. Ele **não** cobre a VM já desligada: aí nada roda, inclusive ele.
