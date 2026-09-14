@@ -55,6 +55,11 @@ log() { echo "[monitor] $1"; }
 falha() { echo "[monitor] ✗ $1"; FALHAS+=("$1"); }
 ok() { echo "[monitor] ✓ $1"; SINAIS_OK=$((SINAIS_OK + 1)); }
 
+# Cada rodada abre com a hora: sem ela, o log do cron não diz QUANDO um sinal
+# falhou, e contar rodadas pelo journal não serve — o journal desta VM retém
+# poucos dias e perde linha do cron.
+log "── rodada de $(date '+%F %T %z') (${MODO#--})"
+
 # ── 1. A central está de pé e serve ────────────────────────────────
 LOCAL="$(curl -s --max-time 10 "http://127.0.0.1:${PORTA}/api" 2>/dev/null)"
 VERSAO_LOCAL="$(printf '%s' "$LOCAL" | jq -r '.version // empty' 2>/dev/null)"

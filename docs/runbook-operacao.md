@@ -117,6 +117,10 @@ Com `flock` (execução única) e `cd` para a raiz do repo — cron roda com `cw
 verificação atrasada não faz sentido, só interessa o estado de agora, e a próxima virada de hora já
 traz. É também o único agendamento que comprovadamente rodava antes de 08/09/2026.
 
+Cada rodada abre com `[monitor] ── rodada de <data hora fuso> (executar)`. É o log que se usa para
+saber **quando** um sinal falhou e se alguma hora ficou sem rodada: o journal desta VM retém poucos
+dias e às vezes perde a linha do cron.
+
 ### Jobs de dado — timers do systemd
 
 ```
