@@ -125,7 +125,9 @@ máquina duas vezes às 02:39 e 02:41, e o Linux ficou **9 h 41 min** fora. A te
 expediente: o horário ativo teria **aprovado** aquele reboot. O problema nunca foi *quando* a máquina
 reinicia; é que depois de reiniciar **ninguém loga**. Quem conserta isso é o login automático, e ele
 conserta a queda de luz junto. Adiar patch numa máquina que termina webhook de produção seria troca
-ruim de qualquer jeito.
+ruim de qualquer jeito. Medido com o login automático no ar: em 15/09/2026 o Windows Update reiniciou
+às 02:24 (KB5129195, dois reboots seguidos) e a VM estava de pé às 02:26:16 — ~2 min, sem ninguém.
+**Os túneis não voltam** — ver "A regra", no fim.
 
 ## Orçamento da máquina — memória e disco do WSL
 
@@ -227,7 +229,7 @@ vale só N vezes e para sozinho — funciona no teste e falha semanas depois.
 Depois de um reboot **sem abrir terminal nenhum**, entre no WSL e confira:
 
 ```bash
-uptime                                    # tem de bater com o boot do Windows
+journalctl --list-boots | tail -2         # o boot novo começa segundos depois do logon do Windows
 pgrep -u root -fx 'sleep infinity'        # o sleep da tarefa: a âncora
 docker compose ps                         # containers de pé
 systemctl list-timers 'central-*'         # e a coluna LAST preenchida
@@ -241,6 +243,42 @@ Get-WinEvent -FilterHashtable @{LogName='System'; Id=7001} -MaxEvents 1 | Select
 ```
 
 É o item **R5** do plano de resiliência: R1 sem esse teste é suposição, não disponibilidade.
+
+Não use `uptime` para isso: nesta VM ele mente (seção abaixo).
+
+## O relógio da VM e o journal
+
+**O relógio monotônico desta VM corre à frente do de parede** — de +2% a +8,6% em todos os boots
+medidos até 18/09/2026 — e o WSL corrige o de parede a cada ~30 s (`systemd-resolved: Clock change
+detected`, ~120 por hora). A causa não foi encontrada; o clocksource já é
+`hyperv_clocksource_tsc_page`. Timer `OnCalendar` não sofre: segue o relógio de parede, que o WSL
+mantém certo. Duas consequências:
+
+**1. `uptime`, `uptime -s` e `ps -o lstart` mentem**, porque derivam do monotônico: com 20,6 h de VM o
+`uptime -s` apontava 1 h 40 min antes do boot real. Se a VM caiu, e quando subiu, diz o **ID do
+boot**:
+
+```bash
+cat /proc/sys/kernel/random/boot_id      # mudou desde a última conferência = a VM caiu
+journalctl --list-boots | tail -3        # a 1ª data do boot atual é a subida
+```
+
+Prove continuidade pelo ID, não pela primeira entrada: quando o journal poda arquivos antigos, o
+FIRST ENTRY dos boots anteriores anda sozinho.
+
+**2. O journal abre um arquivo novo a cada salto** (`Time jumped backwards, rotating.`) — ~44 por dia
+em média, de 26 a 55, medido de 14 a 18/09/2026. Com o teto padrão de 100 arquivos
+(`SystemMaxFiles`) a retenção era de ~2,4 dias. Por isso a VM leva um drop-in, que é configuração da
+máquina — recriar a VM o perde:
+
+```bash
+sudo mkdir -p /etc/systemd/journald.conf.d && printf '[Journal]\nSystemMaxFiles=700\n' | sudo tee /etc/systemd/journald.conf.d/retencao.conf && sudo systemctl restart systemd-journald
+```
+
+700 arquivos ≈ 16 dias ≈ 2,6 GB (cada arquivo ocupa ~3,7 MB reais). O teto de espaço padrão
+(`SystemMaxUse`, 4 GB neste disco) continua valendo, e os dois limites podam sozinhos os arquivos mais
+antigos: não há rotina de limpeza a criar. Conferir: `ls /var/log/journal/*/ | wc -l` passa de 100 e
+o FIRST ENTRY do boot mais antigo para de andar.
 
 ## Quem ancora é a janela da tarefa
 
@@ -272,8 +310,13 @@ de 09/09: das 18:57 às 15:27 do dia seguinte, com o Windows de pé. É o compor
   Start-ScheduledTask -TaskName "WSL-Always-On"
   ```
 
-- **Reinício do Windows** não pede nada: o login automático dispara a tarefa. Medido em 2026-09-10:
-  logon 4 s depois do boot, e a janela abriu no mesmo segundo.
+- **Reinício do Windows** não pede nada **para a VM**: o login automático dispara a tarefa. Medido em
+  2026-09-10 (logon 4 s depois do boot, a janela no mesmo segundo) e num reinício real do Windows
+  Update em 2026-09-15 (~2 min fora).
+- **Os túneis não voltam com o reinício.** São passo manual: rode o `tuneis-manha.sh` do monorepo
+  assim que alguém chegar. Até lá a central fica sem URL pública — o monitor acusa no sinal 2 e
+  avisa no sino. Em 2026-09-15 foram 8 h. Por que isso não se automatiza:
+  `docs/plano-resiliencia.md`, bloco B0.
 
 `LastTaskResult` não diz **quem** encerrou a tarefa: `3221225786` (`0xC000013A`) sai tanto quando
 alguém fecha a janela quanto quando ela é encerrada por fora. Com a tarefa já rodando, um segundo
