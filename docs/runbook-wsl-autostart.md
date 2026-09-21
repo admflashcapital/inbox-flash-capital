@@ -266,19 +266,24 @@ journalctl --list-boots | tail -3        # a 1ª data do boot atual é a subida
 Prove continuidade pelo ID, não pela primeira entrada: quando o journal poda arquivos antigos, o
 FIRST ENTRY dos boots anteriores anda sozinho.
 
-**2. O journal abre um arquivo novo a cada salto** (`Time jumped backwards, rotating.`) — ~44 por dia
-em média, de 26 a 55, medido de 14 a 18/09/2026. Com o teto padrão de 100 arquivos
-(`SystemMaxFiles`) a retenção era de ~2,4 dias. Por isso a VM leva um drop-in, que é configuração da
-máquina — recriar a VM o perde:
+**2. O journal abre um arquivo novo a cada salto** (`Time jumped backwards, rotating.`) — um arquivo
+por salto, e o número de saltos varia muito: de 22 a 112 por dia, ~65 em média, medido de 14 a
+20/09/2026. É o log do sistema da VM (Docker, cron, os timers do backup, o kernel), e ~90% das
+entradas é ruído: `systemd-resolved` avisando cada correção de relógio (44%), avisos do WSL no kernel
+(`UtilAcceptVsock`, 28%) e o `wsl-pro.service` reiniciando (17%), medido em 20–21/09/2026. Com o
+teto padrão de 100 arquivos (`SystemMaxFiles`) a retenção era de ~2,4 dias. Por isso a VM leva um
+drop-in, que é configuração da máquina — recriar a VM o perde:
 
 ```bash
 sudo mkdir -p /etc/systemd/journald.conf.d && printf '[Journal]\nSystemMaxFiles=700\n' | sudo tee /etc/systemd/journald.conf.d/retencao.conf && sudo systemctl restart systemd-journald
 ```
 
-700 arquivos ≈ 16 dias ≈ 2,6 GB (cada arquivo ocupa ~3,7 MB reais). O teto de espaço padrão
-(`SystemMaxUse`, 4 GB neste disco) continua valendo, e os dois limites podam sozinhos os arquivos mais
-antigos: não há rotina de limpeza a criar. Conferir: `ls /var/log/journal/*/ | wc -l` passa de 100 e
-o FIRST ENTRY do boot mais antigo para de andar.
+700 arquivos ≈ 2,5 GB (~3,6 MB reais cada) e **de 6 a 11 dias de histórico**: ~6 no ritmo mais alto
+medido, ~11 na média. O teto de espaço padrão (`SystemMaxUse`, 4 GB neste disco) continua valendo, e
+os dois limites podam sozinhos os arquivos mais antigos — **o teto é a rotina de limpeza**: a contagem
+sobe até ~700 e para ali, e a partir daí cada arquivo novo apaga o mais velho. Não há rotina a criar.
+Conferir: `ls /var/log/journal/*/ | wc -l` não passa de ~700; depois de chegar lá, o FIRST ENTRY do
+boot mais antigo anda a cada poda — é o esperado.
 
 ## Quem ancora é a janela da tarefa
 
@@ -317,6 +322,9 @@ de 09/09: das 18:57 às 15:27 do dia seguinte, com o Windows de pé. É o compor
   assim que alguém chegar. Até lá a central fica sem URL pública — o monitor acusa no sinal 2 e
   avisa no sino. Em 2026-09-15 foram 8 h. Por que isso não se automatiza:
   `docs/plano-resiliencia.md`, bloco B0.
+- **Os túneis sobrevivem ao fechamento da aba que os subiu** — o `tuneis-manha.sh` os desliga do
+  terminal (`start_new_session`). Pode fechar a aba. Medido de 18 a 21/09/2026: a sessão de origem
+  morreu e os três `ngrok` seguiram vivos, adotados pelo PID 1.
 
 `LastTaskResult` não diz **quem** encerrou a tarefa: `3221225786` (`0xC000013A`) sai tanto quando
 alguém fecha a janela quanto quando ela é encerrada por fora. Com a tarefa já rodando, um segundo
@@ -329,9 +337,11 @@ A prova é o processo, não o código (`pgrep`, na seção "Criar a tarefa").
   ele é redundante.
 - **`[general] instanceIdleTimeout=-1` no `.wslconfig`**: faria a VM sobreviver com zero cliente.
   Redundante com a janela aberta, e também não religaria uma VM já parada.
-- **Âncora dentro do Linux** (unidade do systemd, `setsid`, `nohup`): não conta como cliente. E o WSL
-  mata a árvore de processos de uma invocação de interop quando o `wsl.exe` dela sai — por isso o
-  `sleep` é o próprio processo da tarefa (`exec sleep infinity`), preso à janela.
+- **Âncora dentro do Linux** (unidade do systemd, `setsid`, `nohup`): o processo pode sobreviver — um
+  `setsid` sobrevive ao fechamento da aba, como os túneis acima —, mas **não conta como cliente**: a
+  VM cai 15 s depois do último `wsl.exe` com ele vivo (A/B de 2026-09-10, acima). Por isso o `sleep` é
+  o próprio processo da tarefa (`exec sleep infinity`): é ele que mantém vivo o `wsl.exe` da janela,
+  e é o `wsl.exe` que conta.
 
 ### Onde isso é cobrado
 
