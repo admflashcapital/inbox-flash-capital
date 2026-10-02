@@ -81,7 +81,7 @@ sinais de liveness — mas se a máquina morre, ele morre junto, e o silêncio f
 
 ## 4. O plano
 
-Ordenado por retorno, não por dificuldade. **B0.1 e R1 concluídos em 2026-09-04; B0.2 e B0.4 em 2026-10-02**; o B0.3 segue sem conferência.
+Ordenado por retorno, não por dificuldade. **B0.1 e R1 concluídos em 2026-09-04; B0.2, B0.3 e B0.4 em 2026-10-02** — o bloco B0 está fechado.
 
 ### Bloco B0 — tirar a receita da máquina do escritório *(o mais valioso; independe do domínio)*
 
@@ -89,7 +89,7 @@ Ordenado por retorno, não por dificuldade. **B0.1 e R1 concluídos em 2026-09-0
 |---|---|---|---|---|
 | **B0.1** | ✅ **FEITO — já estava.** `api.flashcapital.com.br` é CNAME para `bps2k9e9.up.railway.app`; `GET /health` devolve 200 e os cabeçalhos são `server: railway-hikari`. Verificado em 2026-09-04 | monorepo | — | o nome estável para onde o webhook vai apontar **já existe** |
 | **B0.2** | ✅ **FEITO em 2026-10-02.** O WhatsApp Sender (`XE…`, o que decide para `whatsapp:`) aponta para `https://api.flashcapital.com.br/webhooks/twilio/{inbound,status}`, trocado no console. Prova: POST da Twilio → **200** no Railway, sem "Assinatura inválida" — logo o `PUBLIC_BOLETO_BASE_URL` do Railway bate. O `IncomingPhoneNumber` (`PN…`) segue no túnel antigo, sem efeito: o número não tem SMS e o `StatusCallback` dele é status de ligação | monorepo | — | queda de escritório não derruba mais a confirmação de sacado. O espelho da produção chega à central pela URL efêmera do túnel, com o `X-Relay-Token` na borda (AD-16): cada reinício do agente ngrok exige atualizar o `CHATWOOT_URL` do Railway à mão, e até lá o painel tem buraco |
-| **B0.3** | ⬜ Conferir que `SUPABASE_PUBLIC_URL` está **ausente** (ou igual a `SUPABASE_URL`) no Railway | monorepo | 15 min | herdar o valor de dev reescreve a URL da mídia para `localhost:54321` → Twilio **63019** |
+| **B0.3** | ✅ **FEITO em 2026-10-02** — o Vitor conferiu no painel: `SUPABASE_PUBLIC_URL` **não existe** no Railway, então a URL da mídia sai do `SUPABASE_URL` (`supabase.co`), já pública | monorepo | 15 min | herdar o valor de dev reescreve a URL da mídia para `localhost:54321` → Twilio **63019** |
 | **B0.4** | ✅ **FEITO em 2026-10-02.** O `tuneis-manha.sh` não sobe mais `:8001` nem `:54321` e não escreve na Twilio; o `tuneis_twilio.py` **confere** por padrão contra a produção e só escreve com `TUNEIS_TWILIO=aplicar`. O `:3001` **fica**: sem domínio, é ele que dá à central a URL pública exigida pelo 21609 | monorepo | — | o script não desfaz mais o B0.2 |
 
 > ⚠️ **O `:3001` sai do script só quando houver hostname estável de produção para a central.**
