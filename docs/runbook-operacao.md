@@ -118,9 +118,10 @@ verificação atrasada não faz sentido, só interessa o estado de agora, e a pr
 traz. É também o único agendamento que comprovadamente rodava antes de 08/09/2026.
 
 Cada rodada abre com `[monitor] ── rodada de <data hora fuso> (executar)`. É o log que se usa para
-saber **quando** um sinal falhou e se alguma hora ficou sem rodada: o journal às vezes perde a linha
-do cron e retém de 6 a 11 dias, conforme o ritmo (ver "O relógio da VM e o journal" em
-`docs/runbook-wsl-autostart.md`).
+saber **quando** um sinal falhou e se alguma hora ficou sem rodada — e é o único que serve para
+isso: o journal às vezes perde a linha do cron, e a janela que ele retém depende do ritmo dos saltos
+do relógio (ver "O relógio da VM e o journal" em `docs/runbook-wsl-autostart.md`). Este arquivo o
+cron só aumenta, e ninguém o poda.
 
 ### Jobs de dado — timers do systemd
 

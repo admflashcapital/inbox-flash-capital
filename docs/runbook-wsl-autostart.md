@@ -267,23 +267,41 @@ Prove continuidade pelo ID, não pela primeira entrada: quando o journal poda ar
 FIRST ENTRY dos boots anteriores anda sozinho.
 
 **2. O journal abre um arquivo novo a cada salto** (`Time jumped backwards, rotating.`) — um arquivo
-por salto, e o número de saltos varia muito: de 22 a 112 por dia, ~65 em média, medido de 14 a
-20/09/2026. É o log do sistema da VM (Docker, cron, os timers do backup, o kernel), e ~90% das
-entradas é ruído: `systemd-resolved` avisando cada correção de relógio (44%), avisos do WSL no kernel
-(`UtilAcceptVsock`, 28%) e o `wsl-pro.service` reiniciando (17%), medido em 20–21/09/2026. Com o
-teto padrão de 100 arquivos (`SystemMaxFiles`) a retenção era de ~2,4 dias. Por isso a VM leva um
-drop-in, que é configuração da máquina — recriar a VM o perde:
+por salto. É o log do sistema da VM (Docker, cron, os timers do backup, o kernel), e a maior parte
+das entradas é ruído: `systemd-resolved` avisando cada correção de relógio e os avisos do WSL no
+kernel (`UtilAcceptVsock`) respondem por quase tudo.
+
+**O ritmo de saltos varia muito e não é estável.** Medido de 22 a 112 por dia (~65 em média) na
+semana de 14 a 20/09/2026, e de ~270 a ~470 por dia do fim de setembro em diante (dias cheios: 416
+em 27/09/2026 e 391 em 01/10/2026). Por isso a retenção sai de uma divisão, não de um número fixo:
+
+    dias de histórico  ≈  SystemMaxFiles  ÷  saltos por dia
+
+E por isso o teto **não** se escolhe em dias. No ritmo de ~400 saltos/dia, os 100 arquivos do padrão
+do systemd dão ~6 horas e 700 dão 1,8 dia (medido: janela retida de 43,8 h em 02/10/2026). Para
+cobrir uma semana — o prazo em que um incidente descoberto dias depois ainda pode ser investigado —
+a VM leva um drop-in, que é configuração da máquina e se perde ao recriar a VM:
 
 ```bash
-sudo mkdir -p /etc/systemd/journald.conf.d && printf '[Journal]\nSystemMaxFiles=700\n' | sudo tee /etc/systemd/journald.conf.d/retencao.conf && sudo systemctl restart systemd-journald
+sudo mkdir -p /etc/systemd/journald.conf.d && printf '[Journal]\nSystemMaxFiles=2800\nSystemMaxUse=12G\n' | sudo tee /etc/systemd/journald.conf.d/retencao.conf && sudo systemctl restart systemd-journald
 ```
 
-700 arquivos ≈ 2,5 GB (~3,6 MB reais cada) e **de 6 a 11 dias de histórico**: ~6 no ritmo mais alto
-medido, ~11 na média. O teto de espaço padrão (`SystemMaxUse`, 4 GB neste disco) continua valendo, e
-os dois limites podam sozinhos os arquivos mais antigos — **o teto é a rotina de limpeza**: a contagem
-sobe até ~700 e para ali, e a partir daí cada arquivo novo apaga o mais velho. Não há rotina a criar.
-Conferir: `ls /var/log/journal/*/ | wc -l` não passa de ~700; depois de chegar lá, o FIRST ENTRY do
-boot mais antigo anda a cada poda — é o esperado.
+**Os dois limites sobem juntos, ou o de espaço morde primeiro.** Cada arquivo ocupa ~3,5 MB reais
+(8 MiB aparentes — são esparsos), então 2800 arquivos pedem ~10 GB; com o `SystemMaxUse` padrão
+deste disco (4 GB) a poda começaria em ~1150 arquivos e o teto de arquivos nunca valeria.
+
+**O teto é a rotina de limpeza** — não há rotina a criar. A contagem sobe até ele e para ali; a
+partir daí cada arquivo novo apaga o mais velho. Conferir os três de uma vez:
+
+```bash
+ls /var/log/journal/*/ | wc -l        # não passa do SystemMaxFiles
+journalctl --disk-usage               # não passa do SystemMaxUse
+journalctl -o short-iso | head -1     # onde começa a janela retida
+```
+
+Depois de bater o teto, o FIRST ENTRY do boot mais antigo anda a cada poda — é o esperado. E **a
+auditoria diária não depende do journal**: o monitor escreve em `backups/monitor-canais.log`, que o
+cron só aumenta e ninguém poda. O journal serve para forense.
 
 ## Quem ancora é a janela da tarefa
 
