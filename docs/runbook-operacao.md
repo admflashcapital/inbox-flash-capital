@@ -247,12 +247,13 @@ Quando o estado **muda**, o monitor posta um alerta no **sino do Nexus**, no pai
 (`POST /notificacoes/alerta`, header `X-Monitor-Token`). Notifica na transição, não a cada tick: uma
 queda de 6h gera 2 avisos, não 6. Volta ao normal → aviso `success`.
 
-Chaves envolvidas: `MONITOR_URL` e `MONITOR_TOKEN` no `.env` daqui; `MONITOR_TOKEN` **com o mesmo
-valor** no `.env` do monorepo.
+Chaves envolvidas: `MONITOR_URL=https://api.flashcapital.com.br` (a API de **produção**) e
+`MONITOR_TOKEN` no `.env` daqui; `MONITOR_TOKEN` **com o mesmo valor** nas variáveis do serviço `api`
+no Railway. Apontar para a API local do dev faz o aviso cair no banco local, ou sumir com o dev
+parado. Provado em 2026-10-02: POST de teste → 201 na produção.
 
-> O painel só mostra o aviso se a API do monorepo estiver no ar — e o alerta some do radar se **esta
-> máquina** estiver desligada. É o mesmo limite do expurgo, e ele só cai quando a central sair para um
-> host que fica de pé.
+> O alerta some do radar se **esta máquina** estiver desligada: quem posta é o cron daqui. É o mesmo
+> limite do expurgo, e ele só cai quando a central sair para um host que fica de pé.
 
 ## Checagem
 
