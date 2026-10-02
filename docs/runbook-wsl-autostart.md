@@ -337,12 +337,13 @@ de 09/09: das 18:57 às 15:27 do dia seguinte, com o Windows de pé. É o compor
   2026-09-10 (logon 4 s depois do boot, a janela no mesmo segundo) e num reinício real do Windows
   Update em 2026-09-15 (~2 min fora).
 - **Os túneis não voltam com o reinício.** São passo manual: rode o `tuneis-manha.sh` do monorepo
-  assim que alguém chegar. Até lá a central fica sem URL pública — o monitor acusa no sinal 2 e
-  avisa no sino. Em 2026-09-15 foram 8 h. Por que isso não se automatiza:
-  `docs/plano-resiliencia.md`, bloco B0.
-- **Os túneis sobrevivem ao fechamento da aba que os subiu** — o `tuneis-manha.sh` os desliga do
-  terminal (`start_new_session`). Pode fechar a aba. Medido de 18 a 21/09/2026: a sessão de origem
-  morreu e os três `ngrok` seguiram vivos, adotados pelo PID 1.
+  assim que alguém chegar. Até lá a central e o n8n do CRM ficam sem URL pública — a atendente não
+  responde pelo WhatsApp (21609) e os webhooks de Resend e JotForm caem; o monitor acusa a central no
+  sinal 2 e avisa no sino. Em 2026-09-15 foram 8 h. O inbound do número oficial **não** depende
+  disto: aponta para a produção (`api.flashcapital.com.br`).
+- **Os túneis sobrevivem ao fechamento da aba que os subiu** — o `tuneis-manha.sh` desliga o agente
+  ngrok do terminal (`start_new_session`). Pode fechar a aba. Medido de 18 a 21/09/2026: a sessão de
+  origem morreu e os `ngrok` seguiram vivos, adotados pelo PID 1.
 
 `LastTaskResult` não diz **quem** encerrou a tarefa: `3221225786` (`0xC000013A`) sai tanto quando
 alguém fecha a janela quanto quando ela é encerrada por fora. Com a tarefa já rodando, um segundo

@@ -81,40 +81,32 @@ sinais de liveness — mas se a máquina morre, ele morre junto, e o silêncio f
 
 ## 4. O plano
 
-Ordenado por retorno, não por dificuldade. **B0.1 e R1 concluídos em 2026-09-04**; o resto não iniciado.
+Ordenado por retorno, não por dificuldade. **B0.1 e R1 concluídos em 2026-09-04; B0.2 e B0.4 em 2026-10-02**; o B0.3 segue sem conferência.
 
 ### Bloco B0 — tirar a receita da máquina do escritório *(o mais valioso; independe do domínio)*
 
 | # | Item | Repo | Esforço | Por que |
 |---|---|---|---|---|
 | **B0.1** | ✅ **FEITO — já estava.** `api.flashcapital.com.br` é CNAME para `bps2k9e9.up.railway.app`; `GET /health` devolve 200 e os cabeçalhos são `server: railway-hikari`. Verificado em 2026-09-04 | monorepo | — | o nome estável para onde o webhook vai apontar **já existe** |
-| **B0.2** | ⬜ **Repontar os DOIS recursos** do `+553123916846` para `api.flashcapital.com.br`: `IncomingPhoneNumber` (SMS/voz) **e o WhatsApp Sender** (`whatsapp:`, o que decide). ⚠️ **Bloqueado pelo merge**, não pela infra: a `main` tem a rota de inbound mas **não tem o espelho do Chatwoot** — repontar antes do merge pararia de popular o painel | monorepo | 15 min | **medido**: hoje apontam para o ngrok desta máquina. Enquanto não mudar, queda de escritório = confirmação de sacado quebrada |
+| **B0.2** | ✅ **FEITO em 2026-10-02.** O WhatsApp Sender (`XE…`, o que decide para `whatsapp:`) aponta para `https://api.flashcapital.com.br/webhooks/twilio/{inbound,status}`, trocado no console. Prova: POST da Twilio → **200** no Railway, sem "Assinatura inválida" — logo o `PUBLIC_BOLETO_BASE_URL` do Railway bate. O `IncomingPhoneNumber` (`PN…`) segue no túnel antigo, sem efeito: o número não tem SMS e o `StatusCallback` dele é status de ligação | monorepo | — | queda de escritório não derruba mais a confirmação de sacado. **Custo:** o Railway ainda não alcança a central, então a resposta de cliente a disparo de produção não aparece no painel |
 | **B0.3** | ⬜ Conferir que `SUPABASE_PUBLIC_URL` está **ausente** (ou igual a `SUPABASE_URL`) no Railway | monorepo | 15 min | herdar o valor de dev reescreve a URL da mídia para `localhost:54321` → Twilio **63019** |
-| **B0.4** | ⬜ Tirar do `tuneis-manha.sh` o `:8001`, o `:54321` **e o `:3001`** — os três do `ENV_MAP` (`:79-82`), mais a escrita no console da Twilio | monorepo | 30 min | depois de B0.2, deixar o script rodando **desfaz** o B0.2 toda manhã |
+| **B0.4** | ✅ **FEITO em 2026-10-02.** O `tuneis-manha.sh` não sobe mais `:8001` nem `:54321` e não escreve na Twilio; o `tuneis_twilio.py` **confere** por padrão contra a produção e só escreve com `TUNEIS_TWILIO=aplicar`. O `:3001` **fica**: sem domínio, é ele que dá à central a URL pública exigida pelo 21609 | monorepo | — | o script não desfaz mais o B0.2 |
 
-> ⚠️ **B0.4 não é limpeza, é correção — e o `:3001` é o mais perigoso dos três.**
-> 1. O `tuneis_twilio.py` **escreve** o webhook no console da Twilio a cada rodada — e desde
->    2026-09-04 escreve nos **dois** recursos (`IncomingPhoneNumber` e o **WhatsApp Sender**, que é o
->    que vale para `whatsapp:`). Sem desligá-lo, o próximo `tuneis-manha.sh` devolve o webhook de
->    produção para o ngrok, em silêncio. O desligamento **já existe**: `TUNEIS_TWILIO=conferir` faz o
->    script conferir e gritar sem escrever — é o modo a adotar quando a produção for dona do número.
-> 2. O `ENV_MAP` reescreve `CENTRAL_URL_PUBLICA` no `.env` do inbox **e recria `chatwoot-web` +
->    `chatwoot-sidekiq`** (`:223-226`). Como esse valor vira o `FRONTEND_URL` do Chatwoot, a central de
->    **produção** trocaria o hostname estável da Cloudflare por uma URL de ngrok que morre no dia
->    seguinte — levando junto o `status_callback` que ela anexa em todo envio (o 21609 do AD-11.1).
+> ⚠️ **O `:3001` sai do script só quando houver hostname estável de produção para a central.**
+> O script reescreve `CENTRAL_URL_PUBLICA` e recria `chatwoot-web` + `chatwoot-sidekiq` sempre que a URL
+> do túnel muda. Hoje isso é o certo: não há domínio nem Cloudflare (decisão do Vitor em 2026-10-02), e o
+> túnel é a única URL pública da central. No dia em que existir o hostname do AD-15, deixar o script de pé
+> trocaria esse hostname por uma URL de ngrok que morre no reboot — levando junto o `status_callback` que
+> a central anexa em todo envio (o 21609 do AD-11.1).
 
-> **📌 Medido no reboot de 2026-09-04, e é o argumento mais concreto deste bloco.** A máquina se
-> recompôs sozinha — VM, âncora, 25 containers, 5 crons — **mas voltou sem túnel**. Os túneis são
-> passo manual (`tuneis-manha.sh`), e enquanto o webhook de produção da Twilio apontar para cá, cada
-> minuto entre o boot e alguém rodar o script é inbound de cliente caindo numa URL morta — buraco
-> **permanente**, não atraso (AD-12). Um reboot às 3h vira 6 h de buraco.
+> **📌 Medido no reboot de 2026-09-04.** A máquina se recompôs sozinha — VM, âncora, 25 containers,
+> 5 crons — **mas voltou sem túnel**. Os túneis são passo manual (`tuneis-manha.sh`). Com o B0.2 feito,
+> o inbound do número oficial não passa mais por eles: o que fica sem URL até alguém rodar o script é a
+> central (a atendente não responde pelo WhatsApp, 21609) e o n8n do CRM (webhooks de Resend e JotForm).
 >
-> **Automatizar o túnel no boot NÃO é a saída**, e por dois motivos: o passo perigoso não é subir o
-> túnel, é **escrever o webhook na Twilio** — que depois do merge passaria a sequestrar o inbound de
-> produção em silêncio; e o AD-15 **apaga o mecanismo inteiro** (o `cloudflared` vira container com
-> política de restart e hostname estável, sem URL diária, sem reescrita de `.env`, sem escrita na
-> Twilio). Investir em automação aqui é investir no que já está marcado para demolição — item **2.8**
-> do rastreio da Fase 4. A saída é este bloco B0.
+> **Automatizar o túnel no boot** deixou de ser perigoso — o script não escreve mais na Twilio — e
+> continua não decidido: o AD-15 troca o mecanismo inteiro por `cloudflared` com hostname estável, e
+> em 2026-10-02 o Vitor manteve o ngrok, sem domínio e sem Cloudflare por ora.
 
 ### Bloco R — retomada automática *(independe do domínio — pode começar hoje)*
 
@@ -207,8 +199,9 @@ com o domínio ─────────────────────�
   V2  horário dos crons
 ```
 
-**O B0 vem antes de tudo, e a ordem importa: `B0.2` sem `B0.4` se desfaz sozinha** na manhã seguinte,
-quando o `tuneis_twilio.py` reescrever o `SmsUrl` de volta para o ngrok.
+**O B0 vem antes de tudo, e a ordem importa: `B0.2` sem `B0.4` se desfaz sozinha** — o
+`tuneis_twilio.py` escrevia o webhook a cada rodada. Hoje ele só confere por padrão; escrever exige
+`TUNEIS_TWILIO=aplicar`.
 
 Depois dele, **R1 e F3** são os que eu não deixaria para depois. O primeiro custa 15 minutos e responde
 sozinho pela maior parte do risco de indisponibilidade restante. O segundo é barato agora e caro

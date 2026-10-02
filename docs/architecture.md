@@ -147,8 +147,8 @@ Mapa de camadas → responsabilidade:
   chega a sair. Não há toggle; omitir exigiria fork (proibido, AD-7). Logo **`FRONTEND_URL` pública
   não é preferência de UX — é pré-condição para responder pelo canal oficial.**
 - **Rule:** o `FRONTEND_URL` do container vem da chave `CENTRAL_URL_PUBLICA` do `.env`
-  (`compose.yaml` falha o boot se ela faltar), preenchida em dev pelo terceiro túnel do
-  `tuneis-manha.sh` do monorepo. Toda exposição da central — túnel de dev ou ingresso de produção —
+  (`compose.yaml` falha o boot se ela faltar), preenchida pelo endpoint `central` do agente ngrok
+  da plataforma, que o `tuneis-manha.sh` do monorepo sobe. Toda exposição da central — túnel de dev ou ingresso de produção —
   **tem de** manter `/twilio/delivery_status` alcançável e `/twilio/callback` negado. A
   especificação está em `docs/runbook-deploy.md`; a implementação de dev, em `deploy/ngrok-policy.yml`.
 - **Medido, não suposto:** (1) a Twilio aceita um StatusCallback que devolve **404** — ela valida o
@@ -156,9 +156,9 @@ Mapa de camadas → responsabilidade:
   a `CENTRAL_URL_PUBLICA` **não** quebra o canal de e-mail já autorizado, porque o refresh do Gmail
   usa `grant_type=refresh_token`, que não passa `redirect_uri` (9 checks verdes depois da troca). O
   Google Cloud só é tocado num **consent novo**.
-- **O que ainda falta:** a URL do túnel muda a cada rodada e o subdomínio fixo não existe no plano
-  free (`ERR_NGROK_313`, medido). O custo diário é reconfigurar o `.env` — automatizado, mas real. O
-  ingresso do **AD-15** substitui isso por um domínio estável.
+- **O que ainda falta:** a URL do túnel muda sempre que o agente sobe de novo, e o subdomínio fixo
+  não existe no plano free (`ERR_NGROK_313`, medido). O script regrava o `.env` e recria a central
+  quando ela muda. O ingresso do **AD-15** substitui isso por um domínio estável.
 
 ### AD-12 — O painel é tão completo quanto o uptime de quem o alimenta `[ACCEPTED 2026-09-02]`
 - **Binds:** FR-8, AD-6

@@ -178,9 +178,10 @@ chega a sair**. Não há env var nem toggle para omitir o callback, e mexer no m
 (proibido, AD-7).
 
 **Como está resolvido.** O `FRONTEND_URL` do container é alimentado pela chave `CENTRAL_URL_PUBLICA`
-do `.env`, que o `tuneis-manha.sh` do monorepo preenche com um túnel para a porta 3001 — o terceiro,
-ao lado do da API e do Supabase. Com uma URL pública o `messages.create` passa e **a atendente
-responde pela tela**. Verificado ao vivo em 2026-09-02, com o número oficial real.
+do `.env`, que o `tuneis-manha.sh` do monorepo preenche com um túnel para a porta 3001 (um dos dois
+endpoints do agente ngrok da plataforma; o outro é o n8n do CRM). Com uma URL pública o
+`messages.create` passa e **a atendente responde pela tela**. Verificado ao vivo em 2026-09-02, com o
+número oficial real.
 
 Dois fatos que essa montagem depende, e que foram **medidos**, não supostos:
 
@@ -193,8 +194,8 @@ Dois fatos que essa montagem depende, e que foram **medidos**, não supostos:
    do `verificar-canal-email.sh` seguiram verdes. O Google Cloud só precisa ser tocado de novo num
    **consent novo** — ver `docs/runbook-canal-email.md`, que traz a receita de localhost para isso.
 
-**O que a URL de túnel ainda não é.** Ela muda a cada rodada do `tuneis-manha.sh`, então o custo é
-reconfigurar o `.env` todo dia — automatizado pelo script, mas real. E o subdomínio fixo do plano
+**O que a URL de túnel ainda não é.** Ela muda sempre que o agente ngrok sobe de novo (reboot,
+`TUNEIS_REINICIAR=1`), e o script regrava o `.env` e recria a central quando isso acontece. E o subdomínio fixo do plano
 free **não existe**: `--url` com subdomínio próprio devolve `ERR_NGROK_313` ("Only paid plans may
 create endpoints with custom subdomains"), medido em 2026-09-02. A troca por um domínio estável é o
 ingresso da Fase 4; até lá isto opera.
@@ -218,14 +219,13 @@ Foi assim que descobrimos, em 13/07, que o webhook apontava para um túnel ngrok
 E depois, que uma correção no console tinha **duplicado o caminho**
 (`/webhooks/twilio/inbound/webhooks/twilio/inbound`).
 
-**A URL do ngrok free muda a cada reinício do túnel** — e o subdomínio fixo **não é uma saída**:
-`--url` com subdomínio próprio devolve `ERR_NGROK_313` ("Only paid plans may create endpoints with
-custom subdomains"), medido em 2026-09-02.
+O que fecha o laço hoje é **tirar o webhook do ngrok**: o número oficial aponta para a produção,
+`https://api.flashcapital.com.br/webhooks/twilio/{inbound,status}` (Railway), e nenhum script desta
+máquina escreve nele. Provado em 2026-10-02: POST da Twilio → **200** no Railway, sem "Assinatura
+inválida" — logo o `PUBLIC_BOLETO_BASE_URL` do Railway bate com a URL que a Twilio assina.
 
-O que fecha o laço hoje é o **`tuneis-manha.sh` do monorepo**: ele sobe os três túneis, grava a URL
-nos `.env` dos repos que a consomem, recria os containers que precisam reler o ambiente e **escreve
-o webhook no console da Twilio** (`scripts/tuneis_twilio.py`). O modo de falha que custou 10 dias em
-silêncio deixou de depender de alguém lembrar.
+Consequência para a central: o inbound chega ao **Railway**, que ainda **não alcança** o Chatwoot.
+A resposta de cliente a disparo de produção não aparece aqui até o espelho de produção existir.
 
 ### São DOIS webhooks no mesmo número, e o do WhatsApp é o que decide
 
@@ -236,20 +236,20 @@ O console da Twilio guarda **duas configurações independentes** para `+5531239
 | `IncomingPhoneNumber` (`PN…`) | `SmsUrl` · `StatusCallback` | **SMS e voz** | Phone Numbers → o número |
 | `Channels/Senders` (`XE…`) | `callback_url` · `status_callback_url` | **WhatsApp** | Messaging → Senders → WhatsApp senders |
 
-**Medido em 2026-09-04:** o script escrevia só o primeiro. O número mostrava o túnel do dia e o
-sender, um de dois dias antes — apontando para um ngrok morto. Como todo o tráfego da Flash é
-`whatsapp:`, **é o sender que decide se a resposta do cliente chega**. O script passou a escrever os
-dois e a **conferir por releitura**: sem reler, uma escrita que não pega vira um `✔` mentiroso, que
-foi exatamente como o defeito passou despercebido.
+Como todo o tráfego da Flash é `whatsapp:`, **é o sender que decide se a resposta do cliente
+chega**. O `IncomingPhoneNumber` não tem SMS habilitado (o console mostra "Capability not
+supported"), e o `StatusCallback` dele é status de **ligação**: apontar para lugar errado ali não
+afeta a cobrança.
 
-Conferir a qualquer momento, sem escrever nada:
+Conferir a qualquer momento, contra a produção e sem escrever nada (é o padrão do script):
 
 ```bash
-cd ../monorepo-flash-capital && TUNEIS_TWILIO=conferir python3 scripts/tuneis_twilio.py
+cd ../monorepo-flash-capital && python3 scripts/tuneis_twilio.py
 ```
 
-Isso não elimina a causa, só a automatiza. O conserto de verdade é um **domínio estável** — o
-ingresso da Fase 4.
+Escrever só com `TUNEIS_TWILIO=aplicar`, e ele confere por releitura — sem reler, uma escrita que
+não pega vira um `✔` mentiroso. `TUNEIS_TWILIO_BASE=<url>` troca o alvo: combinado com `aplicar`,
+desvia o inbound de **produção** para lá.
 
 ## Testar o canal sem depender de um celular
 

@@ -75,11 +75,17 @@ O compose, o `.env` e os `scripts/` estão na raiz, então `docker compose` acha
 A central escuta em **`http://127.0.0.1:${CHATWOOT_HOST_PORT}`** (hoje 3001). O navegador entra por
 aí; o monorepo fala com ela pela rede `flash-espelho`, por nome de container.
 
-**E há uma terceira porta de entrada, em dev:** a chave `CENTRAL_URL_PUBLICA` do `.env` recebe um
-túnel para a 3001, subido pelo `tuneis-manha.sh` do monorepo. Ela vira o `FRONTEND_URL` do Chatwoot,
-e **sem ela a atendente não consegue responder pelo WhatsApp** — a Twilio recusa o envio com 21609
-(AD-11.1). O túnel sobe com `deploy/ngrok-policy.yml`, que nega `/twilio/callback` na borda.
+**E há uma terceira porta de entrada:** a chave `CENTRAL_URL_PUBLICA` do `.env` recebe um túnel
+ngrok para a 3001, subido pelo `tuneis-manha.sh` do monorepo — um agente único que serve a central e
+o n8n do CRM (o plano free limita a **3 sessões de agente**, não a 3 URLs). Ela vira o
+`FRONTEND_URL` do Chatwoot, e **sem ela a atendente não consegue responder pelo WhatsApp** — a
+Twilio recusa o envio com 21609 (AD-11.1). O túnel sobe com `deploy/ngrok-policy.yml`, que nega
+`/twilio/callback` na borda. A URL é efêmera e não volta sozinha depois de um reboot: rode o script.
 `bash scripts/verificar-canal-oficial.sh` cobra as duas coisas ao vivo.
+
+**O inbound do número oficial vai para a produção** (`api.flashcapital.com.br`, Railway), e o
+Railway **ainda não alcança a central**: resposta de cliente a disparo de produção não aparece aqui.
+Hoje quem espelha na central é só a API **local**, pela `flash-espelho`.
 
 ### As-built que vai te morder (aprendido em produção, não re-descubra)
 

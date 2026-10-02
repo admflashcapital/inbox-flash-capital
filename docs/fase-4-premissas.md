@@ -63,12 +63,13 @@ de NS **exclusiva**: não coexiste com a GoDaddy. Isso produziu sete caminhos, s
 Cloudflare. Nada é migrado, a GoDaddy não é tocada, e não há janela de propagação a temer porque não
 existe tráfego legado naquele nome. É a diferença entre "mudar o DNS da empresa" e "criar um DNS novo".
 
-**E o ganho passa dos três repos.** O `tuneis-manha.sh` mantém hoje **quatro** URLs efêmeras vivas:
+**E o ganho passa dos três repos.** O `tuneis-manha.sh` mantém hoje **duas** URLs efêmeras vivas,
+num agente ngrok único (o plano free limita a 3 sessões de agente). A API e a mídia já saíram do túnel:
 
 | Túnel | Serve | Consome a URL | Na Fase 4 |
 |---|---|---|---|
-| `:8001` | FastAPI do monorepo — webhook da Twilio + boleto público | `PUBLIC_BOLETO_BASE_URL` | **Railway**, `api.flashcapital.com.br` (CNAME na zona antiga) |
-| `:54321` | mídia do Supabase (a Twilio busca o PDF) | `SUPABASE_PUBLIC_URL` | ✅ **some.** O Supabase é hospedado (`supabase.co`) e já em produção: a URL de storage nasce pública e estável. O túnel é artefato de **dev** |
+| — | FastAPI do monorepo — webhook da Twilio + boleto público | `PUBLIC_BOLETO_BASE_URL` | ✅ **já é** o Railway, `api.flashcapital.com.br` (B0.2, 2026-10-02) |
+| — | mídia do Supabase (a Twilio busca o PDF) | `SUPABASE_PUBLIC_URL` | ✅ **já é** o `supabase.co`. O túnel `:54321` é só de dev, subido à mão |
 | `:3001` | a central (Chatwoot) | `CENTRAL_URL_PUBLICA` | túnel → `inbox.<novodominio>` |
 | `:5678` | n8n do CRM — webhooks Resend/JotForm | `WEBHOOK_URL` | túnel → `n8n.<novodominio>` |
 
@@ -79,15 +80,12 @@ URL estável** — o ngrok é dev-only por decisão, então a Fase 4 é obrigat�
 
 ## 2.1 Topologia — a plataforma NÃO fica na mesma máquina `[DECIDIDO 2026-09-03]`
 
-> ⚠️ **Isto é o ALVO, não o estado atual.** Medido na API da Twilio (2026-09-03, reconfirmado em
-> 2026-09-04): o número de produção `+553123916846` tem inbound **e** status callback apontando para um
-> túnel ngrok da máquina do escritório. O monorepo **tem deploy no Railway** — provado: o
-> `api.flashcapital.com.br` é CNAME para `bps2k9e9.up.railway.app`, responde e envia de lá — mas a
-> **fronteira pública de volta ainda não foi movida**. Enquanto não for, uma queda do escritório derruba
-> a confirmação de sacado, o link do boleto e a mídia — não só o painel.
->
-> Mover essa fronteira é o item **B0** do `docs/plano-resiliencia.md`, **não depende do domínio novo** e
-> vem antes de tudo o mais.
+> ⚠️ **Estado em 2026-10-02: metade do alvo.** O webhook do WhatsApp Sender do `+553123916846` aponta
+> para `api.flashcapital.com.br` (B0.2 do `docs/plano-resiliencia.md`), e o POST da Twilio chega ao
+> Railway com 200. Uma queda do escritório não derruba mais a confirmação de sacado. **O espelho de
+> produção ainda não existe:** o Railway não alcança a central (itens 2.1–2.3 abaixo), então a resposta
+> de cliente a disparo de produção não aparece no painel. Hoje só a API local espelha, pela
+> `flash-espelho`.
 
 O alvo: o monorepo no **Railway**; inbox e CRM na máquina do escritório. São dois lugares, e isso muda
 mais do que parece:
@@ -205,7 +203,7 @@ Todas já rastreadas em `PROGRESS.md`. Aqui só o mapa de quais caem e quais nã
 | Dívida | Cai com o domínio? |
 |---|---|
 | `link_boleto` guarda URL de túnel que morre amanhã → 404 em conversa antiga | ✅ sim, é o conserto exato |
-| Webhook da Twilio apodrece (hoje só mitigado pelo `tuneis-manha.sh`) | ✅ sim |
+| Webhook da Twilio apodrece | ✅ já caiu sem o domínio: aponta para o Railway (B0.2) |
 | n8n: editor alcançável pela URL efêmera | ✅ sim, com a restrição de path na borda |
 | `/twilio/delivery_status` aceita chamada não assinada | 🟡 mitigado por allowlist de IP, não eliminado |
 | Teto de corpo (requisito 4) | ✅ passa a existir |
@@ -253,7 +251,7 @@ Ordem por dependência, não por dificuldade. Nada disto está iniciado.
 | 2.2b | ⬜ **o `env.example` do monorepo ensina `http://chatwoot-web:3000`** — nome de container, que em Railway não resolve. Quem copiar esse template para produção monta um espelho que falha **em silêncio** (AD-12). Precisa de aviso no arquivo, não só no rastreio | monorepo | achado em 2026-09-04 |
 | 2.2c | ⬜ **o espelho não sabe mandar os headers do Access.** `chatwoot_mirror.py::_headers()` manda só `api_access_token` + `Content-Type` (verificado em 2026-09-04). Com `/api/*` sob Service Auth (1.5b), toda chamada leva 302 e **nenhum disparo é espelhado** — em silêncio, porque o `raise_for_status()` passa na página de login. É a armadilha 1 do §4, aqui virada trabalho: **`CF-Access-Client-Id` + `CF-Access-Client-Secret` no `_headers()`, e asserção de `content-type`** | monorepo | **1.5b · bloqueia o go-live da Fase 4** |
 | 2.3 | ⬜ **ADR: o espelho atravessa a internet.** O AD-10 diz "máquina-a-máquina é sempre rede privada" — deixa de valer para essa perna | inbox | é mudança de arquitetura, não de `.env` |
-| 2.4 | ⬜ `PUBLIC_BOLETO_BASE_URL` → `api.flashcapital.com.br` (CNAME para o Railway na zona antiga) | monorepo | **as três cópias** (env, DNS, console Twilio) têm de bater. Não depende do domínio novo |
+| 2.4 | ✅ `PUBLIC_BOLETO_BASE_URL` → `api.flashcapital.com.br` (CNAME para o Railway na zona antiga) | monorepo | feito em 2026-10-02 (B0.2): a Twilio posta no Railway e a assinatura bate |
 | 2.5 | ⬜ conferir que `SUPABASE_PUBLIC_URL` está **ausente** (ou igual a `SUPABASE_URL`) no Railway | monorepo | com Supabase Cloud o `make_public_url` tem de virar no-op. Herdar o valor de dev reescreveria a URL da mídia para um `localhost:54321` — e a Twilio devolveria **63019** |
 | 2.6 | ⬜ `WEBHOOK_URL` do n8n → `n8n.<novodominio>` | crm | reconfigurar Resend e JotForm |
 | 2.7 | ⬜ **redirect URI do Google** no Cloud Console → domínio novo | inbox | destrava o consent permanente do Gmail (hoje é dança diária) |
