@@ -224,8 +224,11 @@ O que fecha o laço hoje é **tirar o webhook do ngrok**: o número oficial apon
 máquina escreve nele. Provado em 2026-10-02: POST da Twilio → **200** no Railway, sem "Assinatura
 inválida" — logo o `PUBLIC_BOLETO_BASE_URL` do Railway bate com a URL que a Twilio assina.
 
-Consequência para a central: o inbound chega ao **Railway**, que ainda **não alcança** o Chatwoot.
-A resposta de cliente a disparo de produção não aparece aqui até o espelho de produção existir.
+Consequência para a central: o inbound chega ao **Railway**, que valida a assinatura e o relaya para
+cá pela URL pública do túnel (`CHATWOOT_URL` no Railway), com o `X-Relay-Token` cobrado na borda
+(AD-16). Provado em 2026-10-02: `POST /twilio/callback` → **204** na borda e a mensagem `incoming`
+na inbox 1. A URL é efêmera: quando o agente ngrok reinicia, o `CHATWOOT_URL` do Railway tem de ser
+atualizado à mão, e até lá a resposta do cliente não aparece aqui.
 
 ### São DOIS webhooks no mesmo número, e o do WhatsApp é o que decide
 
@@ -325,7 +328,7 @@ conversa duplicada para o mesmo cliente, é aqui que se olha.
 |---|---|
 | Mensagem chega na Twilio (`status=received`) e **nada acontece**, sem log em lugar nenhum | erro **11200**: a Twilio não conseguiu chamar o webhook. Veja os Alerts — eles dizem a URL exata que ela tentou |
 | A confirmação de sacado parou de funcionar | o webhook do número foi repontado para o Chatwoot. Ele deve apontar para o **monorepo** |
-| Mensagem do cliente não aparece na central | o relay do monorepo não está entregando. Com os dois na mesma máquina: confira se `fastapi_api` e `chatwoot-web` estão ambos na rede `flash-espelho`. Com o monorepo no Railway: confira o `CHATWOOT_URL` público e se o Access deixa o espelho passar (uma página de login HTML com **200** engana o `raise_for_status()`). Nos dois casos, confira `CHATWOOT_MIRROR_ENABLED` — o espelho falha em silêncio (AD-12) |
+| Mensagem do cliente não aparece na central | o relay da produção não está entregando, e falha em silêncio (AD-12). Na ordem: (1) o log do Railway (`railway logs -s api -e staging`) tem o `POST /webhooks/twilio/inbound` 200? Um `Fan-out do inbound para a central falhou` diz o erro; (2) o `CHATWOOT_URL` do Railway é a URL **atual** do endpoint `central` (`curl -s localhost:4040/api/tunnels`)? Se o agente reiniciou, não é; (3) a borda recebeu o relay? `http://localhost:4040/inspect/http`, ou `curl -s 'localhost:4040/api/requests/http?limit=10'`: `POST /twilio/callback` **403** = token divergente entre o Railway e o `RELAY_TOKEN` daqui; **204** = chegou ao Chatwoot. Confira também `CHATWOOT_MIRROR_ENABLED=true` no Railway |
 | O cliente recebeu a cobrança **duas vezes** | o push do monorepo foi feito **sem `source_id`** — a central reenviou. Ver § "O disparo não pode sair duas vezes" |
 | Fora das 24h a atendente escreve e a mensagem falha | a inbox foi criada com `medium: sms` — sem janela. Recrie com `whatsapp` |
 | A UI não oferece template nenhum | templates não sincronizados: `conectar-twilio.sh --templates` |

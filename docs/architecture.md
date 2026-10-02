@@ -111,7 +111,8 @@ Mapa de camadas → responsabilidade:
   (AD-15). Railway não entra numa rede Docker local, então `CHATWOOT_URL=http://chatwoot-web:3000`
   **não resolve lá**. Em produção essa perna sai pela **URL pública** da central, atravessando a
   internet — e o `env.example` do monorepo ainda ensina o nome do container, que é o valor de **dev**.
-  Consequências, todas rastreadas em `docs/fase-4-premissas.md` §6 bloco 2:
+  Hoje essa perna é o túnel ngrok com o gate do `X-Relay-Token` (**AD-16**). Para o ingresso do
+  AD-15, as consequências estão rastreadas em `docs/fase-4-premissas.md` §6 bloco 2:
   1. `CHATWOOT_URL` vira `https://inbox.<dominio>` (item 2.2), e a `flash-espelho` fica com **um
      membro** — perde a razão de existir e vira artefato de dev;
   2. a invariante "máquina-a-máquina é sempre rede privada" **deixa de valer para essa perna**, e
@@ -149,7 +150,8 @@ Mapa de camadas → responsabilidade:
 - **Rule:** o `FRONTEND_URL` do container vem da chave `CENTRAL_URL_PUBLICA` do `.env`
   (`compose.yaml` falha o boot se ela faltar), preenchida pelo endpoint `central` do agente ngrok
   da plataforma, que o `tuneis-manha.sh` do monorepo sobe. Toda exposição da central — túnel de dev ou ingresso de produção —
-  **tem de** manter `/twilio/delivery_status` alcançável e `/twilio/callback` negado. A
+  **tem de** manter `/twilio/delivery_status` alcançável e `/twilio/callback` negado a quem não traz
+  o `X-Relay-Token` (o relay da produção entra com ele, AD-16). A
   especificação está em `docs/runbook-deploy.md`; a implementação de dev, em `deploy/ngrok-policy.yml`.
 - **Medido, não suposto:** (1) a Twilio aceita um StatusCallback que devolve **404** — ela valida o
   host, não o path, e é o que permite negar o `/twilio/callback` sem quebrar o envio; (2) rotacionar
@@ -243,6 +245,42 @@ Mapa de camadas → responsabilidade:
 - **Estado:** decidido e especificado; **não executado** — falta comprar o domínio e conferir os seis
   limites do plano gratuito. Rastreio em `docs/fase-4-premissas.md` §6.
 
+### AD-16 — O espelho de produção chega pela internet, com o `X-Relay-Token` cobrado na borda `[ACCEPTED 2026-10-02]`
+- **Binds:** AD-10, AD-11, AD-11.1, AD-12, AD-15
+- **Prevents:** que o painel fique cego para a produção enquanto o domínio do AD-15 não existe, e que
+  a perna Railway → central entre sem identidade num path que o Chatwoot não protege.
+- **Contexto:** o monorepo de produção roda no **Railway**, e a central na máquina do escritório. O
+  Railway não entra na rede `flash-espelho`, então `http://chatwoot-web:3000` não resolve lá. A
+  `docs/fase-4-premissas.md` §2.1 já registrava que essa perna precisaria atravessar a internet, e que
+  isso era mudança de arquitetura, não de `.env`.
+- **Decisão:** a perna Railway → central usa a **URL pública** da central, a do endpoint `central` do
+  agente ngrok da plataforma (`tuneis-manha.sh` do monorepo). O `deploy/ngrok-policy.yml` nega
+  `/twilio/callback` **exceto** quando o pedido traz o `X-Relay-Token` correto. O arquivo versionado
+  carrega o marcador `__RELAY_TOKEN__`, e o script o troca pelo `RELAY_TOKEN` do `.env` só na config
+  gerada (`~/.cache/flash-tuneis/plataforma.yml`, diretório 700, arquivo 600). Usada avulsa, sem a
+  troca, a policy nega o path inteiro: falha fechada. A via máquina-a-máquina por rede privada (AD-10)
+  vale para processos na mesma máquina.
+- **Medido em 2026-10-02:** sem token, com token errado e em POST sem token, a borda devolve **403**;
+  com o token, passa. Ponta a ponta: celular → Twilio → Railway (`/webhooks/twilio/inbound` 200,
+  assinatura válida) → `relay_inbound` → borda (`POST /twilio/callback` **204**) → mensagem `incoming`
+  na inbox 1, com `source_id`. A API pública respondeu **200 JSON** ao User-Agent do `httpx`, sem a
+  página de aviso do ngrok; o caminho de saída (`mirror_outbound`) usa essa mesma URL e o mesmo token
+  de API, mas **ainda não foi provado por um disparo real**.
+- **Configuração no Railway** (serviço `api`): `CHATWOOT_MIRROR_ENABLED=true`, `CHATWOOT_URL` = URL
+  atual do endpoint `central`, `CHATWOOT_ACCOUNT_ID=1`, `CHATWOOT_INBOX_ID=1`,
+  `CHATWOOT_ACCESS_TOKEN` e `CHATWOOT_RELAY_TOKEN` (igual ao `RELAY_TOKEN` daqui).
+- **Consequências:**
+  1. **A URL é efêmera, e fica assim até o domínio do AD-15** (decisão do Vitor, 2026-10-02: a conta
+     ngrok não tem URL fixa). Cada vez que o agente sobe de novo, a URL muda e o `CHATWOOT_URL` do
+     Railway é atualizado **à mão**; o passo 5 do script avisa. Até lá o espelho de produção fica
+     cego, e sem retry (AD-12) cada minuto é buraco permanente no painel.
+  2. **O token é a única proteção do `/twilio/callback`**, e mora em quatro lugares: o `.env` deste
+     repo, o `.env` do monorepo, as variáveis do Railway e a config gerada. Rotacionar é trocar nos
+     quatro e reiniciar o agente (`TUNEIS_REINICIAR=1`).
+  3. **O espelho do dev fica desligado** (`CHATWOOT_MIRROR_ENABLED=false` no monorepo local): a
+     central é a da operação, e um teste local escreveria no painel real. A rede `flash-espelho`
+     continua declarada nos dois composes, mas hoje não transporta nada.
+
 ### Diagrama de direção de dependência (quem pode depender de quem)
 
 ```mermaid
@@ -259,7 +297,7 @@ graph LR
   end
 
   TW -->|inbound + delivery status| MONO
-  MONO -->|espelho: mensagem + custom_attributes<br/>rede flash-espelho| CW
+  MONO -->|espelho: mensagem + custom_attributes<br/>produção: URL pública + X-Relay-Token (AD-16)| CW
   CW -->|polling IMAP DE SAÍDA| GM
   TW -. NUNCA fala com a central .-> CW
   CW -. NUNCA consulta o domínio .-> MONO

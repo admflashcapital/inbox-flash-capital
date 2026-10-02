@@ -255,7 +255,7 @@ não vai para produção; **as regras vão**.
 
 | # | Requisito | Por que o Chatwoot não resolve | Verificado |
 |---|---|---|---|
-| 1 | **Só o espelho entra no `/twilio/callback`** — deixou de ser "negar de fora" | O `Twilio::CallbackController` **não valida assinatura nenhuma**. Exposto sem gate, qualquer um forja um inbound na conversa de um cliente. ⚠️ Com o monorepo no Railway, **o relay legítimo passou a vir de fora**: negar incondicionalmente mataria o espelho | ngrok policy → **403** (2026-09-02, quando o relay era interno) · na Fase 4: Access **Service Auth** |
+| 1 | **Só o espelho entra no `/twilio/callback`** — deixou de ser "negar de fora" | O `Twilio::CallbackController` **não valida assinatura nenhuma**. Exposto sem gate, qualquer um forja um inbound na conversa de um cliente. ⚠️ Com o monorepo no Railway, **o relay legítimo passou a vir de fora**: negar incondicionalmente mataria o espelho | ngrok policy: **403** sem token, com token errado e em POST sem token; com o `X-Relay-Token` certo, passa (2026-10-02, AD-16) · na Fase 4: Access **Service Auth** |
 | 2 | **Deixar `/twilio/delivery_status` aberto** | É a própria Twilio que o chama, sem identidade. E o **21609** exige que ele seja alcançável, senão a central não consegue responder | ngrok → 404 (rota existe só em POST) |
 | 3 | **Headers de segurança** | O Chatwoot não emite `nosniff`, `Referrer-Policy` nem `X-Frame-Options` | ngrok `add-headers` |
 | 4 | **Teto de tamanho de corpo** | O Puma não impõe limite próprio | ⬜ não coberto hoje · vem de graça no plano da Cloudflare |
@@ -289,7 +289,13 @@ não vai para produção; **as regras vão**.
 `chatwoot-seed` falharam, web e sidekiq nem sobem (dependem do sucesso deles):
 `docker compose logs chatwoot-init chatwoot-seed`.
 
-**Um container do monorepo não alcança a central.** Confira que os dois estão na `flash-espelho`:
+**A produção não alcança a central.** O monorepo do Railway chega pela URL pública do túnel
+(AD-16): confira se o `CHATWOOT_URL` do Railway é a URL atual do endpoint `central`
+(`curl -s localhost:4040/api/tunnels`) e se a borda está devolvendo **204**, não **403**, no
+`POST /twilio/callback` (`http://localhost:4040/inspect/http`). Roteiro completo na linha
+"Mensagem do cliente não aparece na central" do `runbook-canal-oficial.md`.
+
+**Um container do monorepo nesta máquina não alcança a central.** Confira que os dois estão na `flash-espelho`:
 `docker network inspect flash-espelho --format '{{range .Containers}}{{.Name}} {{end}}'` — precisa
 listar `fastapi_api` e `inbox-flash-capital-chatwoot-web-1`. **Não tente
 `host.docker.internal:3001`**: a porta é um bind de loopback e recusa pacote vindo da bridge do

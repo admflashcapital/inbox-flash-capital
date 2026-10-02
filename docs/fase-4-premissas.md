@@ -80,12 +80,13 @@ URL estável** — o ngrok é dev-only por decisão, então a Fase 4 é obrigat�
 
 ## 2.1 Topologia — a plataforma NÃO fica na mesma máquina `[DECIDIDO 2026-09-03]`
 
-> ⚠️ **Estado em 2026-10-02: metade do alvo.** O webhook do WhatsApp Sender do `+553123916846` aponta
-> para `api.flashcapital.com.br` (B0.2 do `docs/plano-resiliencia.md`), e o POST da Twilio chega ao
-> Railway com 200. Uma queda do escritório não derruba mais a confirmação de sacado. **O espelho de
-> produção ainda não existe:** o Railway não alcança a central (itens 2.1–2.3 abaixo), então a resposta
-> de cliente a disparo de produção não aparece no painel. Hoje só a API local espelha, pela
-> `flash-espelho`.
+> ⚠️ **Estado em 2026-10-02: a topologia já é esta, com o ngrok no lugar do domínio.** O webhook do
+> WhatsApp Sender do `+553123916846` aponta para `api.flashcapital.com.br` (B0.2 do
+> `docs/plano-resiliencia.md`): uma queda do escritório não derruba mais a confirmação de sacado. O
+> espelho de produção atravessa a internet pela URL **efêmera** do túnel da central, com o
+> `X-Relay-Token` cobrado na borda (**AD-16**). O inbound foi provado ponta a ponta; o espelho de um
+> disparo real, ainda não. Sem URL fixa no ngrok, cada reinício do agente exige atualizar o
+> `CHATWOOT_URL` do Railway à mão — é o que o domínio deste documento resolve.
 
 O alvo: o monorepo no **Railway**; inbox e CRM na máquina do escritório. São dois lugares, e isso muda
 mais do que parece:
@@ -178,7 +179,7 @@ Já escrita e verificada em `docs/runbook-deploy.md` §Antes de expor. Resumo do
 
 | # | Requisito | Hoje (ngrok) | Fase 4 |
 |---|---|---|---|
-| 1 | ~~negar `/twilio/callback` de fora~~ → **só o espelho passa** | ✅ 403 incondicional (o relay era interno) | Access **Service Auth**, não WAF — **mudou por causa do §2.1**. Token do relay no WAF seria uma 4ª cópia do segredo |
+| 1 | ~~negar `/twilio/callback` de fora~~ → **só o espelho passa** | ✅ 403 exceto com o `X-Relay-Token` certo (AD-16; o relay vem do Railway) | Access **Service Auth**, não WAF — **mudou por causa do §2.1**. Token do relay no WAF seria uma 4ª cópia do segredo |
 | 2 | `/twilio/delivery_status` alcançável | ✅ aberto | **Bypass/Service Auth avaliado ANTES de Allow/Block** + allowlist dos IPs da Twilio |
 | 3 | headers de segurança | ✅ `add-headers` | Transform Rules |
 | 4 | teto de tamanho de corpo | ❌ **não coberto** | primeira vez que fica coberto |
@@ -247,10 +248,10 @@ Ordem por dependência, não por dificuldade. Nada disto está iniciado.
 | # | Item | Repo | Nota |
 |---|---|---|---|
 | 2.1 | ⬜ `CENTRAL_URL_PUBLICA` → `inbox.<novodominio>` | inbox | vira `FRONTEND_URL` do Chatwoot |
-| 2.2 | ⬜ **`CHATWOOT_URL` deixa de ser `http://chatwoot-web:3000`** e passa a `https://inbox.<novodominio>` | monorepo | consequência do §2.1. A rede `flash-espelho` fica com um membro e perde a razão de existir |
+| 2.2 | ⬜ **`CHATWOOT_URL` passa a `https://inbox.<novodominio>`** | monorepo | consequência do §2.1. Ponte desde 2026-10-02: no Railway ela é a URL efêmera do túnel da central (AD-16), e o espelho do dev está desligado — a `flash-espelho` não transporta nada |
 | 2.2b | ⬜ **o `env.example` do monorepo ensina `http://chatwoot-web:3000`** — nome de container, que em Railway não resolve. Quem copiar esse template para produção monta um espelho que falha **em silêncio** (AD-12). Precisa de aviso no arquivo, não só no rastreio | monorepo | achado em 2026-09-04 |
 | 2.2c | ⬜ **o espelho não sabe mandar os headers do Access.** `chatwoot_mirror.py::_headers()` manda só `api_access_token` + `Content-Type` (verificado em 2026-09-04). Com `/api/*` sob Service Auth (1.5b), toda chamada leva 302 e **nenhum disparo é espelhado** — em silêncio, porque o `raise_for_status()` passa na página de login. É a armadilha 1 do §4, aqui virada trabalho: **`CF-Access-Client-Id` + `CF-Access-Client-Secret` no `_headers()`, e asserção de `content-type`** | monorepo | **1.5b · bloqueia o go-live da Fase 4** |
-| 2.3 | ⬜ **ADR: o espelho atravessa a internet.** O AD-10 diz "máquina-a-máquina é sempre rede privada" — deixa de valer para essa perna | inbox | é mudança de arquitetura, não de `.env` |
+| 2.3 | ✅ **2026-10-02 — AD-16.** **ADR: o espelho atravessa a internet.** O AD-10 diz "máquina-a-máquina é sempre rede privada" — deixa de valer para essa perna | inbox | é mudança de arquitetura, não de `.env` |
 | 2.4 | ✅ `PUBLIC_BOLETO_BASE_URL` → `api.flashcapital.com.br` (CNAME para o Railway na zona antiga) | monorepo | feito em 2026-10-02 (B0.2): a Twilio posta no Railway e a assinatura bate |
 | 2.5 | ⬜ conferir que `SUPABASE_PUBLIC_URL` está **ausente** (ou igual a `SUPABASE_URL`) no Railway | monorepo | com Supabase Cloud o `make_public_url` tem de virar no-op. Herdar o valor de dev reescreveria a URL da mídia para um `localhost:54321` — e a Twilio devolveria **63019** |
 | 2.6 | ⬜ `WEBHOOK_URL` do n8n → `n8n.<novodominio>` | crm | reconfigurar Resend e JotForm |

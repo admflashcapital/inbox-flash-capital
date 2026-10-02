@@ -7,18 +7,22 @@
 # arquivo, qualquer um que descubra a URL forja uma mensagem inbound na conversa de um
 # cliente real — e a central hoje tem PII de verdade.
 #
-# O inbound LEGÍTIMO não passa por aqui: ele chega ao monorepo (que valida a assinatura
-# da Twilio) e é relayado container-a-container pela rede `flash-espelho`, sem tocar no
-# túnel. Então negar o path na borda não custa nada de funcionalidade.
+# O inbound LEGÍTIMO chega ao monorepo de PRODUÇÃO (Railway), que valida a assinatura da
+# Twilio e o relaya para cá pela internet, com o header `X-Relay-Token`. O Chatwoot não
+# confere esse header — então quem confere é esta borda, e ela é a ÚNICA proteção do path.
 #
-# Verificado no plano FREE em 2026-09-02: `/twilio/callback` → 403, `/app/login` → 200.
+# O token NÃO mora neste arquivo: `__RELAY_TOKEN__` é trocado pelo `RELAY_TOKEN` do `.env`
+# na config gerada pelo `tuneis-manha.sh` do monorepo (arquivo 600, nunca impresso). Usado
+# avulso, sem a troca, o marcador não casa com nada e o path fica negado — falha fechada.
 #
-# Uso: ngrok http 3001 --traffic-policy-file deploy/ngrok-policy.yml
+# Uso: o `tuneis-manha.sh` embute este arquivo no endpoint `central` do agente da plataforma.
 on_http_request:
-  # 1. O path que aceita mensagem forjada. Falha fechada: nega sempre.
-  #    Não há exceção por header porque nada legítimo entra por aqui de fora.
+  # 1. O path que aceita mensagem forjada. Falha fechada: nega tudo que não trouxer o token.
   - expressions:
-      - "req.url.path.startsWith('/twilio/callback')"
+      - >-
+        req.url.path.startsWith('/twilio/callback')
+        && !('x-relay-token' in req.headers
+             && req.headers['x-relay-token'][0] == '__RELAY_TOKEN__')
     actions:
       - type: deny
         config:

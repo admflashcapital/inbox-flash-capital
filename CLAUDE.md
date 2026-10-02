@@ -19,20 +19,21 @@ espelham os disparos do monorepo e carimbam o contexto do título. A operação 
 labels, respostas rápidas, log estruturado, expurgo LGPD e sonda de saúde no cron.
 O banco tem **PII real de cliente desde 2026-07-14** — trate backup como segredo.
 
-> 🚨 **"Espelha os disparos" vale em DEV, não em produção.** O `chatwoot_mirror.py` vive na
-> `feat/regua-comunicacao-v2` do monorepo; a **`main` de lá não tem `api/integrations/chatwoot/`**.
-> Como produção roda do Railway, a partir da `main`, **até o merge + deploy nenhum disparo real é
-> espelhado e nenhum inbound é relayado**. O gate do EPIC-3 foi provado ao vivo rodando a branch — o
-> que está fechado é o **código**, não a produção. Rastreado no `PROGRESS.md` §Dívida técnica e no
-> **B0.2** de `docs/plano-resiliencia.md`.
+> 🚨 **Quem alimenta a central é a PRODUÇÃO (Railway), por uma URL efêmera.** O espelho entra pela
+> URL pública do túnel da central, com o `X-Relay-Token` cobrado na borda (AD-16). Quando o agente
+> ngrok reinicia, a URL muda e o `CHATWOOT_URL` do Railway tem de ser atualizado **à mão** — até
+> isso, o que a produção dispara e recebe não aparece aqui, e não volta depois (AD-12). O inbound foi
+> provado ponta a ponta em 2026-10-02; o espelho de um disparo real ainda não. O espelho do monorepo
+> **local** fica desligado: esta é a central da operação.
 
 **Escopo: 19 stories** no inventário, **11 vivas**, **11 concluídas** — os épicos 2 e 5 foram
 cancelados. **Não há story pendente.** O que resta não é story:
 
-1. **O merge da branch do monorepo** — é o que leva o espelho para produção (acima).
-2. **Bloco B0** de `docs/plano-resiliencia.md` — tirar a receita da máquina do escritório. O webhook
-   de produção da Twilio ainda termina num túnel daqui.
+1. **Provar o espelho de um disparo real da produção** — o caminho de saída (`mirror_outbound`) usa a
+   mesma URL e o mesmo token do inbound, que já está provado.
+2. **B0.3** de `docs/plano-resiliencia.md` — conferir `SUPABASE_PUBLIC_URL` no Railway.
 3. **Fase 4** (AD-15) — comprar o domínio e conferir os seis limites do plano gratuito da Cloudflare.
+   É o que acaba com a URL efêmera.
 4. A **dívida técnica** rastreada no `PROGRESS.md`.
 
 A **Fase 3.5** (benchmark de 24h) **deixou de ser gate** em 2026-09-03: ela existia para decidir onde a
@@ -73,19 +74,22 @@ O compose, o `.env` e os `scripts/` estão na raiz, então `docker compose` acha
 | `bash scripts/retencao-conversas.sh --simular` | expurgo LGPD (simulado) |
 
 A central escuta em **`http://127.0.0.1:${CHATWOOT_HOST_PORT}`** (hoje 3001). O navegador entra por
-aí; o monorepo fala com ela pela rede `flash-espelho`, por nome de container.
+aí. O monorepo de **produção** fala com ela pela URL pública do túnel (AD-16); a rede
+`flash-espelho` (por nome de container) só serve a um monorepo nesta mesma máquina, e o espelho do
+dev fica desligado.
 
 **E há uma terceira porta de entrada:** a chave `CENTRAL_URL_PUBLICA` do `.env` recebe um túnel
 ngrok para a 3001, subido pelo `tuneis-manha.sh` do monorepo — um agente único que serve a central e
 o n8n do CRM (o plano free limita a **3 sessões de agente**, não a 3 URLs). Ela vira o
 `FRONTEND_URL` do Chatwoot, e **sem ela a atendente não consegue responder pelo WhatsApp** — a
 Twilio recusa o envio com 21609 (AD-11.1). O túnel sobe com `deploy/ngrok-policy.yml`, que nega
-`/twilio/callback` na borda. A URL é efêmera e não volta sozinha depois de um reboot: rode o script.
+`/twilio/callback` na borda a quem não traz o `X-Relay-Token`. A URL é efêmera (não há URL fixa no
+ngrok) e não volta sozinha depois de um reboot: rode o script e, se a URL mudou, atualize o
+`CHATWOOT_URL` no Railway.
 `bash scripts/verificar-canal-oficial.sh` cobra as duas coisas ao vivo.
 
-**O inbound do número oficial vai para a produção** (`api.flashcapital.com.br`, Railway), e o
-Railway **ainda não alcança a central**: resposta de cliente a disparo de produção não aparece aqui.
-Hoje quem espelha na central é só a API **local**, pela `flash-espelho`.
+**O inbound do número oficial vai para a produção** (`api.flashcapital.com.br`, Railway), que valida
+a assinatura e o relaya para cá pela URL pública, com o `X-Relay-Token` (AD-16).
 
 ### As-built que vai te morder (aprendido em produção, não re-descubra)
 
@@ -99,9 +103,9 @@ Todas as falhas caras deste projeto foram **silenciosas**. Nenhuma deu erro. Gua
    confere `X-Twilio-Signature`. Com a central atrás de um túnel a proteção deixou de ser
    topológica: quem barra é a borda (`deploy/ngrok-policy.yml` → 403). **Toda exposição nova tem de
    trazer esse gate junto** — e o `/twilio/delivery_status` tem de ficar aberto, senão volta o 21609.
-   ⚠️ **Com o monorepo no Railway o gate muda de forma:** o relay legítimo passa a vir de fora, então
-   é "só o espelho entra" (Access Service Auth), não "ninguém entra". Ver `docs/fase-4-premissas.md`
-   §2.1. A especificação está em `docs/runbook-deploy.md`.
+   O relay legítimo vem de fora (o Railway), então o gate é "só o espelho entra": a borda deixa
+   passar quem traz o `X-Relay-Token` certo e nega o resto (AD-16). O token é a única proteção do
+   path. A especificação está em `docs/runbook-deploy.md`.
 3. **O seed não cria conta nem admin, e isso é deliberado.** No Chatwoot os dois nascem juntos no
    `AccountBuilder` do onboarding; pré-criar a conta faria o onboarding criar uma SEGUNDA — e
    "existe exatamente uma conta" é invariante verificada.
@@ -140,7 +144,7 @@ performance/escala. Não super-engenheirar.
 |---|---|---|
 | `crm-flash-capital` | comercial: leads, docs, análise, contrato mãe. Twenty + N8N | **fonte da verdade de lead**. Sem relação de infra com este repo desde o AD-10 — nenhuma rede, nenhum proxy em comum |
 | `monorepo-flash-capital` | plataforma interna, app do cliente, site, FastAPI + worker. Supabase | **fonte da verdade de cedente/sacado/cobrança**; origina os disparos e os espelha na central |
-| `inbox-flash-capital` (**este**) | a central (Chatwoot) | **espelho e cockpit** — não é dono de nenhum dado de negócio. Ligado só ao monorepo, pela rede `flash-espelho` |
+| `inbox-flash-capital` (**este**) | a central (Chatwoot) | **espelho e cockpit** — não é dono de nenhum dado de negócio. Ligado só ao monorepo: o de produção pela URL pública com `X-Relay-Token` (AD-16) |
 
 ---
 

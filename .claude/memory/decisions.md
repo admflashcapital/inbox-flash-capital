@@ -1,6 +1,6 @@
 # Decisões Arquiteturais — Inbox Flash Capital
 
-> Condensado de `docs/architecture.md` (AD-1..AD-15). NÃO violar durante a implementação.
+> Condensado de `docs/architecture.md` (AD-1..AD-16). NÃO violar durante a implementação.
 > Mudar exige atualizar o AD no doc, não uma decisão de sessão.
 
 - **AD-1 — Chatwoot é espelho, nunca fonte da verdade de dado de domínio.**
@@ -71,8 +71,8 @@ fica pela via mais simples: **a central só tem o número oficial**.
   `Channel::TwilioSms#send_message` anexa `status_callback` **sem condição**, e a Twilio valida a
   URL na CRIAÇÃO: em loopback o envio morre com **21609** e a mensagem nem sai. Sem toggle; omitir
   exigiria fork (AD-7). Por isso o `FRONTEND_URL` do container vem de `CENTRAL_URL_PUBLICA`
-  (o `compose.yaml` falha o boot sem ela). **Toda exposição tem de negar `/twilio/callback` e deixar
-  `/twilio/delivery_status` aberto** — `verificar-canal-oficial.sh` cobra os dois ao vivo.
+  (o `compose.yaml` falha o boot sem ela). **Toda exposição tem de negar `/twilio/callback` a quem não
+  traz o `X-Relay-Token` (AD-16) e deixar `/twilio/delivery_status` aberto** — `verificar-canal-oficial.sh` cobra os dois ao vivo.
   Medido: a Twilio aceita callback que devolve **404** (valida o host, não o path); e rotacionar a
   URL **não** quebra o e-mail já autorizado (o refresh usa `grant_type=refresh_token`, sem
   `redirect_uri`).
@@ -123,6 +123,16 @@ fica pela via mais simples: **a central só tem o número oficial**.
   conferir os seis limites do plano gratuito. A especificação da borda **não muda** com a troca de
   túnel: negar `/twilio/callback`, deixar `/twilio/delivery_status` alcançável (AD-11.1) e cobrar a
   identidade do relay na entrada.
+
+- **AD-16 — O espelho de produção chega pela internet, com o `X-Relay-Token` na borda.** `[2026-10-02]`
+  O Railway não entra na `flash-espelho`: a perna Railway → central usa a URL pública do endpoint
+  `central` do agente ngrok (`CHATWOOT_URL` no Railway). `deploy/ngrok-policy.yml` nega
+  `/twilio/callback` **exceto** com o token certo; o arquivo traz `__RELAY_TOKEN__`, trocado pelo
+  `RELAY_TOKEN` só na config gerada (600). Avulso, nega tudo (falha fechada). Provado ponta a ponta
+  no inbound; o outbound (`mirror_outbound`) ainda não foi provado por disparo real. **URL efêmera
+  até o domínio do AD-15** (decisão do Vitor): reiniciou o agente, atualiza o `CHATWOOT_URL` do
+  Railway à mão; até lá, buraco permanente (AD-12). O token mora em 4 lugares (`.env` daqui, `.env`
+  do monorepo, Railway, config gerada). **Espelho do dev desligado** — a central é a da operação.
 
 - **A janela de 24h é NATIVA — e protege a tela, não a API.** `[MEDIDO 2026-09-03]`
   `Conversations::MessageWindowService` devolve 24h para `Channel::TwilioSms` **se e somente se**
